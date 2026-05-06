@@ -5,7 +5,7 @@
 set -e
 
 LUCENT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_REMOTE="${GITHUB_REMOTE:-origin}"
+REPO_REMOTE="https://github.com/antonizick/lucent.git"
 LOG_FILE="$LUCENT_DIR/.sync.log"
 TODAY=$(date +%Y-%m-%d)
 
@@ -32,3 +32,9 @@ git push "$REPO_REMOTE" main
 echo "$TODAY" >> "$LOG_FILE"
 echo "# synced: $TODAY $(date +%Y-%m-%d\ %H:%M:%S)" >> "$LOG_FILE"
 echo "Synced to $REPO_REMOTE at $(date)"
+
+# Clean up log — keep today's entry and the last 30 days of history
+if [ -f "$LOG_FILE" ]; then
+    cutoff=$(date -d "30 days ago" +%Y-%m-%d 2>/dev/null || date -v-30d +%Y-%m-%d 2>/dev/null)
+    [ -n "$cutoff" ] && grep -v "^#[0-9]" "$LOG_FILE" | grep -E "^#$|^[0-9]" | awk -v d="$cutoff" '$0 ~ /^[0-9]/ && $1 >= d {print}' > "$LOG_FILE.tmp" && grep "^#" "$LOG_FILE" >> "$LOG_FILE.tmp" && mv "$LOG_FILE.tmp" "$LOG_FILE"
+fi
