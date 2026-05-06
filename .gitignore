@@ -1,0 +1,12 @@
+# Temporary files
+*.swp
+*.swo
+*.pyc
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Exclude the reference submodule
+ai-shared-brain/

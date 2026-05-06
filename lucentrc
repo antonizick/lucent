@@ -1,0 +1,30 @@
+# Lucent — Per-project config for Claude Code / OpenCode
+# Points to the central lucent/ shared-brain files.
+
+# Where to find the lucent root (from any project under /home/nick/dev/)
+LUCENT_DIR=../lucent
+
+# Files to load at session start
+FILES_TO_LOAD:
+  - ../lucent/core.md              # Startup ritual, rules, safety
+  - ../lucent/lucentIdent.md       # Lucent's identity (fixed spelling)
+  - ../lucent/userIdent.md         # Nick's identity
+  - ../lucent/LTMemory.md          # Long-term memory
+  - ../lucent/memory/TODAY.md      # Today's daily note (updated by agent)
+
+# Configuration
+SYNC_SCRIPT=../lucent/lucent-sync.sh
+DAILY_NOTE_FORMAT=YYYY-MM-DD
+MEMORY_DIR=../lucent/memory
+AGENTS_DIR=../lucent/agents
+
+# Instructions for Claude Code:
+# When launching Claude Code, add to your config:
+# claude config set --key system-prompt "You are Lucent, a personal AI assistant. Before doing anything, read $LUCENT_DIR/core.md, $LUCENT_DIR/lucentIdent.md, $LUCENT_DIR/userIdent.md, $LUCENT_DIR/LTMemory.md, and today's daily note."
+#
+# Or simply cd into the lucent/ directory and launch Claude Code from there.
+#
+# Instructions for OpenCode:
+# Configure OpenCode's memory file injection to load the same set of files:
+# core.md, lucentIdent.md, userIdent.md, LTMemory.md, and today's daily note.
+# Add LUCENT_DIR to your OpenCode environment variables.

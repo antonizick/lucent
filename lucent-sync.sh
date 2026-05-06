@@ -1,0 +1,34 @@
+#!/bin/bash
+# lucent-sync.sh — Push lucent files to the private GitHub repo
+# Checks if already synced today to avoid redundant commits/pushes.
+
+set -e
+
+LUCENT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_REMOTE="${GITHUB_REMOTE:-origin}"
+LOG_FILE="$LUCENT_DIR/.sync.log"
+TODAY=$(date +%Y-%m-%d)
+
+# Check if already synced today
+if [ -f "$LOG_FILE" ]; then
+    last_synced=$(grep "^# synced:" "$LOG_FILE" | tail -1 | awk '{print $3}')
+    if [ "$last_synced" = "$TODAY" ]; then
+        echo "Already synced today ($TODAY). Skipping."
+        exit 0
+    fi
+fi
+
+# Commit changes
+cd "$LUCENT_DIR"
+git add -A
+if [ -z "$(git diff --cached --name-only)" ]; then
+    echo "No changes to sync."
+    exit 0
+fi
+
+git commit -m "lucent: sync $(date +%Y-%m-%d\ %H:%M:%S)" || true
+git push "$REPO_REMOTE" main
+
+echo "$TODAY" >> "$LOG_FILE"
+echo "# synced: $TODAY $(date +%Y-%m-%d\ %H:%M:%S)" >> "$LOG_FILE"
+echo "Synced to $REPO_REMOTE at $(date)"
