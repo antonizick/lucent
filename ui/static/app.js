@@ -5,17 +5,15 @@ const currentTextTimestamp = document.getElementById('currentTextTimestamp');
 const voiceSelect = document.getElementById('voiceSelect');
 const themeToggle = document.getElementById('themeToggle');
 const status = document.getElementById('status');
-const waveform = document.getElementById('waveform');
-const enableVoiceBtn = document.getElementById('enableVoice');
 const voicePanelLabel = document.getElementById('voicePanelLabel');
 const logContent = document.getElementById('logContent');
 
 // State
 let currentVoice = null;
 let isSpeaking = false;
-let voiceEnabled = false;
 let lastLogContent = '';
 let fadeTimeout = null;
+let speechEnabled = false;
 
 // Load and populate available voices
 function loadVoices() {
@@ -75,22 +73,20 @@ function updateTimestamp() {
     currentTextTimestamp.textContent = `${hours}:${minutes}:${seconds}`;
 }
 
-// Enable voice output (requires user interaction)
-function enableVoiceOutput() {
-    voiceEnabled = true;
-    enableVoiceBtn.classList.add('hidden');
-    status.textContent = 'Voice enabled. Ready to speak.';
-
-    // Test TTS with a small utterance to ensure it works
-    const testUtterance = new SpeechSynthesisUtterance('');
-    testUtterance.voice = currentVoice;
-    window.speechSynthesis.speak(testUtterance);
+// Enable speech on first user interaction
+function enableSpeech() {
+    if (!speechEnabled) {
+        speechEnabled = true;
+        status.textContent = 'Speech enabled. Ready.';
+        // Remove the click listener after first interaction
+        document.removeEventListener('click', enableSpeech);
+    }
 }
 
 // Text-to-speech
 function speakText(text) {
-    if (!voiceEnabled) {
-        status.textContent = 'Voice not enabled. Click "Enable Voice" button.';
+    if (!speechEnabled) {
+        status.textContent = 'Click anywhere to enable speech.';
         currentTextContent.textContent = text;
         updateTimestamp();
         return;
@@ -141,7 +137,6 @@ function speakText(text) {
         scanner.style.display = 'none';
         speakingAnimation.classList.remove('hidden');
         speakingAnimation.style.display = 'flex';
-        waveform.classList.add('hidden');
         voicePanelLabel.textContent = 'AI VOICE BOX — SPEAKING';
         voicePanelLabel.classList.add('speaking');
         status.textContent = 'Speaking...';
@@ -160,7 +155,6 @@ function speakText(text) {
         scanner.style.display = 'flex';
         speakingAnimation.classList.add('hidden');
         speakingAnimation.style.display = 'none';
-        waveform.classList.add('hidden');
         voicePanelLabel.textContent = 'AI VOICE BOX — IDLE';
         voicePanelLabel.classList.remove('speaking');
         status.textContent = 'Ready';
@@ -186,7 +180,6 @@ function speakText(text) {
         scanner.style.display = 'flex';
         speakingAnimation.classList.add('hidden');
         speakingAnimation.style.display = 'none';
-        waveform.classList.add('hidden');
         voicePanelLabel.textContent = 'AI VOICE BOX — IDLE';
         voicePanelLabel.classList.remove('speaking');
     };
@@ -263,11 +256,34 @@ themeToggle.addEventListener('click', () => {
     themeToggle.textContent = isLight ? '☀️' : '🌙';
 });
 
-// Enable voice button click handler
-enableVoiceBtn.addEventListener('click', enableVoiceOutput);
+// Constrain animation to viewport top
+function constrainAnimationHeight() {
+    const speakingAnimation = document.getElementById('speakingAnimation');
+    if (speakingAnimation) {
+        const rect = speakingAnimation.getBoundingClientRect();
+        const spaceAbove = rect.top; // Distance from top of viewport to animation
+        const containerHeight = 120; // Container height in pixels
+
+        // Calculate how much height we can use (in percentage of container)
+        // If space above is 200px and container is 120px, we can go to 200/120 = 166%
+        const maxHeightPercent = Math.max(100, (spaceAbove / containerHeight) * 100);
+
+        // Set CSS variable for max animation height
+        document.documentElement.style.setProperty('--max-animation-height', maxHeightPercent + '%');
+    }
+}
+
+// Recalculate on resize
+window.addEventListener('resize', constrainAnimationHeight);
+
+// Initial calculation after page loads
+window.addEventListener('load', constrainAnimationHeight);
 
 initTheme();
 setupSpeechListener();
 setupLogListener();
 
-status.textContent = 'Click "Enable Voice" to start';
+// Listen for first click to enable speech (browser autoplay policy)
+document.addEventListener('click', enableSpeech);
+
+status.textContent = 'Click anywhere to enable speech';
