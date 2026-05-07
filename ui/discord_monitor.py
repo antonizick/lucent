@@ -209,7 +209,7 @@ Respond naturally and concisely to this instruction. Keep responses under 2-3 se
             logger.error(f"Exception clearing messages: {e}")
             return False
 
-    def handle_command(self, message: dict) -> tuple[bool, str]:
+    def handle_command(self, message: dict):
         """Handle special Discord commands. Returns (is_command, response)."""
         text = message.get("text", "").strip().lower()
 
