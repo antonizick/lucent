@@ -117,7 +117,7 @@ Respond naturally and concisely to this instruction. Keep responses under 2-3 se
         """Post response back to Discord."""
         try:
             payload = {
-                "source": message.get("source"),
+                "source": "discord_command",  # All Discord messages have this source
                 "message_id": message.get("message_id"),
                 "channel_id": message.get("channel_id"),
                 "thread_id": message.get("thread_id"),
