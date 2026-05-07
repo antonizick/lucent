@@ -8,8 +8,7 @@
 .vscode/
 .idea/
 
-# Exclude the reference submodule
-ai-shared-brain/
+# Private context
 private/
 
 # Environment variables and Python cache (ui/)

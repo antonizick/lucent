@@ -2,7 +2,7 @@
 
 ## Projects
 
-- **Lucent** — Personal AI assistant framework. Skeleton complete: README.md, directory structure, sync script, per-project config (.lucentrc), .gitignore. Based on ai-shared-brain starter kit. Next: populate memory files, create sub-agents.
+- **Lucent** — Personal AI assistant framework. Skeleton complete: README.md, directory structure, sync script, per-project config (.lucentrc), .gitignore. Next: populate memory files, create sub-agents.
 
 ## Preferences
 
@@ -14,7 +14,7 @@
 ## Decisions
 
 - README.md is the only public-facing file — concise, covers architecture, setup, usage, not a tutorial.
-- .gitignore excludes ai-shared-brain/ submodule, private/, IDE files, .DS_Store.
+- .gitignore excludes private/, IDE files, .DS_Store.
 - Daily notes accumulate forever — no deletion of completed notes. Daily notes can and should be edited, refined, and summarized during their day. Once the day is over, the note is never deleted — only its content promoted to LTMemory.md.
 
 ## Lessons Learned
@@ -24,7 +24,7 @@
 
 ## Context
 
-- Repo at /home/nick/dev/lucent/ with ai-shared-brain/ as git submodule.
+- Repo at /home/nick/dev/lucent/.
 - Sync: lucent-sync.sh + aliases (brain/lucent) to GitHub remote.
 - Per-project .lucentrc files wire dev sessions into the system.
 

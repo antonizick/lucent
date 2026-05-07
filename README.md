@@ -20,7 +20,7 @@ A personal AI assistant framework built on persistent memory. Lucent maintains c
                                    +-----------+
 ```
 
-Lucent's architecture is based on the [ai-shared-brain](https://github.com/pawdman/ai-shared-brain) starter kit, adapted for personal use with a private GitHub repository as the single source of truth.
+Lucent is a personal AI assistant framework with a private GitHub repository as the single source of truth.
 
 ## Core Files
 
@@ -45,13 +45,6 @@ lucent/
 ├── lucent-sync.sh         Sync script — commit + push to GitHub
 ├── lucentrc               Sync config (remote URL, log dedup)
 ├── .sync.log              Sync history (30-day auto-cleanup)
-├── ai-shared-brain/       Git submodule: shared brain architecture
-│   ├── core.md
-│   ├── lucentIdent.md
-│   ├── userIdent.md
-│   ├── LTMemory.md
-│   ├── agents/            Sub-agent definitions
-│   └── memory/            Daily episodic notes
 ├── agents/                Sub-agent definitions: {name}-agent.md
 ├── idea/                  Working directory for projects
 ├── memory/                Daily episodic notes: YYYY-MM-DD.md
@@ -65,7 +58,6 @@ lucent/
 ```bash
 git clone https://github.com/antonizick/lucent.git
 cd lucent
-git submodule update --init --recursive
 ```
 
 ### 2. Configure your AI agent
@@ -156,11 +148,9 @@ Each project under `/home/nick/dev/` gets its own `.lucentrc` pointing to the sh
 ## Architecture
 
 ```
-Lucent = ai-shared-brain (core) + private GitHub repo + daily notes + agent config
+Lucent = memory files + daily notes + agent config + GitHub sync
 
-The brain lives in ai-shared-brain/ (submodule).
-The working context lives in lucent/ root.
-Everything syncs to GitHub via lucent-sync.sh.
+Everything lives in lucent/ root and syncs to GitHub via lucent-sync.sh.
 Per-project .lucentrc files wire any dev session into the system.
 ```
 

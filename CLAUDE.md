@@ -50,7 +50,7 @@ At the end of the session, append a summary to today's daily note. Follow the No
 
 ## What This Repo Is
 
-A personal AI assistant framework based on the ai-shared-brain starter kit. Lucent manages persistent memory through markdown files that AI agents read and write. Synced to GitHub via `lucent-sync.sh`.
+A personal AI assistant framework. Lucent manages persistent memory through markdown files that AI agents read and write. Synced to GitHub via `lucent-sync.sh`.
 
 ## File Structure
 
