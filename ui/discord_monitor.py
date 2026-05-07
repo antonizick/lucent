@@ -113,9 +113,27 @@ Respond naturally and concisely to this instruction. Keep responses under 2-3 se
             logger.error(f"Exception processing instruction: {e}")
             return f"[Error processing instruction: {str(e)}]"
 
-    def post_response(self, message: dict, response_text: str) -> bool:
-        """Post response back to Discord."""
+    def send_voice_feedback(self, response_text: str) -> bool:
+        """Send voice feedback to Voice Box."""
         try:
+            payload = {"text": response_text}
+            resp = requests.post(
+                "http://localhost:8001/speak",
+                json=payload,
+                timeout=10
+            )
+            return resp.status_code == 200
+        except Exception as e:
+            logger.error(f"Exception sending voice feedback: {e}")
+            return False
+
+    def post_response(self, message: dict, response_text: str) -> bool:
+        """Post response back to Discord and send voice feedback."""
+        try:
+            # Send voice feedback to Voice Box
+            self.send_voice_feedback(response_text)
+
+            # Post response to Discord
             payload = {
                 "source": "discord_command",  # All Discord messages have this source
                 "message_id": message.get("message_id"),
