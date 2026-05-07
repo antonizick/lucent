@@ -10,3 +10,13 @@
 
 # Exclude the reference submodule
 ai-shared-brain/
+private/
+
+# Environment variables and Python cache (ui/)
+ui/.env
+ui/__pycache__/
+ui/.venv/
+ui/venv/
+
+# Scratchpad for local working files
+scratchpad/
