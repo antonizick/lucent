@@ -106,7 +106,7 @@ Respond naturally and concisely to this instruction. Keep responses under 2-3 se
                     "stream": False,
                     "temperature": 0.7
                 },
-                timeout=30
+                timeout=900
             )
 
             if resp.status_code == 200:
