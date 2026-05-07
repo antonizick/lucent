@@ -229,6 +229,22 @@ Respond naturally and concisely to this instruction. Keep responses under 2-3 se
             except Exception as e:
                 return True, f"Error listing models: {str(e)}"
 
+        # Check for current model query
+        elif any(phrase in text for phrase in ["current model", "which model", "what model"]):
+            try:
+                resp = requests.get(
+                    f"{self.backend_url}/ollama/models",
+                    timeout=5
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    current = data.get("current", "unknown")
+                    return True, f"Current model: {current}"
+                else:
+                    return True, "Could not fetch model info"
+            except Exception as e:
+                return True, f"Error checking model: {str(e)}"
+
         # Check for numbered model selection (just a number)
         elif text.isdigit():
             try:

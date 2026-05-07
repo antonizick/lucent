@@ -274,7 +274,7 @@ async def get_available_models():
             if DISCORD_MODEL_FILE.exists():
                 current = DISCORD_MODEL_FILE.read_text().strip()
             return {
-                "available": list(set(models)),
+                "available": models,
                 "current": current
             }
         else:
