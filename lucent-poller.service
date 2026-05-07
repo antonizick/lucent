@@ -1,0 +1,19 @@
+[Unit]
+Description=Lucent Discord Message Poller
+After=network-online.target lucent-server.service
+Wants=network-online.target
+Requires=lucent-server.service
+
+[Service]
+Type=simple
+User=nick
+WorkingDirectory=/home/nick/dev/lucent/ui
+ExecStart=/usr/bin/python3 /home/nick/dev/lucent/ui/discord_poller.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target

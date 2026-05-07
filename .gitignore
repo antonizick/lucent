@@ -19,3 +19,6 @@ ui/venv/
 
 # Scratchpad for local working files
 scratchpad/
+
+# Project workspace (local development only, not synced to repo)
+idea/

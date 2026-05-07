@@ -7,4 +7,4 @@ echo "Installing dependencies..."
 pip3 install -r requirements.txt
 
 echo "Starting Lucent Voice UI on http://localhost:8001"
-uvicorn server:app --host 127.0.0.1 --port 8001 --reload
+python3 -m uvicorn server:app --host 127.0.0.1 --port 8001

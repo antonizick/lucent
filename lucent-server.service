@@ -1,0 +1,18 @@
+[Unit]
+Description=Lucent Discord Integration Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nick
+WorkingDirectory=/home/nick/dev/lucent/ui
+ExecStart=/usr/bin/python3 /home/nick/dev/lucent/ui/server.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target

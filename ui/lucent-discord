@@ -1,0 +1,32 @@
+#!/bin/bash
+# Simple CLI to fetch and display pending Discord messages
+
+BACKEND_URL="${BACKEND_URL:-http://localhost:8002}"
+
+# Fetch pending messages
+response=$(curl -s "$BACKEND_URL/discord/messages")
+
+# Parse JSON and display using Python
+python3 << EOF
+import json
+import sys
+
+response = '''$response'''
+try:
+    data = json.loads(response)
+    messages = data.get('messages', [])
+    count = data.get('count', 0)
+
+    if count == 0 or not messages:
+        print("No pending Discord messages.")
+    else:
+        print(f"📬 Pending Discord Messages ({count}):")
+        for msg in messages:
+            print(f"\n📨 From: {msg.get('user_id')}")
+            print(f"Time: {msg.get('timestamp')}")
+            print(f"Message: {msg.get('text')}")
+            print("---")
+except json.JSONDecodeError:
+    print("Error parsing response from server.")
+    print(f"Response was: {response}")
+EOF

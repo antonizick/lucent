@@ -1,0 +1,138 @@
+import discord
+from discord.ext import commands
+import os
+import json
+import aiohttp
+import asyncio
+from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+DISCORD_SERVER_ID = int(os.getenv("DISCORD_SERVER_ID", 0))
+DISCORD_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID", 0))
+DISCORD_LOG_CHANNEL_ID = int(os.getenv("DISCORD_LOG_CHANNEL_ID", 0))
+DISCORD_LOG_WEBHOOK_URL = os.getenv("DISCORD_LOG_WEBHOOK_URL", "")
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8001")
+
+# Bot setup
+intents = discord.Intents.default()
+intents.message_content = True
+intents.guilds = True
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+@bot.event
+async def on_ready():
+    """Called when bot connects and is ready."""
+    print(f"Logged in as {bot.user}")
+    print(f"Server ID: {DISCORD_SERVER_ID}")
+    print(f"Command Channel ID: {DISCORD_CHANNEL_ID}")
+    print(f"Log Channel ID: {DISCORD_LOG_CHANNEL_ID}")
+    print(f"Bot ready and listening")
+
+@bot.event
+async def on_message(message):
+    """Listen for messages in the Lucent command channel."""
+    # Ignore messages from the bot itself
+    if message.author == bot.user:
+        return
+
+    # Only respond in the configured Lucent channel
+    if message.channel.id != DISCORD_CHANNEL_ID:
+        return
+
+    # Skip commands
+    if message.content.startswith("!"):
+        await bot.process_commands(message)
+        return
+
+    # Post message to backend queue
+    await queue_message(message)
+
+async def queue_message(message: discord.Message):
+    """Post Discord message to backend /message/pending queue."""
+    payload = {
+        "source": "discord_command",
+        "user_id": str(message.author.id),
+        "channel_id": str(message.channel.id),
+        "message_id": str(message.id),
+        "thread_id": str(message.channel.id) if hasattr(message.channel, 'parent') else None,
+        "text": message.content,
+        "timestamp": datetime.now().isoformat()
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{BACKEND_URL}/message/pending",
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
+                if resp.status == 200:
+                    # Add reaction to confirm receipt
+                    await message.add_reaction("✅")
+                    print(f"[DISCORD] Queued message from {message.author}: {message.content[:50]}")
+                else:
+                    print(f"[ERROR] Failed to queue message: {resp.status}")
+                    await message.add_reaction("❌")
+    except Exception as e:
+        print(f"[ERROR] Exception posting to queue: {e}")
+        await message.add_reaction("❌")
+
+async def post_response(message_id: str, thread_id: str, response_text: str):
+    """Post Lucent's response back to Discord thread."""
+    try:
+        channel = bot.get_channel(DISCORD_CHANNEL_ID)
+        if not channel:
+            print(f"[ERROR] Could not find channel {DISCORD_CHANNEL_ID}")
+            return
+
+        # If there's a thread_id, post in thread; otherwise post as reply
+        if thread_id and thread_id != "None":
+            thread = await channel.fetch_thread(int(thread_id))
+            await thread.send(f"**Lucent:** {response_text}")
+        else:
+            try:
+                original_msg = await channel.fetch_message(int(message_id))
+                await original_msg.reply(f"**Lucent:** {response_text}")
+            except discord.NotFound:
+                await channel.send(f"**Lucent:** {response_text}")
+
+        print(f"[DISCORD] Posted response to message {message_id}")
+    except Exception as e:
+        print(f"[ERROR] Failed to post response: {e}")
+
+async def broadcast_log(text: str, level: str = "info"):
+    """Broadcast console log to Discord log channel via webhook."""
+    if not DISCORD_LOG_WEBHOOK_URL:
+        return
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            payload = {
+                "content": f"```\n[{level.upper()}] {text}\n```"
+            }
+            async with session.post(
+                DISCORD_LOG_WEBHOOK_URL,
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=5)
+            ) as resp:
+                if resp.status != 204:
+                    print(f"[ERROR] Failed to post log: {resp.status}")
+    except Exception as e:
+        print(f"[ERROR] Exception posting log: {e}")
+
+def run_bot():
+    """Start the Discord bot."""
+    if not DISCORD_BOT_TOKEN:
+        print("[ERROR] DISCORD_BOT_TOKEN not set in .env")
+        return
+
+    try:
+        bot.run(DISCORD_BOT_TOKEN)
+    except Exception as e:
+        print(f"[ERROR] Failed to start bot: {e}")
+
+if __name__ == "__main__":
+    run_bot()

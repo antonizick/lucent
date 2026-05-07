@@ -1,5 +1,6 @@
 import os
 import json
+import logging
 from datetime import datetime, date
 from pathlib import Path
 from collections import deque
@@ -7,15 +8,23 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
 
+# Setup Discord logging (optional, depends on webhook URL)
+from discord_logger import setup_discord_logging
+setup_discord_logging()
+logger = logging.getLogger(__name__)
+
 app = FastAPI()
 
-# Simple in-memory queue for speech requests
-speech_queue = deque(maxlen=100)  # Keep last 100 requests
+# In-memory queues
+speech_queue = deque(maxlen=100)  # Voice UI speech (backward compat)
+message_queue = deque(maxlen=100)  # Generic message queue (Discord, terminal, voice input)
+discord_pending = deque(maxlen=100)  # Pending Discord messages for terminal delivery
 
 # CORS for local development
 app.add_middleware(
@@ -33,6 +42,26 @@ if static_dir.exists():
 
 class SpeakRequest(BaseModel):
     text: str
+
+class MessageRequest(BaseModel):
+    """Generic message from any source (Discord, terminal, voice UI)."""
+    source: str  # "discord_command", "voice_ui_input", "terminal_input"
+    text: str
+    user_id: Optional[str] = None
+    channel_id: Optional[str] = None  # Discord channel ID
+    message_id: Optional[str] = None  # Discord message ID
+    thread_id: Optional[str] = None  # Discord thread ID
+    timestamp: Optional[str] = Field(default_factory=lambda: datetime.now().isoformat())
+
+class ResponseRequest(BaseModel):
+    """Response to send back to the message source."""
+    source: str  # "discord_command", "voice_ui_input", etc.
+    message_id: Optional[str] = None
+    channel_id: Optional[str] = None
+    thread_id: Optional[str] = None
+    user_id: Optional[str] = None
+    response: str
+    timestamp: Optional[str] = Field(default_factory=lambda: datetime.now().isoformat())
 
 @app.get("/")
 async def root():
@@ -60,13 +89,115 @@ async def speak(request: SpeakRequest):
         "timestamp": item["timestamp"]
     }
 
+@app.post("/message/pending")
+async def queue_message(request: MessageRequest):
+    """Queue a message from any source (Discord, terminal, voice UI)."""
+    if not request.text or not request.text.strip():
+        raise HTTPException(status_code=400, detail="Text cannot be empty")
+
+    item = {
+        "source": request.source,
+        "text": request.text,
+        "user_id": request.user_id,
+        "channel_id": request.channel_id,
+        "message_id": request.message_id,
+        "thread_id": request.thread_id,
+        "timestamp": request.timestamp
+    }
+    message_queue.append(item)
+    logger.info(f"[{request.source}] Queued message: {request.text[:100]}")
+
+    return {
+        "status": "queued",
+        "source": request.source,
+        "text": request.text,
+        "timestamp": request.timestamp
+    }
+
+@app.get("/message/pending")
+async def get_pending_message():
+    """Get next pending message from the generic queue."""
+    if message_queue:
+        return {"message": message_queue.popleft()}
+    else:
+        return {"message": None}
+
 @app.get("/speak/pending")
 async def get_pending_speech():
-    """Get next pending speech request from the queue."""
+    """Get next pending speech request from the queue (backward compat for Voice UI)."""
     if speech_queue:
         return {"speech": speech_queue.popleft()}
     else:
         return {"speech": None}
+
+@app.post("/response")
+async def handle_response(request: ResponseRequest):
+    """Handle responses from the poller (route to appropriate handler)."""
+    logger.info(f"Response from {request.source}: {request.response[:100]}")
+
+    # Route based on source
+    if request.source == "discord_command":
+        # Send to Discord
+        try:
+            # Import discord bot functions (deferred to avoid circular import)
+            from discord_bot import post_response
+            import asyncio
+
+            # Run async function
+            asyncio.create_task(post_response(
+                request.message_id,
+                request.thread_id,
+                request.response
+            ))
+            return {
+                "status": "routed",
+                "destination": "discord",
+                "message_id": request.message_id
+            }
+        except Exception as e:
+            logger.error(f"Failed to route to Discord: {e}")
+            return {
+                "status": "error",
+                "message": str(e)
+            }
+    else:
+        logger.warning(f"Unknown source: {request.source}")
+        return {
+            "status": "error",
+            "message": f"Unknown source: {request.source}"
+        }
+
+@app.post("/discord/pending")
+async def store_discord_message(request: MessageRequest):
+    """Store Discord message for terminal delivery (instead of autonomous processing)."""
+    if request.source != "discord_command":
+        raise HTTPException(status_code=400, detail="Only discord_command messages accepted")
+
+    item = {
+        "user_id": request.user_id,
+        "channel_id": request.channel_id,
+        "message_id": request.message_id,
+        "text": request.text,
+        "timestamp": request.timestamp
+    }
+    discord_pending.append(item)
+    logger.info(f"[DISCORD_PENDING] Stored message from {request.user_id}: {request.text[:80]}")
+
+    return {
+        "status": "stored",
+        "count": len(discord_pending)
+    }
+
+@app.get("/discord/messages")
+async def get_pending_discord_messages():
+    """Get all pending Discord messages for terminal display."""
+    messages = list(discord_pending)
+    discord_pending.clear()  # Clear after retrieval
+
+    return {
+        "messages": messages,
+        "count": len(messages)
+    }
 
 @app.get("/log")
 async def get_log():
@@ -85,4 +216,4 @@ async def get_log():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8001)
+    uvicorn.run(app, host="127.0.0.1", port=8002)
