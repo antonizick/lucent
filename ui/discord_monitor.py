@@ -213,7 +213,8 @@ Respond naturally and concisely to this instruction. Keep responses under 2-3 se
         """Handle special Discord commands. Returns (is_command, response)."""
         text = message.get("text", "").strip().lower()
 
-        if text == "!models":
+        # Check for list models commands
+        if any(phrase in text for phrase in ["list models", "show models", "available models", "what models"]):
             try:
                 resp = requests.get(
                     f"{self.backend_url}/ollama/models",
@@ -223,25 +224,70 @@ Respond naturally and concisely to this instruction. Keep responses under 2-3 se
                     data = resp.json()
                     models = data.get("available", [])
                     current = data.get("current", "unknown")
-                    return True, f"Available models: {', '.join(models)}\nCurrent: {current}\n\nUse: !model <name>"
+                    numbered_list = "\n".join([f"{i+1}. {m}" for i, m in enumerate(models)])
+                    return True, f"Available models:\n{numbered_list}\n\nCurrent: {current}\n\nReply with a number to switch (e.g., 1 or 2)"
             except Exception as e:
                 return True, f"Error listing models: {str(e)}"
 
-        elif text.startswith("!model "):
-            model_name = text.replace("!model ", "").strip()
+        # Check for numbered model selection (just a number)
+        elif text.isdigit():
             try:
-                resp = requests.post(
-                    f"{self.backend_url}/ollama/model?model_name={model_name}",
+                resp = requests.get(
+                    f"{self.backend_url}/ollama/models",
                     timeout=5
                 )
                 if resp.status_code == 200:
-                    self.model = model_name
-                    logger.info(f"Model switched to: {model_name}")
-                    return True, f"Model switched to: {model_name}"
+                    data = resp.json()
+                    models = data.get("available", [])
+                    choice = int(text)
+                    if 1 <= choice <= len(models):
+                        model_name = models[choice - 1]
+                        switch_resp = requests.post(
+                            f"{self.backend_url}/ollama/model?model_name={model_name}",
+                            timeout=5
+                        )
+                        if switch_resp.status_code == 200:
+                            self.model = model_name
+                            logger.info(f"Model switched to: {model_name}")
+                            return True, f"Switched to model {choice}: {model_name}"
+                        else:
+                            return True, f"Failed to switch model: {switch_resp.status_code}"
+                    else:
+                        return True, f"Invalid choice. Please select 1-{len(models)}"
                 else:
-                    return True, f"Failed to switch model: {resp.status_code}"
+                    return True, "Could not fetch available models"
             except Exception as e:
                 return True, f"Error switching model: {str(e)}"
+
+        # Check for switch model commands (explicit name)
+        elif any(phrase in text for phrase in ["use model", "switch to", "change to", "set model"]):
+            # Extract model name - look for words after the command phrases
+            model_name = None
+            for phrase in ["use model", "switch to", "change to", "set model"]:
+                if phrase in text:
+                    model_name = text.split(phrase)[-1].strip()
+                    break
+
+            if model_name:
+                try:
+                    resp = requests.post(
+                        f"{self.backend_url}/ollama/model?model_name={model_name}",
+                        timeout=5
+                    )
+                    if resp.status_code == 200:
+                        self.model = model_name
+                        logger.info(f"Model switched to: {model_name}")
+                        return True, f"Model switched to: {model_name}"
+                    elif resp.status_code == 404:
+                        data = resp.json()
+                        available = data.get("available", [])
+                        return True, f"Model '{model_name}' not found. Available: {', '.join(available)}"
+                    else:
+                        return True, f"Failed to switch model: {resp.status_code}"
+                except Exception as e:
+                    return True, f"Error switching model: {str(e)}"
+            else:
+                return True, "Please specify a model name. Example: 'use model mistral'"
 
         return False, ""
 

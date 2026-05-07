@@ -290,6 +290,27 @@ async def set_model(model_name: str):
         return {"error": "Model name required"}, 400
 
     model_name = model_name.strip().lower()
+
+    # Validate model exists in Ollama
+    try:
+        resp = requests.get(
+            f"{OLLAMA_URL}/api/tags",
+            timeout=10
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            available = [m["name"].split(":")[0].lower() for m in data.get("models", [])]
+            if model_name not in available:
+                return {
+                    "error": f"Model '{model_name}' not found",
+                    "available": list(set(available))
+                }, 404
+        else:
+            return {"error": "Could not reach Ollama"}, 503
+    except Exception as e:
+        logger.error(f"Error validating model: {e}")
+        return {"error": f"Error validating model: {str(e)}"}, 500
+
     DISCORD_MODEL_FILE.write_text(model_name)
     logger.info(f"Discord model switched to: {model_name}")
     return {"status": "switched", "model": model_name}
