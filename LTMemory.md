@@ -21,6 +21,10 @@
 
 - Start sessions with a clean README before populating memory. A framework with no content is still a template.
 - .lucentrc config is the bridge between any project and Lucent's context.
+- **Ollama model names:** Always use full names with version tags (e.g., "qwen3.6:35b", "mistral:latest"), not short names. Short names fail when passed to Ollama API.
+- **Qwen model capabilities:** Qwen3.6 is more capable than mistral but may attempt tool_use syntax (Claude feature). Needs system prompt constraint + response cleaning.
+- **Response timeouts:** Qwen3.6 is ~30x slower than mistral. Discord monitor needs 15-minute timeout for generate endpoint.
+- **Debug logging:** Don't use print() for debugging when discord_logger broadcasts to Discord. Use logger.info/error instead (or remove debug output entirely).
 
 ## Context
 
