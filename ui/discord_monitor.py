@@ -144,11 +144,8 @@ Respond naturally and concisely to this instruction. Keep responses under 2-3 se
             return False
 
     def post_response(self, message: dict, response_text: str) -> bool:
-        """Post response back to Discord and send voice feedback."""
+        """Post response back to Discord."""
         try:
-            # Send voice feedback to Voice Box
-            self.send_voice_feedback(response_text)
-
             # Post response to Discord
             payload = {
                 "source": "discord_command",  # All Discord messages have this source
