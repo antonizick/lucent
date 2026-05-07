@@ -22,6 +22,26 @@ A personal AI assistant framework built on persistent memory. Lucent maintains c
 
 Lucent is a personal AI assistant framework with a private GitHub repository as the single source of truth.
 
+## Key Features
+
+### Voice Feedback (Voice Box)
+The Voice Box web UI (port 8001) provides voice acknowledgment for every interaction. When an agent receives input from Nick, it sends a voice confirmation via the `/speak` endpoint. This ensures Nick always knows the system received his input, even when away from keyboard.
+
+- **Server:** `ui/server.py` (FastAPI, port 8001)
+- **Startup:** `bash ui/start.sh`
+- **Voice Send:** `bash ui/speak.sh "Your message"`
+
+### Discord Integration
+Lucent integrates with Discord for monitoring and async responses. A background monitor watches for messages, forwards them to Claude, and posts responses back to Discord.
+
+- **Components:**
+  - `discord_bot.py` — Bot client (webhook responses)
+  - `discord_monitor.py` — Message monitor & Claude response handler
+  - `discord_logger.py` — Logging forwarder
+  - `discord_poller.py` — Polling engine
+- **Setup:** Configure `.env` with `DISCORD_WEBHOOK_URL` and `DISCORD_CHANNEL_ID`
+- **Run:** `python discord_monitor.py`
+
 ## Core Files
 
 | File | Purpose |
@@ -48,7 +68,17 @@ lucent/
 ├── agents/                Sub-agent definitions: {name}-agent.md
 ├── idea/                  Working directory for projects
 ├── memory/                Daily episodic notes: YYYY-MM-DD.md
-└── private/               Sensitive context (git-ignored)
+├── private/               Sensitive context (git-ignored)
+├── ui/                    Voice Box web UI & Discord integration
+│   ├── server.py          FastAPI server (voice feedback, Discord webhooks)
+│   ├── discord_bot.py     Discord bot client
+│   ├── discord_monitor.py Discord message monitor & Lucent response handler
+│   ├── discord_logger.py  Logging forwarder to Discord channel
+│   ├── discord_poller.py  Polling engine for channel messages
+│   ├── speak.sh           Voice feedback endpoint (send to Voice Box)
+│   ├── start.sh           Startup script
+│   └── static/            Web UI assets
+└── scratchpad/            Temporary workspace (not synced)
 ```
 
 ## Setup
@@ -153,6 +183,10 @@ Lucent = memory files + daily notes + agent config + GitHub sync
 Everything lives in lucent/ root and syncs to GitHub via lucent-sync.sh.
 Per-project .lucentrc files wire any dev session into the system.
 ```
+
+## Web UI
+
+<img src="scratchpad/screenshots/WebUI.png" alt="Lucent Voice Box Web UI" width="100%" />
 
 ## License
 
