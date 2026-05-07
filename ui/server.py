@@ -134,13 +134,7 @@ async def get_pending_speech():
 @app.post("/response")
 async def handle_response(request: ResponseRequest):
     """Handle responses from the poller (route to appropriate handler)."""
-    logger.info(f"[RESPONSE ENDPOINT] Received response from {request.source}: {request.response[:100]}")
-    print(f"[DEBUG] /response endpoint called with source={request.source}")
-
-    # Route based on source
-    print(f"[DEBUG] Checking source: {request.source}")
     if request.source == "discord_command":
-        print(f"[DEBUG] Source is discord_command, routing to webhook")
         # Send to Discord via bot's webhook
         try:
             payload = {
@@ -148,21 +142,14 @@ async def handle_response(request: ResponseRequest):
                 "thread_id": request.thread_id,
                 "response": request.response
             }
-            print(f"[DEBUG WEBHOOK] Building payload: {payload}")
-            logger.info(f"[WEBHOOK] Posting to bot webhook: {payload}")
-
-            print(f"[DEBUG WEBHOOK] Making POST request to http://127.0.0.1:8003/webhook/response")
             resp = requests.post(
                 "http://127.0.0.1:8003/webhook/response",
                 json=payload,
                 timeout=10
             )
 
-            print(f"[DEBUG WEBHOOK] Got response: {resp.status_code}")
-            logger.info(f"[WEBHOOK] Bot response: {resp.status_code}")
             if resp.status_code == 200:
-                print(f"[DEBUG WEBHOOK] Success! Response routed")
-                logger.info(f"Response routed to Discord webhook: {request.response[:80]}")
+                logger.info(f"Response routed to Discord: {request.response[:80]}")
                 return {
                     "status": "routed",
                     "destination": "discord",
@@ -175,7 +162,6 @@ async def handle_response(request: ResponseRequest):
                     "message": f"Bot webhook error: {resp.status_code}"
                 }
         except Exception as e:
-            print(f"[DEBUG WEBHOOK] Exception: {e}")
             logger.error(f"Failed to route to Discord: {e}")
             return {
                 "status": "error",
