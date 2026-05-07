@@ -186,7 +186,7 @@ Per-project .lucentrc files wire any dev session into the system.
 
 ## Web UI
 
-<img src="scratchpad/screenshots/WebUI.png" alt="Lucent Voice Box Web UI" width="100%" />
+<img src="docs/images/WebUI.png" alt="Lucent Voice Box Web UI" width="100%" />
 
 ## License
 
