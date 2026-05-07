@@ -9,13 +9,14 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
+from anthropic import Anthropic
 
 load_dotenv()
 
 # Configuration
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8002")
 LUCENT_ROOT = os.getenv("LUCENT_ROOT", "/home/nick/dev/lucent")
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 POLLING_INTERVAL = 3  # Seconds between polls for pending messages
 
 # Setup logging
@@ -30,8 +31,8 @@ class DiscordInstructionMonitor:
         self.lucent_root = Path(LUCENT_ROOT)
         self.memory_dir = self.lucent_root / "memory"
         self.backend_url = BACKEND_URL
-        self.ollama_url = OLLAMA_URL
-        self.model = "mistral"  # Fast model for Discord responses
+        self.client = Anthropic(api_key=ANTHROPIC_API_KEY)
+        self.model = "claude-haiku-4-5-20251001"  # Least expensive Claude model
 
     def load_context(self) -> str:
         """Load Lucent's full context (identity, memory, daily note)."""
@@ -69,7 +70,7 @@ class DiscordInstructionMonitor:
         return "\n\n".join(context_parts)
 
     def process_instruction(self, message: dict) -> str:
-        """Process Discord instruction through Ollama and return response."""
+        """Process Discord instruction through Claude Haiku and return response."""
         try:
             context = self.load_context()
             instruction_text = message.get("text", "")
@@ -80,35 +81,24 @@ class DiscordInstructionMonitor:
 
 Respond naturally and concisely to this instruction. Keep responses under 2-3 sentences unless more detail is needed."""
 
-            # Call Ollama
-            resp = requests.post(
-                f"{self.ollama_url}/api/generate",
-                json={
-                    "model": self.model,
-                    "prompt": instruction_text,
-                    "system": system_prompt,
-                    "stream": False,
-                    "temperature": 0.7
-                },
-                timeout=30
+            # Call Claude Haiku
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=500,
+                system=system_prompt,
+                messages=[
+                    {"role": "user", "content": instruction_text}
+                ]
             )
 
-            if resp.status_code == 200:
-                data = resp.json()
-                response_text = data.get("response", "").strip()
-                if response_text:
-                    logger.info(f"Generated response: {response_text[:100]}")
-                    return response_text
-                else:
-                    logger.error("Empty response from Ollama")
-                    return "[Error: empty response from model]"
+            response_text = response.content[0].text.strip()
+            if response_text:
+                logger.info(f"Generated response: {response_text[:100]}")
+                return response_text
             else:
-                logger.error(f"Ollama error: {resp.status_code}")
-                return f"[Error processing instruction: {resp.status_code}]"
+                logger.error("Empty response from Claude")
+                return "[Error: empty response from model]"
 
-        except requests.exceptions.Timeout:
-            logger.error("Ollama timeout")
-            return "[Error: response generation timed out]"
         except Exception as e:
             logger.error(f"Exception processing instruction: {e}")
             return f"[Error processing instruction: {str(e)}]"
@@ -197,7 +187,7 @@ Respond naturally and concisely to this instruction. Keep responses under 2-3 se
         """Main monitoring loop."""
         logger.info(f"Starting Discord instruction monitor (polling every {POLLING_INTERVAL}s)")
         logger.info(f"Backend: {self.backend_url}")
-        logger.info(f"Ollama: {self.ollama_url}")
+        logger.info(f"Model: Claude Haiku (via Anthropic)")
 
         while True:
             try:
