@@ -137,23 +137,32 @@ async def handle_response(request: ResponseRequest):
 
     # Route based on source
     if request.source == "discord_command":
-        # Send to Discord
+        # Send to Discord via bot's webhook
         try:
-            # Import discord bot functions (deferred to avoid circular import)
-            from discord_bot import post_response
-            import asyncio
-
-            # Run async function
-            asyncio.create_task(post_response(
-                request.message_id,
-                request.thread_id,
-                request.response
-            ))
-            return {
-                "status": "routed",
-                "destination": "discord",
-                "message_id": request.message_id
+            payload = {
+                "message_id": request.message_id,
+                "thread_id": request.thread_id,
+                "response": request.response
             }
+            resp = requests.post(
+                "http://127.0.0.1:8003/webhook/response",
+                json=payload,
+                timeout=10
+            )
+
+            if resp.status_code == 200:
+                logger.info(f"Response routed to Discord webhook: {request.response[:80]}")
+                return {
+                    "status": "routed",
+                    "destination": "discord",
+                    "message_id": request.message_id
+                }
+            else:
+                logger.error(f"Bot webhook error: {resp.status_code}")
+                return {
+                    "status": "error",
+                    "message": f"Bot webhook error: {resp.status_code}"
+                }
         except Exception as e:
             logger.error(f"Failed to route to Discord: {e}")
             return {

@@ -6,6 +6,8 @@ import aiohttp
 import asyncio
 from datetime import datetime
 from dotenv import load_dotenv
+from flask import Flask, request, jsonify
+import threading
 
 load_dotenv()
 
@@ -14,13 +16,39 @@ DISCORD_SERVER_ID = int(os.getenv("DISCORD_SERVER_ID", 0))
 DISCORD_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID", 0))
 DISCORD_LOG_CHANNEL_ID = int(os.getenv("DISCORD_LOG_CHANNEL_ID", 0))
 DISCORD_LOG_WEBHOOK_URL = os.getenv("DISCORD_LOG_WEBHOOK_URL", "")
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8001")
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8002")
 
 # Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+# Flask webhook for receiving responses from server
+flask_app = Flask(__name__)
+
+@flask_app.route("/webhook/response", methods=["POST"])
+def webhook_response():
+    """Receive response from server and post to Discord."""
+    try:
+        data = request.json
+        message_id = data.get("message_id")
+        thread_id = data.get("thread_id")
+        response_text = data.get("response")
+
+        if not response_text:
+            return jsonify({"error": "Missing response text"}), 400
+
+        # Schedule the async post_response to run in the bot's event loop
+        asyncio.run_coroutine_threadsafe(
+            post_response(message_id, thread_id, response_text),
+            bot.loop
+        )
+
+        return jsonify({"status": "scheduled"}), 200
+    except Exception as e:
+        print(f"[ERROR] Webhook error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @bot.event
 async def on_ready():
@@ -123,11 +151,20 @@ async def broadcast_log(text: str, level: str = "info"):
     except Exception as e:
         print(f"[ERROR] Exception posting log: {e}")
 
+def run_flask():
+    """Run Flask webhook server in background thread."""
+    flask_app.run(host="127.0.0.1", port=8003, debug=False, use_reloader=False)
+
 def run_bot():
     """Start the Discord bot."""
     if not DISCORD_BOT_TOKEN:
         print("[ERROR] DISCORD_BOT_TOKEN not set in .env")
         return
+
+    # Start Flask webhook in background thread
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    print("[INFO] Flask webhook started on http://127.0.0.1:8003")
 
     try:
         bot.run(DISCORD_BOT_TOKEN)
