@@ -6,6 +6,7 @@ import time
 import requests
 import json
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
@@ -84,6 +85,17 @@ class DiscordInstructionMonitor:
 
         return "\n\n".join(context_parts)
 
+    def clean_response(self, response_text: str) -> str:
+        """Remove tool_use blocks and XML tags from response."""
+        # Remove tool_use blocks entirely
+        response_text = re.sub(r'<tool_use>.*?</tool_use>', '', response_text, flags=re.DOTALL)
+        # Remove stray XML tags
+        response_text = re.sub(r'</?tool_use>|</?name>|</?arguments>', '', response_text)
+        # Remove empty brackets and clean up whitespace
+        response_text = re.sub(r'[\[\]]', '', response_text)
+        response_text = response_text.strip()
+        return response_text if response_text else "Processing complete."
+
     def process_instruction(self, message: dict) -> str:
         """Process Discord instruction through Ollama and return response."""
         try:
@@ -94,7 +106,9 @@ class DiscordInstructionMonitor:
 
 {context}
 
-Respond naturally and concisely to this instruction. Keep responses under 2-3 sentences unless more detail is needed."""
+Respond naturally and concisely to this instruction. Keep responses under 2-3 sentences unless more detail is needed.
+
+IMPORTANT: Do NOT use tool_use syntax or attempt to call tools. Generate only plain text responses. Do not output XML tags or tool calls."""
 
             # Call Ollama
             resp = requests.post(
@@ -113,6 +127,7 @@ Respond naturally and concisely to this instruction. Keep responses under 2-3 se
                 data = resp.json()
                 response_text = data.get("response", "").strip()
                 if response_text:
+                    response_text = self.clean_response(response_text)
                     logger.info(f"Generated response: {response_text[:100]}")
                     return response_text
                 else:
