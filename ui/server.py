@@ -254,6 +254,46 @@ async def get_log():
     else:
         return {"content": "No log for today yet."}
 
+# Model management for Discord
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+DISCORD_MODEL_FILE = Path(__file__).parent / ".discord_model"
+
+@app.get("/ollama/models")
+async def get_available_models():
+    """Get list of available Ollama models."""
+    try:
+        resp = requests.get(
+            f"{OLLAMA_URL}/api/tags",
+            timeout=10
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            models = [m["name"].split(":")[0] for m in data.get("models", [])]
+            # Get current model
+            current = "mistral"
+            if DISCORD_MODEL_FILE.exists():
+                current = DISCORD_MODEL_FILE.read_text().strip()
+            return {
+                "available": list(set(models)),
+                "current": current
+            }
+        else:
+            return {"error": "Could not reach Ollama"}
+    except Exception as e:
+        logger.error(f"Error fetching Ollama models: {e}")
+        return {"error": str(e)}
+
+@app.post("/ollama/model")
+async def set_model(model_name: str):
+    """Set the current Discord model."""
+    if not model_name or not model_name.strip():
+        return {"error": "Model name required"}, 400
+
+    model_name = model_name.strip().lower()
+    DISCORD_MODEL_FILE.write_text(model_name)
+    logger.info(f"Discord model switched to: {model_name}")
+    return {"status": "switched", "model": model_name}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8002)

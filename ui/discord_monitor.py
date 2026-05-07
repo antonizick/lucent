@@ -31,7 +31,23 @@ class DiscordInstructionMonitor:
         self.memory_dir = self.lucent_root / "memory"
         self.backend_url = BACKEND_URL
         self.ollama_url = OLLAMA_URL
-        self.model = "mistral"  # Fast model for Discord responses
+        self.model = self.load_selected_model()  # Load persisted model choice
+
+    def load_selected_model(self) -> str:
+        """Load the selected model from server or default to mistral."""
+        try:
+            resp = requests.get(
+                f"{self.backend_url}/ollama/models",
+                timeout=5
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                model = data.get("current", "mistral")
+                logger.info(f"Loaded model: {model}")
+                return model
+        except Exception as e:
+            logger.warning(f"Could not load model preference: {e}")
+        return "mistral"
 
     def load_context(self) -> str:
         """Load Lucent's full context (identity, memory, daily note)."""
@@ -193,11 +209,48 @@ Respond naturally and concisely to this instruction. Keep responses under 2-3 se
             logger.error(f"Exception clearing messages: {e}")
             return False
 
+    def handle_command(self, message: dict) -> tuple[bool, str]:
+        """Handle special Discord commands. Returns (is_command, response)."""
+        text = message.get("text", "").strip().lower()
+
+        if text == "!models":
+            try:
+                resp = requests.get(
+                    f"{self.backend_url}/ollama/models",
+                    timeout=5
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    models = data.get("available", [])
+                    current = data.get("current", "unknown")
+                    return True, f"Available models: {', '.join(models)}\nCurrent: {current}\n\nUse: !model <name>"
+            except Exception as e:
+                return True, f"Error listing models: {str(e)}"
+
+        elif text.startswith("!model "):
+            model_name = text.replace("!model ", "").strip()
+            try:
+                resp = requests.post(
+                    f"{self.backend_url}/ollama/model?model_name={model_name}",
+                    timeout=5
+                )
+                if resp.status_code == 200:
+                    self.model = model_name
+                    logger.info(f"Model switched to: {model_name}")
+                    return True, f"Model switched to: {model_name}"
+                else:
+                    return True, f"Failed to switch model: {resp.status_code}"
+            except Exception as e:
+                return True, f"Error switching model: {str(e)}"
+
+        return False, ""
+
     def monitor(self):
         """Main monitoring loop."""
         logger.info(f"Starting Discord instruction monitor (polling every {POLLING_INTERVAL}s)")
         logger.info(f"Backend: {self.backend_url}")
         logger.info(f"Ollama: {self.ollama_url}")
+        logger.info(f"Current model: {self.model}")
 
         while True:
             try:
@@ -208,11 +261,16 @@ Respond naturally and concisely to this instruction. Keep responses under 2-3 se
                     for message in messages:
                         logger.info(f"Processing Discord instruction from {message.get('user_id')}")
 
-                        # Process the instruction
-                        response = self.process_instruction(message)
+                        # Check if it's a command
+                        is_command, response = self.handle_command(message)
 
-                        # Post response back to Discord
-                        self.post_response(message, response)
+                        if is_command:
+                            # Send command response
+                            self.post_response(message, response)
+                        else:
+                            # Process as normal instruction
+                            response = self.process_instruction(message)
+                            self.post_response(message, response)
 
                     # Clear processed messages
                     self.clear_processed_messages()
