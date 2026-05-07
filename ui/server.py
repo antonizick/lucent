@@ -268,9 +268,9 @@ async def get_available_models():
         )
         if resp.status_code == 200:
             data = resp.json()
-            models = [m["name"].split(":")[0] for m in data.get("models", [])]
+            models = [m["name"] for m in data.get("models", [])]
             # Get current model
-            current = "mistral"
+            current = "mistral:latest"
             if DISCORD_MODEL_FILE.exists():
                 current = DISCORD_MODEL_FILE.read_text().strip()
             return {
@@ -299,11 +299,28 @@ async def set_model(model_name: str):
         )
         if resp.status_code == 200:
             data = resp.json()
-            available = [m["name"].split(":")[0].lower() for m in data.get("models", [])]
-            if model_name not in available:
+            available = [m["name"].lower() for m in data.get("models", [])]
+
+            # Try exact match first
+            exact_match = None
+            for model in available:
+                if model == model_name:
+                    exact_match = model
+                    break
+
+            # Try partial match (for "qwen" matching "qwen3.6:35b")
+            partial_matches = []
+            if not exact_match:
+                for model in available:
+                    if model_name in model:
+                        partial_matches.append(model)
+
+            final_model = exact_match or (partial_matches[0] if len(partial_matches) == 1 else None)
+
+            if not final_model:
                 return {
                     "error": f"Model '{model_name}' not found",
-                    "available": list(set(available))
+                    "available": available
                 }, 404
         else:
             return {"error": "Could not reach Ollama"}, 503
@@ -311,9 +328,9 @@ async def set_model(model_name: str):
         logger.error(f"Error validating model: {e}")
         return {"error": f"Error validating model: {str(e)}"}, 500
 
-    DISCORD_MODEL_FILE.write_text(model_name)
-    logger.info(f"Discord model switched to: {model_name}")
-    return {"status": "switched", "model": model_name}
+    DISCORD_MODEL_FILE.write_text(final_model)
+    logger.info(f"Discord model switched to: {final_model}")
+    return {"status": "switched", "model": final_model}
 
 if __name__ == "__main__":
     import uvicorn
