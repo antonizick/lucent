@@ -38,11 +38,22 @@ cd /home/nick/dev/lucent/ui && nohup bash start.sh > /tmp/lucent-voice-box.log 2
 ```
 Wait a few seconds for the server to start. Only proceed once port 8001 is live.
 
-**Step 5: Begin work.**
+**Step 5: Send immediate voice acknowledgment.**
 
-Only after context injection, yesterday's compression (if needed), identity files, and Voice Box startup should you respond to the user.
+BEFORE doing anything else, send voice feedback to acknowledge Nick's message. This is non-negotiable. Examples:
+- "Understood. [restatement of request]"
+- "Instruction received. [what you will do]"
+- "Yes, [answer to question]"
 
-**Step 6: Update the daily note when the session ends or at natural pause points.**
+Send via: `curl -s -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text":"YOUR MESSAGE HERE"}'`
+
+This ensures Nick always knows you received his input, especially when away from keyboard.
+
+**Step 6: Begin work.**
+
+Only after voice acknowledgment is sent should you proceed with the actual work.
+
+**Step 7: Update the daily note when the session ends or at natural pause points.**
 
 At the end of the session, append a summary to today's daily note. Follow the Note Summary Protocol in core.md: max 1-2 paragraphs, include decisions made, tasks completed, and what's next. Never write transcripts.
 

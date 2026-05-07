@@ -188,9 +188,28 @@ async def store_discord_message(request: MessageRequest):
         "count": len(discord_pending)
     }
 
+@app.get("/discord/pending")
+async def peek_pending_discord_messages():
+    """Peek at pending Discord messages without clearing (for monitor processing)."""
+    messages = list(discord_pending)
+    return {
+        "messages": messages,
+        "count": len(messages)
+    }
+
+@app.delete("/discord/pending")
+async def clear_pending_discord_messages():
+    """Clear all pending Discord messages (used after processing)."""
+    count = len(discord_pending)
+    discord_pending.clear()
+    return {
+        "status": "cleared",
+        "count": count
+    }
+
 @app.get("/discord/messages")
 async def get_pending_discord_messages():
-    """Get all pending Discord messages for terminal display."""
+    """Get all pending Discord messages for terminal display (destructive)."""
     messages = list(discord_pending)
     discord_pending.clear()  # Clear after retrieval
 

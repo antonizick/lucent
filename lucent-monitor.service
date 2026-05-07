@@ -1,0 +1,17 @@
+[Unit]
+Description=Lucent Discord Instruction Monitor
+After=network.target lucent-server.service
+Wants=lucent-server.service
+
+[Service]
+Type=simple
+User=nick
+WorkingDirectory=/home/nick/dev/lucent/ui
+ExecStart=/usr/bin/python3 /home/nick/dev/lucent/ui/discord_monitor.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
