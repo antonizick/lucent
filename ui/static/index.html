@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lucent — Voice Output</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>Lucent</h1>
+            <div class="controls">
+                <select id="voiceSelect" class="voice-selector">
+                    <option value="">Loading voices...</option>
+                </select>
+                <button id="themeToggle" class="theme-toggle" title="Toggle light/dark theme">🌙</button>
+            </div>
+        </div>
+
+        <!-- Voice Panel -->
+        <div class="voice-panel">
+            <div class="panel-label" id="voicePanelLabel">AI VOICE BOX — IDLE</div>
+            <button id="enableVoice" class="enable-voice-btn">Enable Voice</button>
+
+            <!-- Knight Rider Scanner -->
+            <div id="scanner" class="scanner-container">
+                <div class="scanner-light"></div>
+                <div class="scanner-bar">
+                    <div class="scanner-dot"></div>
+                    <div class="scanner-dot"></div>
+                    <div class="scanner-dot"></div>
+                    <div class="scanner-dot"></div>
+                    <div class="scanner-dot"></div>
+                    <div class="scanner-dot"></div>
+                    <div class="scanner-dot"></div>
+                    <div class="scanner-dot"></div>
+                    <div class="scanner-dot"></div>
+                    <div class="scanner-dot"></div>
+                </div>
+            </div>
+
+            <!-- Knight Rider Speaking Animation -->
+            <div id="speakingAnimation" class="speaking-animation hidden">
+                <div class="speaking-bar"></div>
+                <div class="speaking-bar"></div>
+                <div class="speaking-bar"></div>
+                <div class="speaking-bar"></div>
+                <div class="speaking-bar"></div>
+            </div>
+
+            <div id="currentText" class="current-text">Waiting for input...</div>
+        </div>
+
+        <!-- Log Panel -->
+        <div class="log-panel">
+            <div class="log-label">DAY'S LOG — LIVE FEED</div>
+            <pre id="logContent" class="log-content"></pre>
+        </div>
+
+        <!-- Status indicator -->
+        <div id="status" class="status"></div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

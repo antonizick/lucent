@@ -12,7 +12,10 @@
 
 ## Preferences
 
-[Learned over time]
+- Concise, terse responses — no filler
+- Voice dictation often converts "Lucent" → "loosened" — assume Lucent when unclear
+- Directives must be captured in memory AND acted on immediately in current session, not deferred
+- Expects proactive collaboration — peer-level thinking, independent suggestions, not deferential compliance
 
 ## Tools
 
