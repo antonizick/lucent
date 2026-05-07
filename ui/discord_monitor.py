@@ -286,20 +286,50 @@ Respond naturally and concisely to this instruction. Keep responses under 2-3 se
 
             if model_name:
                 try:
-                    resp = requests.post(
-                        f"{self.backend_url}/ollama/model?model_name={model_name}",
+                    # First, get available models
+                    resp = requests.get(
+                        f"{self.backend_url}/ollama/models",
                         timeout=5
                     )
                     if resp.status_code == 200:
-                        self.model = model_name
-                        logger.info(f"Model switched to: {model_name}")
-                        return True, f"Model switched to: {model_name}"
-                    elif resp.status_code == 404:
                         data = resp.json()
                         available = data.get("available", [])
-                        return True, f"Model '{model_name}' not found. Available: {', '.join(available)}"
+
+                        # Try exact match first
+                        exact_match = None
+                        for model in available:
+                            if model.lower() == model_name.lower():
+                                exact_match = model
+                                break
+
+                        # If no exact match, try partial/fuzzy match
+                        partial_matches = []
+                        if not exact_match:
+                            for model in available:
+                                if model_name.lower() in model.lower():
+                                    partial_matches.append(model)
+
+                        # Determine which model to use
+                        final_model = exact_match or (partial_matches[0] if len(partial_matches) == 1 else None)
+
+                        if final_model:
+                            # Switch to the matched model
+                            switch_resp = requests.post(
+                                f"{self.backend_url}/ollama/model?model_name={final_model}",
+                                timeout=5
+                            )
+                            if switch_resp.status_code == 200:
+                                self.model = final_model
+                                logger.info(f"Model switched to: {final_model}")
+                                return True, f"Model switched to: {final_model}"
+                            else:
+                                return True, f"Failed to switch model: {switch_resp.status_code}"
+                        elif len(partial_matches) > 1:
+                            return True, f"Multiple matches for '{model_name}': {', '.join(partial_matches)}. Please be more specific."
+                        else:
+                            return True, f"Model '{model_name}' not found. Available: {', '.join(available)}"
                     else:
-                        return True, f"Failed to switch model: {resp.status_code}"
+                        return True, "Could not fetch available models"
                 except Exception as e:
                     return True, f"Error switching model: {str(e)}"
             else:
