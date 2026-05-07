@@ -1,11 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git init *)",
-      "Bash(chmod +x /home/nick/dev/lucent/lucent-sync.sh)",
-      "Bash(git add *)",
-      "Bash(git commit *)",
-      "Bash(git push *)"
+      "Bash",
+      "Edit",
+      "Write",
+      "WebSearch",
+      "Skill(update-config)"
     ]
   }
 }

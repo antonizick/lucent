@@ -245,6 +245,24 @@ body {
     word-wrap: break-word;
     min-height: 30px;
     text-align: center;
+    position: relative;
+    padding-bottom: 24px;
+    opacity: 1;
+    transition: opacity 0.5s ease;
+}
+
+.current-text.faded {
+    opacity: 0.4;
+}
+
+.text-timestamp {
+    position: absolute;
+    bottom: 4px;
+    right: 8px;
+    font-size: 12px;
+    color: #888888;
+    font-family: 'Courier New', monospace;
+    opacity: 0.85;
 }
 
 .enable-voice-btn {

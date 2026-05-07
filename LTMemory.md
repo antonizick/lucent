@@ -15,7 +15,7 @@
 
 - README.md is the only public-facing file — concise, covers architecture, setup, usage, not a tutorial.
 - .gitignore excludes ai-shared-brain/ submodule, private/, IDE files, .DS_Store.
-- Daily notes accumulate forever — no deletion. Promoted to LTMemory on review.
+- Daily notes accumulate forever — no deletion of completed notes. Daily notes can and should be edited, refined, and summarized during their day. Once the day is over, the note is never deleted — only its content promoted to LTMemory.md.
 
 ## Lessons Learned
 
@@ -27,3 +27,17 @@
 - Repo at /home/nick/dev/lucent/ with ai-shared-brain/ as git submodule.
 - Sync: lucent-sync.sh + aliases (brain/lucent) to GitHub remote.
 - Per-project .lucentrc files wire dev sessions into the system.
+
+## Archival & Maintenance Policy
+
+**Philosophy:** Retain what's load-bearing, archive what's outdated.
+
+**Keep in LTMemory:** Decisions that still hold. Preferences that still apply. Lessons that inform future work. Architecture decisions. Recurring patterns.
+
+**Archive to `memory/archive/`:** Outdated context. Completed initiatives (unless they're principles). Historical notes that don't affect future work. Decisions superseded by newer ones.
+
+**Decision rule:** "If a new sub-agent reads this, does it help them work with Nick?" Yes → keep. No → archive.
+
+**Process:** Monthly review (or quarterly). Scan LTMemory, ask the question above, move stale entries to `memory/archive/YYYY-MM.md` with a brief note on why it was archived.
+
+**Format:** Archived entries stay readable. Archive files are numbered by month: `archive/2026-Q2.md`, `archive/2026-Q3.md`, etc.

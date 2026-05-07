@@ -1,5 +1,7 @@
 // DOM elements
 const currentText = document.getElementById('currentText');
+const currentTextContent = document.getElementById('currentTextContent');
+const currentTextTimestamp = document.getElementById('currentTextTimestamp');
 const voiceSelect = document.getElementById('voiceSelect');
 const themeToggle = document.getElementById('themeToggle');
 const status = document.getElementById('status');
@@ -13,6 +15,7 @@ let currentVoice = null;
 let isSpeaking = false;
 let voiceEnabled = false;
 let lastLogContent = '';
+let fadeTimeout = null;
 
 // Load and populate available voices
 function loadVoices() {
@@ -63,6 +66,15 @@ if (savedVoice && voiceSelect.options[savedVoice]) {
     currentVoice = voices[savedVoice];
 }
 
+// Update timestamp display
+function updateTimestamp() {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    currentTextTimestamp.textContent = `${hours}:${minutes}:${seconds}`;
+}
+
 // Enable voice output (requires user interaction)
 function enableVoiceOutput() {
     voiceEnabled = true;
@@ -79,7 +91,8 @@ function enableVoiceOutput() {
 function speakText(text) {
     if (!voiceEnabled) {
         status.textContent = 'Voice not enabled. Click "Enable Voice" button.';
-        currentText.textContent = text;
+        currentTextContent.textContent = text;
+        updateTimestamp();
         return;
     }
 
@@ -92,8 +105,18 @@ function speakText(text) {
     // Cancel any ongoing speech
     window.speechSynthesis.cancel();
 
-    // Display the text
-    currentText.textContent = text;
+    // Clear any pending fade timeout
+    if (fadeTimeout) {
+        clearTimeout(fadeTimeout);
+        fadeTimeout = null;
+    }
+
+    // Reset opacity to full
+    currentText.style.opacity = '1';
+
+    // Display the text with timestamp
+    currentTextContent.textContent = text;
+    updateTimestamp();
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.voice = currentVoice;
@@ -105,6 +128,16 @@ function speakText(text) {
         isSpeaking = true;
         const scanner = document.getElementById('scanner');
         const speakingAnimation = document.getElementById('speakingAnimation');
+
+        // Clear any pending fade timeout when speech starts
+        if (fadeTimeout) {
+            clearTimeout(fadeTimeout);
+            fadeTimeout = null;
+        }
+
+        // Ensure text is full opacity while speaking
+        currentText.style.opacity = '1';
+
         scanner.style.display = 'none';
         speakingAnimation.classList.remove('hidden');
         speakingAnimation.style.display = 'flex';
@@ -115,6 +148,12 @@ function speakText(text) {
     };
 
     utterance.onend = () => {
+        // Set timeout to fade text after 2 minutes
+        fadeTimeout = setTimeout(() => {
+            currentText.style.opacity = '0.2';
+            fadeTimeout = null;
+        }, 120000);
+
         isSpeaking = false;
         const scanner = document.getElementById('scanner');
         const speakingAnimation = document.getElementById('speakingAnimation');
@@ -133,6 +172,17 @@ function speakText(text) {
         isSpeaking = false;
         const scanner = document.getElementById('scanner');
         const speakingAnimation = document.getElementById('speakingAnimation');
+
+        // Clear any pending fade timeout on error
+        if (fadeTimeout) {
+            console.log('[utterance.onerror] Clearing pending fade timeout');
+            clearTimeout(fadeTimeout);
+            fadeTimeout = null;
+        }
+
+        // Reset opacity on error
+        currentText.style.opacity = '1';
+
         scanner.style.display = 'flex';
         speakingAnimation.classList.add('hidden');
         speakingAnimation.style.display = 'none';

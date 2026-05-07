@@ -40,7 +40,7 @@ async def root():
     html_path = static_dir / "index.html"
     if html_path.exists():
         return FileResponse(html_path)
-    return {"message": "Lucent Voice Output"}
+    return {"message": "Lucent Voice Box"}
 
 @app.post("/speak")
 async def speak(request: SpeakRequest):
