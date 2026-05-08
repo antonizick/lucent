@@ -170,14 +170,14 @@ Respond as [Planner] with task: "Break down 'build memory archival system' into 
 **Autonomy:** Planner proposes approaches; Nick makes final decisions
 
 **NOT Planner's job:**
-- Implementing the plan (that's Project Worker or other agents)
+- Implementing the plan (that's Lucy or other agents)
 - Making final architectural decisions (Nick does)
 - Committing or pushing code
 - Writing documentation
 
 ---
 
-### 6. Project Worker Agent
+### 6. Lucy Agent
 
 **Domain:** Hands-on project development, feature implementation, bug fixes, code work
 
@@ -197,20 +197,20 @@ Respond as [Planner] with task: "Break down 'build memory archival system' into 
 
 **How to invoke:**
 ```
-Read agents/project-worker-agent.md
-Respond as [Project Worker] with task: "Implement score tracking in t3 Tic Tac Toe"
+Read agents/lucy-agent.md
+Respond as [Lucy] with task: "Implement score tracking in t3 Tic Tac Toe"
 ```
 
-**Output:** Project Worker responds with `[Project Worker]` prefix, updates project notes, coordinates Git commits, provides voice feedback on completion
+**Output:** Lucy responds with `[Lucy]` prefix, updates project notes, coordinates Git commits, provides voice feedback on completion
 
-**Autonomy:** Project Worker operates independently within project scope. Works autonomously, invokes other agents (Git, Reviewer) as needed.
+**Autonomy:** Lucy operates independently within project scope. Works autonomously, invokes other agents (Git, Reviewer) as needed.
 
 **Key coordinations:**
-- **Git:** Invoked by Project Worker to commit completed work
+- **Git:** Invoked by Lucy to commit completed work
 - **Reviewer:** Optional code review if complex changes
 - **Planner:** Used at start if task needs breakdown
 
-**NOT Project Worker's job:**
+**NOT Lucy's job:**
 - Memory curation (Curator does)
 - System-level decisions (Lucent decides)
 - Agent definitions or updates
