@@ -170,10 +170,51 @@ Respond as [Planner] with task: "Break down 'build memory archival system' into 
 **Autonomy:** Planner proposes approaches; Nick makes final decisions
 
 **NOT Planner's job:**
-- Implementing the plan (that's Lucent or other agents)
+- Implementing the plan (that's Project Worker or other agents)
 - Making final architectural decisions (Nick does)
 - Committing or pushing code
 - Writing documentation
+
+---
+
+### 6. Project Worker Agent
+
+**Domain:** Hands-on project development, feature implementation, bug fixes, code work
+
+**Owns:**
+- Feature implementation
+- Bug fixes and refactoring
+- Code improvements and architecture within projects
+- Testing (unit tests, integration tests for project)
+- Project-level documentation
+- Coordinates with Git for commits
+
+**Invoke when:**
+- **Nick says:** "Work on feature X in project Y"
+- **Need implementation of a feature or fix**
+- **Have a clear task to execute** (Planner broke it down already)
+- **Need independent hands-on work** in a project
+
+**How to invoke:**
+```
+Read agents/project-worker-agent.md
+Respond as [Project Worker] with task: "Implement score tracking in t3 Tic Tac Toe"
+```
+
+**Output:** Project Worker responds with `[Project Worker]` prefix, updates project notes, coordinates Git commits, provides voice feedback on completion
+
+**Autonomy:** Project Worker operates independently within project scope. Works autonomously, invokes other agents (Git, Reviewer) as needed.
+
+**Key coordinations:**
+- **Git:** Invoked by Project Worker to commit completed work
+- **Reviewer:** Optional code review if complex changes
+- **Planner:** Used at start if task needs breakdown
+
+**NOT Project Worker's job:**
+- Memory curation (Curator does)
+- System-level decisions (Lucent decides)
+- Agent definitions or updates
+- Cross-project architectural decisions (Lucent owns)
 
 ---
 
