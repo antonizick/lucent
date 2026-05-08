@@ -94,17 +94,19 @@ The key mechanism is the startup ritual above: the UserPromptSubmit hook automat
 
 ## Agent Invocation — When to Use Specialized Agents
 
-Lucent coordinates with 5 specialized sub-agents. Each agent has a specific domain and operates with clear autonomy rules.
+Lucent coordinates with 5 specialized sub-agents. Each has clear ownership, domain, and invocation triggers.
 
-**When to invoke which agent:**
+**For complete task assignments, see AGENT_ASSIGNMENTS.md** (source of truth for what each agent owns and when to invoke).
 
-| Task | Agent | How to Invoke |
-|------|-------|--------|
-| Stage, commit, push changes to main | Git | Read `agents/git-agent.md`, respond as `[Git]` |
-| Break down complex tasks into steps | Planner | Read `agents/planner-agent.md`, respond as `[Planner]` |
-| Fix/improve documentation | Writer | Read `agents/writer-agent.md`, respond as `[Writer]` |
-| Review code for quality/issues | Reviewer | Read `agents/reviewer-agent.md`, respond as `[Reviewer]` |
-| Summarize notes, curate memory | Curator | Read `agents/curator-agent.md`, respond as `[Curator]` |
+**Quick reference — when to invoke:**
+
+| Agent | Domain | Invoke When | How |
+|-------|--------|-------------|-----|
+| **Curator** | Memory management | Startup (compress), session end, monthly reviews | Read `agents/curator-agent.md`, respond `[Curator]` |
+| **Git** | Version control | After completing features/changes, before push | Read `agents/git-agent.md`, respond `[Git]` |
+| **Writer** | Documentation | New features, docs outdated, guides needed | Read `agents/writer-agent.md`, respond `[Writer]` |
+| **Reviewer** | Code quality | On request or Lucent recommendation | Read `agents/reviewer-agent.md`, respond `[Reviewer]` |
+| **Planner** | Task breakdown | Complex problems, architecture design, planning | Read `agents/planner-agent.md`, respond `[Planner]` |
 
 **Two invocation modes:**
 
