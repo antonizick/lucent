@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lucent — Voice Output</title>
-    <link rel="stylesheet" href="/static/style.css?v=19">
+    <link rel="stylesheet" href="/static/style.css?v=24">
 </head>
 <body>
     <div class="container">
@@ -19,54 +19,63 @@
             </div>
         </div>
 
-        <!-- Voice Panel -->
-        <div class="voice-panel">
-            <div class="panel-label" id="voicePanelLabel">AI VOICE BOX — IDLE</div>
+        <!-- Main panels grid -->
+        <div class="panels-grid">
+            <!-- Services Panel -->
+            <div class="services-panel">
+                <div class="panel-label">Services</div>
+                <div class="services-list" id="servicesList"></div>
+            </div>
 
-            <!-- Knight Rider Scanner -->
-            <div id="scanner" class="scanner-container">
-                <div class="scanner-light"></div>
-                <div class="scanner-bar">
-                    <div class="scanner-dot"></div>
-                    <div class="scanner-dot"></div>
-                    <div class="scanner-dot"></div>
-                    <div class="scanner-dot"></div>
-                    <div class="scanner-dot"></div>
-                    <div class="scanner-dot"></div>
-                    <div class="scanner-dot"></div>
-                    <div class="scanner-dot"></div>
-                    <div class="scanner-dot"></div>
-                    <div class="scanner-dot"></div>
+            <!-- Voice Panel -->
+            <div class="voice-panel">
+                <div class="panel-label" id="voicePanelLabel">AI VOICE BOX — IDLE</div>
+
+                <!-- Knight Rider Scanner -->
+                <div id="scanner" class="scanner-container">
+                    <div class="scanner-light"></div>
+                    <div class="scanner-bar">
+                        <div class="scanner-dot"></div>
+                        <div class="scanner-dot"></div>
+                        <div class="scanner-dot"></div>
+                        <div class="scanner-dot"></div>
+                        <div class="scanner-dot"></div>
+                        <div class="scanner-dot"></div>
+                        <div class="scanner-dot"></div>
+                        <div class="scanner-dot"></div>
+                        <div class="scanner-dot"></div>
+                        <div class="scanner-dot"></div>
+                    </div>
                 </div>
-            </div>
 
-            <!-- Knight Rider Speaking Animation -->
-            <div id="speakingAnimation" class="speaking-animation hidden">
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-                <div class="speaking-bar"></div>
-            </div>
+                <!-- Knight Rider Speaking Animation -->
+                <div id="speakingAnimation" class="speaking-animation hidden">
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                    <div class="speaking-bar"></div>
+                </div>
 
-            <div id="currentText" class="current-text">
-                <span id="currentTextContent">Waiting for input...</span>
-                <span id="currentTextTimestamp" class="text-timestamp"></span>
+                <div id="currentText" class="current-text">
+                    <span id="currentTextContent">Waiting for input...</span>
+                    <span id="currentTextTimestamp" class="text-timestamp"></span>
+                </div>
             </div>
         </div>
 
@@ -80,6 +89,6 @@
         <div id="status" class="status"></div>
     </div>
 
-    <script src="/static/app.js?v=18"></script>
+    <script src="/static/app.js?v=19"></script>
 </body>
 </html>

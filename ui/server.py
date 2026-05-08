@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import requests
+import subprocess
 from datetime import datetime, date
 from pathlib import Path
 from collections import deque
@@ -239,6 +240,45 @@ async def get_log():
             return {"content": f"Error reading log: {str(e)}"}
     else:
         return {"content": "No log for today yet."}
+
+@app.get("/services/health")
+async def services_health():
+    """Check health status of all services."""
+    services = []
+
+    # Ollama Local inference engine
+    try:
+        resp = requests.get("http://localhost:11434/api/tags", timeout=3)
+        ollama_status = "online" if resp.status_code == 200 else "offline"
+    except:
+        ollama_status = "offline"
+    services.append({"name": "Ollama Local inference engine", "status": ollama_status})
+
+    # Voice Box (self)
+    services.append({"name": "Voice box", "status": "online"})
+
+    # Discord Bot Flask server
+    try:
+        resp = requests.get("http://localhost:8003/", timeout=3)
+        discord_bot_status = "online" if resp.status_code < 500 else "offline"
+    except:
+        discord_bot_status = "offline"
+    services.append({"name": "Discord bot", "status": discord_bot_status})
+
+    # Discord Poller (check if process running)
+    result = subprocess.run(["pgrep", "-f", "discord_poller.py"], capture_output=True)
+    poller_status = "online" if result.returncode == 0 else "offline"
+    services.append({"name": "Discord poller", "status": poller_status})
+
+    # Discord Monitor (check if process running)
+    result = subprocess.run(["pgrep", "-f", "discord_monitor.py"], capture_output=True)
+    monitor_status = "online" if result.returncode == 0 else "offline"
+    services.append({"name": "Discord monitor", "status": monitor_status})
+
+    # Lucent server (self)
+    services.append({"name": "Lucent server", "status": "online"})
+
+    return {"services": services}
 
 # Model management for Discord
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")

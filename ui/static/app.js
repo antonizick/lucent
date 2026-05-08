@@ -7,6 +7,7 @@ const themeToggle = document.getElementById('themeToggle');
 const status = document.getElementById('status');
 const voicePanelLabel = document.getElementById('voicePanelLabel');
 const logContent = document.getElementById('logContent');
+const servicesList = document.getElementById('servicesList');
 
 // State
 let currentVoice = null;
@@ -238,6 +239,43 @@ function setupLogListener() {
     setInterval(pollForLog, 3000);
 }
 
+// Poll for service health
+async function pollServiceHealth() {
+    try {
+        const response = await fetch('/services/health');
+        const data = await response.json();
+        renderServices(data.services);
+    } catch (error) {
+        console.error('Error polling service health:', error);
+    }
+}
+
+// Render services list
+function renderServices(services) {
+    servicesList.innerHTML = '';
+    services.forEach(service => {
+        const item = document.createElement('div');
+        item.className = `service-item ${service.status}`;
+
+        const dot = document.createElement('span');
+        dot.className = `service-dot ${service.status}`;
+
+        const name = document.createElement('span');
+        name.className = 'service-name';
+        name.textContent = service.name;
+
+        item.appendChild(dot);
+        item.appendChild(name);
+        servicesList.appendChild(item);
+    });
+}
+
+// Set up polling for service health
+function setupServiceListener() {
+    pollServiceHealth();
+    setInterval(pollServiceHealth, 10000);
+}
+
 // Theme toggle
 function initTheme() {
     const savedTheme = localStorage.getItem('theme') || 'dark';
@@ -282,6 +320,7 @@ window.addEventListener('load', constrainAnimationHeight);
 initTheme();
 setupSpeechListener();
 setupLogListener();
+setupServiceListener();
 
 // Listen for first click to enable speech (browser autoplay policy)
 document.addEventListener('click', enableSpeech);
