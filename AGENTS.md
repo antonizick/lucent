@@ -65,6 +65,61 @@ All sub-agent output must be prefixed with `[AgentName]` for clear distinction f
 
 **Standard practice:** Add to every agent's Communication Style section: "Output always prefixed with `[AgentName]` for distinction from core Lucent."
 
+---
+
+## How to Invoke an Agent
+
+There are two ways to invoke sub-agents: in-process (Claude Code) and API-based (external/automation).
+
+### In-Process Invocation (Claude Code Terminal)
+
+When Lucent decides a task belongs to a specific agent:
+
+1. **Read the agent file:** `agents/{agent-name}-agent.md`
+2. **Assume the agent's identity** with full context loaded
+3. **Respond in the agent's voice** prefixed with `[AgentName]`
+4. **Include all context** the agent has (core.md, LTMemory.md, userIdent.md, agent personality, 7 days of notes)
+
+Example: Nick asks "What should I work on next?"
+```
+[Lucent] This looks like a planning question. Let me think about that.
+[Planner] Based on the current state of the system and recent work:
+1. Operationalize agents (medium effort)
+2. Build memory archival system (medium effort)
+...
+```
+
+### API-Based Invocation (Script, Discord, or Broker)
+
+For agents running outside Claude Code or in automation contexts:
+
+**CLI:**
+```bash
+python3 /home/nick/dev/lucent/scripts/invoke_agent.py git "Stage and commit all recent changes"
+python3 /home/nick/dev/lucent/scripts/invoke_agent.py planner "Break down implementation of a new Discord command"
+```
+
+**HTTP Endpoint (FastAPI broker on port 8002):**
+```bash
+curl -X POST http://localhost:8002/agent/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"agent":"git","task":"Stage and commit recent changes"}'
+
+# Response:
+{
+  "agent": "git",
+  "response": "[Git] Committed Agent Operationalization Framework...",
+  "status": "success"
+}
+```
+
+Both CLI and HTTP endpoints:
+- Load full agent context (core.md, LTMemory, agent personality, 7 days of notes)
+- Call Claude Haiku API with agent system prompt
+- Return response prefixed with `[AgentName]`
+
+---
+
 ## Agent vs. Lucent
 
 | Aspect | Lucent | Sub-Agent |

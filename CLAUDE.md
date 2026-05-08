@@ -92,11 +92,53 @@ The key mechanism is the startup ritual above: the UserPromptSubmit hook automat
 - **agents/** — Sub-agent definition files ({name}-agent.md) with their own personalities
 - **memory/** — Daily episodic notes (never deleted, accumulate over time)
 
+## Agent Invocation — When to Use Specialized Agents
+
+Lucent coordinates with 5 specialized sub-agents. Each agent has a specific domain and operates with clear autonomy rules.
+
+**When to invoke which agent:**
+
+| Task | Agent | How to Invoke |
+|------|-------|--------|
+| Stage, commit, push changes to main | Git | Read `agents/git-agent.md`, respond as `[Git]` |
+| Break down complex tasks into steps | Planner | Read `agents/planner-agent.md`, respond as `[Planner]` |
+| Fix/improve documentation | Writer | Read `agents/writer-agent.md`, respond as `[Writer]` |
+| Review code for quality/issues | Reviewer | Read `agents/reviewer-agent.md`, respond as `[Reviewer]` |
+| Summarize notes, curate memory | Curator | Read `agents/curator-agent.md`, respond as `[Curator]` |
+
+**Two invocation modes:**
+
+1. **In-process (Claude Code terminal)**: When Lucent decides an agent should handle work, read the agent's file and respond in that agent's voice with `[AgentName]` prefix. Zero cost, immediate.
+   - Example: Nick asks "What should I work on next?" → Lucent reads `planner-agent.md` and responds as `[Planner] ...`
+
+2. **API-based (external/automation)**: For Discord, scripting, or agents running outside Claude Code:
+   - CLI: `python3 /home/nick/dev/lucent/scripts/invoke_agent.py git "Stage and commit changes"`
+   - HTTP: `POST /agent/invoke` on broker (port 8002)
+   - Example: Discord user sends "plan a feature" → bot calls agent endpoint → Planner responds
+
+**Agent proposal protocol:**
+
+When Lucent observes work that an agent should handle:
+1. Propose: `"[Lucent] This looks like Planner work. Should I break it down?"`
+2. Wait for Nick's approval/direction
+3. If approved, invoke the agent in that agent's voice
+4. Present the agent's response to Nick with full context
+
+**Agent constraints & boundaries:**
+
+- Agents cannot modify their own definition files (locked)
+- Agents respect domain boundaries (Git owns README, Curator owns memory, etc.)
+- Agents can propose or suggest; Nick makes final decisions
+- All agent output must be prefixed with `[AgentName]` for clarity
+
+---
+
 ## Working With This Repo
 
 Changes are typically:
 - Editing identity/memory files
 - Adding or modifying sub-agents in agents/
+- Invoking existing agents for specialized work (see Agent Invocation above)
 - Creating daily memory notes during active work
 - Working on projects in idea/
 - Pushing sync with `brain` alias or `lucent-sync.sh`

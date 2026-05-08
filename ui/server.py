@@ -358,6 +358,56 @@ async def set_model(model_name: str):
     logger.info(f"Discord model switched to: {final_model}")
     return {"status": "switched", "model": final_model}
 
+class AgentRequest(BaseModel):
+    """Request to invoke a named agent."""
+    agent: str
+    task: str
+
+@app.post("/agent/invoke")
+async def invoke_agent_endpoint(request: AgentRequest):
+    """Invoke a named sub-agent with a task via Claude Haiku API."""
+    import asyncio
+    import sys
+
+    # Add scripts directory to path for import
+    scripts_dir = Path(__file__).parent.parent / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+
+    try:
+        from invoke_agent import invoke_agent as invoke_agent_fn
+        # Run in executor to avoid blocking
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None, invoke_agent_fn, request.agent, request.task
+        )
+        return {
+            "agent": request.agent,
+            "response": result,
+            "status": "success"
+        }
+    except FileNotFoundError as e:
+        logger.error(f"Agent invocation error: {e}")
+        return {
+            "agent": request.agent,
+            "error": str(e),
+            "status": "error"
+        }, 404
+    except ValueError as e:
+        logger.error(f"Agent invocation error: {e}")
+        return {
+            "agent": request.agent,
+            "error": str(e),
+            "status": "error"
+        }, 400
+    except Exception as e:
+        logger.error(f"Agent invocation error: {e}")
+        return {
+            "agent": request.agent,
+            "error": f"Failed to invoke agent: {str(e)}",
+            "status": "error"
+        }, 500
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8002)
