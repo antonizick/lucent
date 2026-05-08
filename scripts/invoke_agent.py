@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 """
-Invoke a named sub-agent with a task via Claude Haiku API.
+Invoke a named sub-agent with a task via local Ollama.
 
 Usage:
   python3 scripts/invoke_agent.py git "Stage and commit recent changes"
   python3 scripts/invoke_agent.py planner "Break down the voice input feature"
+  python3 scripts/invoke_agent.py --model qwen3.6:35b git "Task"
 """
 
-import anthropic
+import requests
 import sys
-import os
+import argparse
 from pathlib import Path
 from datetime import date, timedelta
-from dotenv import load_dotenv
 
 # Find Lucent root
 SCRIPT_DIR = Path(__file__).parent
 LUCENT_ROOT = SCRIPT_DIR.parent
+OLLAMA_URL = "http://localhost:11434"
 
 def load_agent_context(agent_name):
     """Load all context files for an agent invocation."""
@@ -46,69 +47,88 @@ def load_agent_context(agent_name):
 
     return "\n\n".join(context_parts)
 
-def invoke_agent(agent_name, task):
+def invoke_agent(agent_name, task, model="mistral:latest"):
     """
-    Invoke a named agent with a task via Claude Haiku API.
+    Invoke a named agent with a task via local Ollama.
 
     Args:
         agent_name: Name of the agent (e.g., "git", "planner")
         task: Task description or question for the agent
+        model: Ollama model to use (default: mistral:latest)
 
     Returns:
         Response string prefixed with [AgentName]
     """
-    # Load environment and API key
-    env_path = LUCENT_ROOT / "ui" / ".env"
-    if env_path.exists():
-        load_dotenv(env_path)
-
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise ValueError(
-            "ANTHROPIC_API_KEY not found in environment or ui/.env. "
-            "Please set the API key to use agent invocation."
-        )
-
     # Load agent context
     system_prompt = load_agent_context(agent_name)
 
-    # Call Claude Haiku API
-    client = anthropic.Anthropic(api_key=api_key)
-    message = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=2048,
-        system=system_prompt,
-        messages=[{"role": "user", "content": task}]
-    )
+    # Call Ollama
+    try:
+        resp = requests.post(
+            f"{OLLAMA_URL}/api/generate",
+            json={
+                "model": model,
+                "prompt": task,
+                "system": system_prompt,
+                "stream": False,
+                "temperature": 0.7
+            },
+            timeout=900
+        )
 
-    response = message.content[0].text
+        if resp.status_code == 200:
+            data = resp.json()
+            response_text = data.get("response", "").strip()
+            if response_text:
+                # Format with agent prefix
+                agent_display_name = agent_name.capitalize()
+                return f"[{agent_display_name}] {response_text}"
+            else:
+                raise ValueError("Empty response from Ollama")
+        else:
+            raise ValueError(f"Ollama error: {resp.status_code}")
 
-    # Format with agent prefix
-    agent_display_name = agent_name.capitalize()
-    return f"[{agent_display_name}] {response}"
+    except requests.exceptions.ConnectionError:
+        raise RuntimeError(
+            f"Could not connect to Ollama at {OLLAMA_URL}. "
+            "Is Ollama running? Start with: ollama serve"
+        )
+    except requests.exceptions.Timeout:
+        raise RuntimeError("Ollama request timed out (900s)")
 
 def main():
     """CLI entry point."""
-    if len(sys.argv) < 3:
-        print("Usage: invoke_agent.py <agent_name> <task>")
-        print("Example: invoke_agent.py git 'Stage and commit recent changes'")
-        print("\nAvailable agents: git, planner, curator, writer, reviewer")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Invoke a named sub-agent with a task via Ollama"
+    )
+    parser.add_argument(
+        "--model",
+        default="mistral:latest",
+        help="Ollama model to use (default: mistral:latest)"
+    )
+    parser.add_argument(
+        "agent",
+        help="Agent name (git, planner, curator, writer, reviewer)"
+    )
+    parser.add_argument(
+        "task",
+        nargs="+",
+        help="Task description or question for the agent"
+    )
 
-    agent_name = sys.argv[1]
-    task = " ".join(sys.argv[2:])
+    args = parser.parse_args()
+    agent_name = args.agent
+    task = " ".join(args.task)
+    model = args.model
 
     try:
-        result = invoke_agent(agent_name, task)
+        result = invoke_agent(agent_name, task, model)
         print(result)
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
-    except ValueError as e:
+    except (ValueError, RuntimeError) as e:
         print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
-    except anthropic.APIError as e:
-        print(f"API Error: {e}", file=sys.stderr)
         sys.exit(1)
 
 if __name__ == "__main__":

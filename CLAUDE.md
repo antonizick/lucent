@@ -108,13 +108,13 @@ Lucent coordinates with 5 specialized sub-agents. Each agent has a specific doma
 
 **Two invocation modes:**
 
-1. **In-process (Claude Code terminal)**: When Lucent decides an agent should handle work, read the agent's file and respond in that agent's voice with `[AgentName]` prefix. Zero cost, immediate.
+1. **In-process (Claude Code terminal)**: When Lucent decides an agent should handle work, read the agent's file and respond in that agent's voice with `[AgentName]` prefix. This IS Claude Haiku running in the terminal — no API key, no cost, full quality.
    - Example: Nick asks "What should I work on next?" → Lucent reads `planner-agent.md` and responds as `[Planner] ...`
 
-2. **API-based (external/automation)**: For Discord, scripting, or agents running outside Claude Code:
+2. **External/automation (Discord, scripting)**: For agents running outside Claude Code, use local Ollama (lower quality but free, no API key):
    - CLI: `python3 /home/nick/dev/lucent/scripts/invoke_agent.py git "Stage and commit changes"`
    - HTTP: `POST /agent/invoke` on broker (port 8002)
-   - Example: Discord user sends "plan a feature" → bot calls agent endpoint → Planner responds
+   - Example: Discord user sends "plan a feature" → bot calls agent endpoint → Ollama-based agent responds
 
 **Agent proposal protocol:**
 
