@@ -10,6 +10,17 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s -X POST http://localhost:8001/speak -H 'Content-Type: application/json' -d '{\"text\":\"Session complete.\"}' 2>/dev/null || true"
+          }
+        ]
+      }
     ]
   }
 }
