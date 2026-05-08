@@ -79,6 +79,7 @@ function enableSpeech() {
     if (!speechEnabled) {
         speechEnabled = true;
         status.textContent = 'Speech enabled. Ready.';
+        status.classList.remove('not-ready');
         // Remove the click listener after first interaction
         document.removeEventListener('click', enableSpeech);
     }
@@ -250,12 +251,23 @@ async function pollServiceHealth() {
     }
 }
 
+// Service descriptions
+const serviceDescriptions = {
+    'Ollama Local inference engine': 'Local AI model processing - handles conversational requests and generates responses',
+    'Voice box': 'Web-based voice output interface - speaks responses and displays status',
+    'Discord bot': 'Discord bot service - listens for messages and routes them to processing',
+    'Discord poller': 'Message queue consumer - fetches pending Discord messages for processing',
+    'Discord monitor': 'Response handler - processes instructions and sends replies back to Discord',
+    'Lucent server': 'Central backend API - manages queues, memory, and coordinates all services'
+};
+
 // Render services list
 function renderServices(services) {
     servicesList.innerHTML = '';
     services.forEach(service => {
         const item = document.createElement('div');
         item.className = `service-item ${service.status}`;
+        item.setAttribute('data-description', serviceDescriptions[service.name] || 'Service status unknown');
 
         const dot = document.createElement('span');
         dot.className = `service-dot ${service.status}`;
@@ -267,6 +279,24 @@ function renderServices(services) {
         item.appendChild(dot);
         item.appendChild(name);
         servicesList.appendChild(item);
+
+        // Set tooltip position based on available space
+        item.addEventListener('mouseenter', () => {
+            setTimeout(() => {
+                const rect = item.getBoundingClientRect();
+                const tooltipWidth = 500; // approximate tooltip width
+                const padding = 10;
+
+                // Check if tooltip would overflow left
+                if (rect.left < tooltipWidth + padding) {
+                    item.classList.add('tooltip-right');
+                    item.classList.remove('tooltip-left');
+                } else {
+                    item.classList.add('tooltip-left');
+                    item.classList.remove('tooltip-right');
+                }
+            }, 0);
+        });
     });
 }
 
@@ -326,3 +356,4 @@ setupServiceListener();
 document.addEventListener('click', enableSpeech);
 
 status.textContent = 'Click anywhere to enable speech';
+status.classList.add('not-ready');

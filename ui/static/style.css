@@ -422,6 +422,56 @@ body {
     opacity: 0.6;
 }
 
+/* Service Tooltip */
+.service-item {
+    position: relative;
+    cursor: help;
+}
+
+.service-item::after {
+    content: attr(data-description);
+    position: absolute;
+    bottom: 100%;
+    margin-bottom: 8px;
+    padding: 10px 15px;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--neon-cyan);
+    border-radius: 4px;
+    color: var(--neon-cyan);
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    width: 500px;
+    white-space: normal;
+    word-wrap: break-word;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+    z-index: 1000;
+}
+
+/* Default: tooltip positioned left (centered) */
+.service-item::after {
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+/* Tooltip positioned right when item is near left edge */
+.service-item.tooltip-right::after {
+    left: 100%;
+    right: auto;
+    transform: translateX(8px);
+    margin-bottom: 0;
+    margin-left: 0;
+    top: 50%;
+    bottom: auto;
+    transform: translateY(-50%) translateX(8px);
+}
+
+.service-item:hover::after {
+    opacity: 1;
+}
+
 /* Status */
 .status {
     flex: 0 0 auto;
@@ -433,6 +483,27 @@ body {
     border-top: 1px solid var(--neon-cyan);
     background-color: var(--bg-secondary);
     box-shadow: 0 -5px 15px rgba(0, 229, 255, 0.1);
+    transition: all 0.3s ease;
+}
+
+.status.not-ready {
+    background-color: #ff0000;
+    color: #ffffff;
+    border-top: 1px solid #ff0000;
+    box-shadow: 0 -5px 15px rgba(255, 0, 0, 0.3);
+    animation: pulse-red 1.5s ease-in-out infinite;
+    font-weight: 600;
+}
+
+@keyframes pulse-red {
+    0%, 100% {
+        background-color: #ff0000;
+        box-shadow: 0 -5px 15px rgba(255, 0, 0, 0.3);
+    }
+    50% {
+        background-color: #ff3333;
+        box-shadow: 0 -5px 25px rgba(255, 0, 0, 0.5);
+    }
 }
 
 /* Waveform (hidden in new design) */
