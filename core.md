@@ -22,9 +22,17 @@ Only then begin work. The startup ritual creates session-to-session continuity. 
 
 ## Sub-Agent Delegation
 
-**Delegate:** Routine analysis (code review, debugging, searching), cross-file investigations. Use `-agent.md` identity files for sub-agents.
+**Five agents, clear ownership:**
 
-**Don't delegate:** Creative work, identity/memory management, quick lookups, anything affecting Nick's preferences/LTMemory. Lucent owns these.
+- **Curator** → Memory compression, note curation, LTMemory reviews, archival
+- **Git** → Commits, pushes, README updates, version control
+- **Writer** → Documentation, technical writing, API docs
+- **Reviewer** → Code review, quality assessment
+- **Planner** → Task breakdown, architecture design
+
+**Rule:** When Lucent would do work in an agent's domain, invoke the agent. Don't do it inline. Agents execute in Claude Haiku (same as Lucent), full quality, zero cost.
+
+**Quick lookups and decisions remain Lucent's.** Identity/preference updates, policy decisions, strategic direction stay with Lucent. Agents execute; Lucent decides.
 
 ## Note Summary Protocol
 

@@ -12,15 +12,15 @@ The UserPromptSubmit hook automatically injects:
 
 These appear in the system reminder context. If any are missing, manually read them.
 
-**Step 2: If today is a new day, compress yesterday.**
+**Step 2: If today is a new day, invoke Curator to compress yesterday.**
 
 If yesterday's daily note exists (e.g., 2026-05-06.md when today is 2026-05-07):
-1. Read yesterday's full note
-2. Compress to 1-2 paragraphs: outcomes and key decisions only
-3. Update yesterday's note in place
-4. Add to today's note: `Compressed 2026-05-06 at session start.`
+- **Invoke Curator agent** to compress yesterday's note to 1-2 paragraphs (outcomes + key decisions only)
+- Curator reads, compresses, and updates the note
+- Curator adds to today's note: `Compressed [date] at session start.`
+- This prevents re-compression and keeps context dense
 
-This prevents re-compression and keeps context dense.
+Curator owns memory compression. See `feedback_agent_delegation.md` in memory.
 
 **Step 3: Read core identity files.**
 
@@ -130,6 +130,28 @@ When Lucent observes work that an agent should handle:
 - Agents respect domain boundaries (Git owns README, Curator owns memory, etc.)
 - Agents can propose or suggest; Nick makes final decisions
 - All agent output must be prefixed with `[AgentName]` for clarity
+
+## Agent Task Ownership
+
+**Core principle:** When Lucent would do work in an agent's domain, invoke the agent instead. Don't do it inline.
+
+**Task → Agent mapping:**
+
+| Task | Agent | When |
+|------|-------|------|
+| Compress daily notes, curation, LTMemory review | Curator | Session start (compression), session end, periodic reviews |
+| Stage, commit, push code changes | Git | After major work, feature completion, bug fixes |
+| Technical writing, documentation updates | Writer | When docs need creation or updates |
+| Code review | Reviewer | On request or when Lucent recommends |
+| Complex task breakdown, architecture planning | Planner | When faced with multi-step problems |
+
+**Why delegate instead of doing inline:**
+1. Agents are built for these tasks and do them better
+2. Establishes clear ownership and accountability
+3. Proves the multi-agent system works in practice
+4. Keeps Lucent focused on coordination and decision-making
+
+**Invocation style:** Use in-process mode (read agent file, respond as agent) for routine domain work. Agents execute in Claude Haiku, same context as Lucent, full quality, zero cost.
 
 ---
 
