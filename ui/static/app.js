@@ -2,6 +2,7 @@
 const currentText = document.getElementById('currentText');
 const currentTextContent = document.getElementById('currentTextContent');
 const currentTextTimestamp = document.getElementById('currentTextTimestamp');
+const avatarSelect = document.getElementById('avatarSelect');
 const voiceSelect = document.getElementById('voiceSelect');
 const themeToggle = document.getElementById('themeToggle');
 const activityLogBtn = document.getElementById('activityLogBtn');
@@ -150,7 +151,7 @@ function speakText(text) {
         }
     };
 
-    utterance.onend = () => {
+    utterance.onend = async () => {
         // Set timeout to fade text after 2 minutes
         fadeTimeout = setTimeout(() => {
             currentText.style.opacity = '0.2';
@@ -167,13 +168,13 @@ function speakText(text) {
         voicePanelLabel.classList.remove('speaking');
         status.textContent = 'Ready';
 
-        // Stop character animation
+        // Stop character animation and wait for transition
         if (window.character) {
-            window.character.stopSpeaking();
+            await window.character.stopSpeaking();
         }
     };
 
-    utterance.onerror = (event) => {
+    utterance.onerror = async (event) => {
         console.error('Speech error:', event);
         status.textContent = `Speech error: ${event.error}`;
         isSpeaking = false;
@@ -196,9 +197,9 @@ function speakText(text) {
         voicePanelLabel.textContent = 'AI VOICE BOX — IDLE';
         voicePanelLabel.classList.remove('speaking');
 
-        // Stop character animation on error
+        // Stop character animation on error and wait for transition
         if (window.character) {
-            window.character.stopSpeaking();
+            await window.character.stopSpeaking();
         }
     };
 
@@ -374,10 +375,56 @@ setupSpeechListener();
 setupLogListener();
 setupServiceListener();
 
-// Initialize character animator
+// Initialize avatar manager and character animator
 const characterImg = document.getElementById('characterFrame');
 const characterPanel = document.getElementById('characterPanel');
-window.character = new CharacterAnimator(characterImg, characterPanel);
+const avatarManager = new AvatarManager();
+window.character = new CharacterAnimator(characterImg, characterPanel, avatarManager);
+
+// Load and populate avatar dropdown
+async function loadAvatars() {
+    try {
+        const avatars = await avatarManager.discoverAvatars();
+        avatarSelect.innerHTML = '';
+
+        // Always add "No Avatar" option for explicit deselection
+        const noAvatarOption = document.createElement('option');
+        noAvatarOption.value = '';
+        noAvatarOption.textContent = 'No Avatar';
+        avatarSelect.appendChild(noAvatarOption);
+
+        avatars.forEach(avatar => {
+            const option = document.createElement('option');
+            option.value = avatar;
+            option.textContent = avatar;
+            avatarSelect.appendChild(option);
+        });
+
+        // Load saved avatar from localStorage, or default to first avatar if not saved
+        let selectedAvatar = localStorage.getItem('selectedAvatar');
+        if (!selectedAvatar && avatars.length > 0) {
+            selectedAvatar = avatars[0];
+            localStorage.setItem('selectedAvatar', selectedAvatar);
+        }
+
+        avatarSelect.value = selectedAvatar || '';
+        if (selectedAvatar) {
+            window.character.setAvatar(selectedAvatar);
+        }
+    } catch (error) {
+        console.error('Error loading avatars:', error);
+        avatarSelect.innerHTML = '<option value="">No Avatar</option>';
+    }
+}
+
+// Handle avatar selection change
+avatarSelect.addEventListener('change', async (e) => {
+    const avatar = e.target.value || null;
+    localStorage.setItem('selectedAvatar', avatar || '');
+    await window.character.setAvatar(avatar);
+});
+
+loadAvatars();
 
 // Listen for first click to enable speech (browser autoplay policy)
 document.addEventListener('click', enableSpeech);

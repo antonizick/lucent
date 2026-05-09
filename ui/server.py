@@ -549,6 +549,37 @@ async def invoke_agent_endpoint(request: AgentRequest):
             "status": "error"
         }, 500
 
+@app.get("/api/avatars")
+async def list_avatars():
+    """Discover available avatars from the static/avatars directory."""
+    avatars_dir = Path(__file__).parent / "static" / "avatars"
+    avatars = []
+
+    if avatars_dir.exists():
+        for item in sorted(avatars_dir.iterdir()):
+            if item.is_dir():
+                avatars.append(item.name)
+
+    return {"avatars": avatars}
+
+@app.get("/api/avatars/{avatar}/images")
+async def get_avatar_images(avatar: str, state: str):
+    """Get all images for a specific avatar and state."""
+    # Sanitize avatar name to prevent path traversal
+    if ".." in avatar or "/" in avatar or "\\" in avatar:
+        raise HTTPException(status_code=400, detail="Invalid avatar name")
+
+    state_dir = Path(__file__).parent / "static" / "avatars" / avatar / state
+    images = []
+
+    if state_dir.exists():
+        for item in sorted(state_dir.iterdir()):
+            if item.is_file() and item.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.webp']:
+                # Return relative path for frontend
+                images.append(f"/static/avatars/{avatar}/{state}/{item.name}")
+
+    return {"images": images}
+
 @app.get("/activity-log-viewer")
 async def activity_log_viewer():
     """Serve the activity log viewer page."""

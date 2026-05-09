@@ -1,119 +1,227 @@
-// Frame-based character animator for Lucent's Voice Box UI
+// Character animator with multi-avatar support and state machine (Talking, Idle, Waiting, Bored)
 
-const IDLE_FRAMES = [
-  'idle_neutral', 'idle_left', 'idle_right',
-  'idle_up', 'idle_amused', 'idle_skeptical'
-];
-const SPEAK_FRAMES = ['speak_closed', 'speak_small', 'speak_mid', 'speak_wide'];
-const FRAME_PATH = '/static/frames/';
+const AVATAR_STATES = {
+  TALKING: 'Talking',
+  IDLE: 'Idle',
+  WAITING: 'Waiting',
+  BORED: 'Bored'
+};
+
+const STATE_THRESHOLDS = {
+  IDLE: 2 * 60 * 1000,      // 2 minutes
+  WAITING: 8 * 60 * 1000    // 8 minutes
+};
+
+const ANIMATION_TIMING = {
+  speak: { min: 80, max: 160 },        // mouth movement during talking
+  idle: 3000,                           // idle expression change interval
+  stateCheck: 5000                      // check state transitions every 5 seconds
+};
 
 class CharacterAnimator {
-  constructor(imgEl, panelEl) {
+  constructor(imgEl, panelEl, avatarManager) {
     this.img = imgEl;
     this.panel = panelEl;
+    this.avatarManager = avatarManager;
+    this.currentAvatar = null;
+    this.currentState = AVATAR_STATES.IDLE;
     this.speaking = false;
+    this.lastSpeakTime = Date.now();
+
     this.speakTimer = null;
+    this.stateTimer = null;
     this.idleTimer = null;
-    this.currentIdleFrame = 'idle_neutral';
-    this.frameCache = new Map();
-    this._preloadFrames();
-    this._scheduleIdleBehavior();
+
+    this.currentStateImages = [];
+    this.currentIdleFrame = null;
+
+    this._startStateCheckLoop();
   }
 
-  _preloadFrames() {
-    const allFrames = [...IDLE_FRAMES, ...SPEAK_FRAMES];
-    allFrames.forEach(frame => {
-      const img = new Image();
-      img.src = `${FRAME_PATH}${frame}.png`;
-      this.frameCache.set(frame, img);
-    });
-  }
+  async setAvatar(avatar) {
+    if (this.currentAvatar === avatar) return;
+    this.currentAvatar = avatar;
 
-  _setFrame(name) {
-    this.img.src = `${FRAME_PATH}${name}.png`;
+    if (!avatar) {
+      this._showNoAvatar();
+      return;
+    }
+
+    // Preload all state images for the new avatar
+    const states = [AVATAR_STATES.TALKING, AVATAR_STATES.IDLE, AVATAR_STATES.WAITING, AVATAR_STATES.BORED];
+    for (const state of states) {
+      const images = await this.avatarManager.getStateImages(avatar, state);
+      if (images.length > 0) {
+        this.avatarManager.preloadStateImages(avatar, state, images);
+      }
+    }
+
+    // Update to current state
+    await this._transitionToState(this.currentState);
   }
 
   startSpeaking() {
     this.speaking = true;
+    this.lastSpeakTime = Date.now();
     this.panel.classList.add('speaking');
+    clearTimeout(this.speakTimer);
     clearTimeout(this.idleTimer);
-    this._runSpeakCycle();
+
+    this._updateState(AVATAR_STATES.TALKING);
   }
 
-  stopSpeaking() {
+  async stopSpeaking() {
     this.speaking = false;
     this.panel.classList.remove('speaking');
     clearTimeout(this.speakTimer);
-    this._setFrame('idle_neutral');
-    this._scheduleIdleBehavior();
+    this.lastSpeakTime = Date.now();
+
+    // Immediately transition to idle state instead of waiting for state check loop
+    await this._transitionToState(AVATAR_STATES.IDLE);
   }
 
-  _runSpeakCycle() {
-    if (!this.speaking) return;
-    // Weight frames: more time on mid/small, less on extremes
-    const weights = [2, 3, 3, 1]; // closed, small, mid, wide
-    const pool = SPEAK_FRAMES.flatMap((f, i) => Array(weights[i]).fill(f));
-    const frame = pool[Math.floor(Math.random() * pool.length)];
-    this._setFrame(frame);
-    // Random interval 80–160ms for natural mouth movement
-    const delay = 80 + Math.floor(Math.random() * 80);
-    this.speakTimer = setTimeout(() => this._runSpeakCycle(), delay);
+  async _transitionToState(newState) {
+    if (this.currentState === newState && this.currentStateImages.length > 0) {
+      return; // Already in this state with images loaded
+    }
+
+    this.currentState = newState;
+
+    if (!this.currentAvatar) {
+      this._showNoAvatar();
+      return;
+    }
+
+    const images = await this.avatarManager.getStateImages(this.currentAvatar, newState);
+
+    if (images.length === 0) {
+      // Fallback chain: Idle -> Waiting -> Bored -> no avatar
+      if (newState !== AVATAR_STATES.IDLE) {
+        await this._transitionToState(AVATAR_STATES.IDLE);
+      } else if (newState !== AVATAR_STATES.WAITING) {
+        await this._transitionToState(AVATAR_STATES.WAITING);
+      } else if (newState !== AVATAR_STATES.BORED) {
+        await this._transitionToState(AVATAR_STATES.BORED);
+      } else {
+        this._showNoAvatar();
+      }
+      return;
+    }
+
+    this.currentStateImages = images;
+    this.currentIdleFrame = null;
+
+    if (newState === AVATAR_STATES.TALKING && this.speaking) {
+      this._runTalkingCycle();
+    } else {
+      this._runIdleCycle();
+    }
   }
 
-  _scheduleIdleBehavior() {
-    if (this.speaking) return;
-    // Decide whether to do normal behavior or quick flicker burst
-    const doFlicker = Math.random() < 0.15; // 15% chance of flicker burst
+  _updateState(newState) {
+    if (this.currentState !== newState) {
+      this._transitionToState(newState);
+    }
+  }
+
+  _determineState() {
+    if (this.speaking) {
+      return AVATAR_STATES.TALKING;
+    }
+
+    const timeSinceSpeech = Date.now() - this.lastSpeakTime;
+
+    if (timeSinceSpeech < STATE_THRESHOLDS.IDLE) {
+      return AVATAR_STATES.IDLE;
+    } else if (timeSinceSpeech < STATE_THRESHOLDS.WAITING) {
+      return AVATAR_STATES.WAITING;
+    } else {
+      return AVATAR_STATES.BORED;
+    }
+  }
+
+  _startStateCheckLoop() {
+    const checkState = async () => {
+      const newState = this._determineState();
+      if (newState !== this.currentState) {
+        await this._transitionToState(newState);
+      }
+      this.stateTimer = setTimeout(checkState, ANIMATION_TIMING.stateCheck);
+    };
+    checkState();
+  }
+
+  _runTalkingCycle() {
+    if (!this.speaking || !this.currentStateImages.length) return;
+
+    const frame = this.avatarManager.getRandomImage(this.currentStateImages);
+    if (frame) {
+      this.img.src = frame;
+    }
+
+    const delay = ANIMATION_TIMING.speak.min +
+                  Math.floor(Math.random() * (ANIMATION_TIMING.speak.max - ANIMATION_TIMING.speak.min));
+    this.speakTimer = setTimeout(() => this._runTalkingCycle(), delay);
+  }
+
+  _runIdleCycle() {
+    if (this.speaking || !this.currentStateImages.length) return;
+
+    // Immediately show a frame
+    const frame = this.avatarManager.getRandomImage(this.currentStateImages);
+    if (frame) {
+      this.img.src = frame;
+    }
+
+    const doFlicker = Math.random() < 0.15; // 15% chance of rapid flicker
 
     if (doFlicker) {
-      // Quick flicker burst: rapidly cycle through 2-4 random frames
-      const flickerCount = 2 + Math.floor(Math.random() * 3);
-      let flickerIndex = 0;
-
-      const runFlicker = () => {
-        if (this.speaking || flickerIndex >= flickerCount) {
-          // After burst, return to neutral and resume normal scheduling
-          this.currentIdleFrame = 'idle_neutral';
-          this._setFrame('idle_neutral');
-          this._scheduleIdleBehavior();
-          return;
-        }
-
-        const choices = IDLE_FRAMES.filter(f => f !== this.currentIdleFrame);
-        const frame = choices[Math.floor(Math.random() * choices.length)];
-        this.currentIdleFrame = frame;
-        this._setFrame(frame);
-
-        flickerIndex++;
-        // Quick interval: 150–300ms for rapid flickering
-        const flickerDelay = 150 + Math.floor(Math.random() * 150);
-        this.idleTimer = setTimeout(runFlicker, flickerDelay);
-      };
-
-      runFlicker();
+      this._runFlickerBurst();
     } else {
-      // Normal behavior: change expression every 3 seconds (no random slowdown)
-      const delay = 3000;
+      // Normal idle: hold frame for 300-600ms, then change every 3 seconds after
+      const holdTime = 300 + Math.floor(Math.random() * 300);
       this.idleTimer = setTimeout(() => {
-        if (this.speaking) return;
-        // Pick a frame different from current
-        const choices = IDLE_FRAMES.filter(f => f !== this.currentIdleFrame);
-        const frame = choices[Math.floor(Math.random() * choices.length)];
-        this.currentIdleFrame = frame;
-        this._setFrame(frame);
-        // Brief pause: 300–600ms before next expression
-        const holdTime = 300 + Math.floor(Math.random() * 300);
-        this.idleTimer = setTimeout(() => {
-          if (!this.speaking) {
-            this.currentIdleFrame = 'idle_neutral';
-            this._setFrame('idle_neutral');
-          }
-          this._scheduleIdleBehavior();
-        }, holdTime);
-      }, delay);
+        if (!this.speaking && this.currentStateImages.length > 0) {
+          const delay = ANIMATION_TIMING.idle;
+          this.idleTimer = setTimeout(() => {
+            if (!this.speaking && this.currentState === this._determineState()) {
+              this._runIdleCycle();
+            }
+          }, delay);
+        }
+      }, holdTime);
     }
+  }
+
+  _runFlickerBurst() {
+    const flickerCount = 2 + Math.floor(Math.random() * 3);
+    let flickerIndex = 0;
+
+    const runFlicker = () => {
+      if (this.speaking || flickerIndex >= flickerCount || !this.currentStateImages.length) {
+        this._runIdleCycle();
+        return;
+      }
+
+      const frame = this.avatarManager.getRandomImage(this.currentStateImages);
+      if (frame) {
+        this.img.src = frame;
+      }
+
+      flickerIndex++;
+      const flickerDelay = 150 + Math.floor(Math.random() * 150);
+      this.idleTimer = setTimeout(runFlicker, flickerDelay);
+    };
+
+    runFlicker();
+  }
+
+  _showNoAvatar() {
+    this.img.src = '/static/noavatar.jpg';
+    this.currentStateImages = [];
+    clearTimeout(this.speakTimer);
+    clearTimeout(this.idleTimer);
   }
 }
 
-// Export for use in app.js
 window.CharacterAnimator = CharacterAnimator;

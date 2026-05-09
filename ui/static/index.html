@@ -12,6 +12,9 @@
         <div class="header">
             <h1>Lucent</h1>
             <div class="controls">
+                <select id="avatarSelect" class="avatar-selector">
+                    <option value="">Loading avatars...</option>
+                </select>
                 <button id="activityLogBtn" class="activity-log-btn" title="View activity log">📋</button>
                 <select id="voiceSelect" class="voice-selector">
                     <option value="">Loading voices...</option>
@@ -98,6 +101,7 @@
         <div id="status" class="status"></div>
     </div>
 
+    <script src="/static/avatar-manager.js?v=1000"></script>
     <script src="/static/character.js?v=1000"></script>
     <script src="/static/app.js?v=1000"></script>
 </body>

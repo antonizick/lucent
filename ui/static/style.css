@@ -101,6 +101,53 @@ body {
     min-width: 180px;
 }
 
+.voice-selector option {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    padding: 8px;
+}
+
+.voice-selector option:hover {
+    background-color: rgba(0, 229, 255, 0.2);
+}
+
+.voice-selector option:checked {
+    background-color: rgba(0, 229, 255, 0.3);
+    color: var(--text-primary);
+}
+
+.avatar-selector {
+    min-width: 140px;
+    padding: 8px 12px;
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--neon-cyan);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.avatar-selector:hover {
+    background-color: rgba(0, 229, 255, 0.1);
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+}
+
+.avatar-selector option {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    padding: 8px;
+}
+
+.avatar-selector option:hover {
+    background-color: rgba(0, 229, 255, 0.2);
+}
+
+.avatar-selector option:checked {
+    background-color: rgba(0, 229, 255, 0.3);
+    color: var(--text-primary);
+}
+
 .activity-log-btn {
     padding: 6px 10px;
     background-color: transparent;
