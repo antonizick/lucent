@@ -4,6 +4,7 @@ const currentTextContent = document.getElementById('currentTextContent');
 const currentTextTimestamp = document.getElementById('currentTextTimestamp');
 const voiceSelect = document.getElementById('voiceSelect');
 const themeToggle = document.getElementById('themeToggle');
+const activityLogBtn = document.getElementById('activityLogBtn');
 const status = document.getElementById('status');
 const voicePanelLabel = document.getElementById('voicePanelLabel');
 const logContent = document.getElementById('logContent');
@@ -322,6 +323,12 @@ themeToggle.addEventListener('click', () => {
     const theme = isLight ? 'light' : 'dark';
     localStorage.setItem('theme', theme);
     themeToggle.textContent = isLight ? '☀️' : '🌙';
+});
+
+// Activity log button
+activityLogBtn.addEventListener('click', () => {
+    // Open activity log in a new tab
+    window.open('/activity-log-viewer', '_blank');
 });
 
 // Constrain animation to viewport top

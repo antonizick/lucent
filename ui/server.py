@@ -9,7 +9,7 @@ from datetime import datetime, date
 from pathlib import Path
 from collections import deque
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -548,6 +548,218 @@ async def invoke_agent_endpoint(request: AgentRequest):
             "error": f"Failed to invoke agent: {str(e)}",
             "status": "error"
         }, 500
+
+@app.get("/activity-log-viewer")
+async def activity_log_viewer():
+    """Serve the activity log viewer page."""
+    html_content = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Lucent — Activity Log</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            :root {
+                --bg-primary: #080810;
+                --bg-secondary: #0d0d1a;
+                --text-primary: #ffffff;
+                --text-secondary: #b0b0b0;
+                --neon-cyan: #00e5ff;
+                --border: #00e5ff;
+            }
+
+            body.light-mode {
+                --bg-primary: #f5f5f5;
+                --bg-secondary: #ffffff;
+                --text-primary: #1a1a1a;
+                --text-secondary: #666666;
+                --neon-cyan: #0066cc;
+                --border: #0066cc;
+            }
+
+            body {
+                font-family: 'Courier New', monospace;
+                background-color: var(--bg-primary);
+                color: var(--text-primary);
+                padding: 20px;
+                line-height: 1.6;
+            }
+
+            .container {
+                max-width: 900px;
+                margin: 0 auto;
+            }
+
+            .header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 20px;
+                padding-bottom: 15px;
+                border-bottom: 2px solid var(--neon-cyan);
+            }
+
+            h1 {
+                font-size: 24px;
+                color: var(--neon-cyan);
+                text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+                letter-spacing: 2px;
+            }
+
+            .controls {
+                display: flex;
+                gap: 10px;
+            }
+
+            button {
+                padding: 8px 16px;
+                background-color: var(--bg-secondary);
+                color: var(--text-primary);
+                border: 1px solid var(--neon-cyan);
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 14px;
+                transition: all 0.2s ease;
+            }
+
+            button:hover {
+                background-color: rgba(0, 229, 255, 0.1);
+                box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+            }
+
+            .theme-toggle {
+                background-color: transparent;
+            }
+
+            .info {
+                margin-bottom: 15px;
+                padding: 12px;
+                background-color: var(--bg-secondary);
+                border-left: 3px solid var(--neon-cyan);
+                color: var(--text-secondary);
+                font-size: 13px;
+            }
+
+            .log-content {
+                background-color: var(--bg-secondary);
+                border: 1px solid var(--neon-cyan);
+                border-radius: 4px;
+                padding: 15px;
+                white-space: pre-wrap;
+                word-break: break-word;
+                font-size: 12px;
+                max-height: 70vh;
+                overflow-y: auto;
+                color: var(--text-primary);
+            }
+
+            .log-content::-webkit-scrollbar {
+                width: 8px;
+            }
+
+            .log-content::-webkit-scrollbar-track {
+                background: var(--bg-primary);
+            }
+
+            .log-content::-webkit-scrollbar-thumb {
+                background: rgba(0, 229, 255, 0.3);
+                border-radius: 4px;
+            }
+
+            .log-content::-webkit-scrollbar-thumb:hover {
+                background: rgba(0, 229, 255, 0.5);
+            }
+
+            .loading {
+                text-align: center;
+                color: var(--text-secondary);
+                font-size: 14px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>Activity Log</h1>
+                <div class="controls">
+                    <button id="refreshBtn">🔄 Refresh</button>
+                    <button id="themeToggle">🌙</button>
+                </div>
+            </div>
+
+            <div class="info">
+                <strong>Last Updated:</strong> <span id="timestamp">Loading...</span> |
+                <strong>Entries:</strong> <span id="entryCount">-</span>
+            </div>
+
+            <div class="log-content" id="logContent">
+                <div class="loading">Loading activity log...</div>
+            </div>
+        </div>
+
+        <script>
+            const logContent = document.getElementById('logContent');
+            const timestamp = document.getElementById('timestamp');
+            const entryCount = document.getElementById('entryCount');
+            const refreshBtn = document.getElementById('refreshBtn');
+            const themeToggle = document.getElementById('themeToggle');
+
+            async function loadActivityLog() {
+                try {
+                    const response = await fetch('/activity-log');
+                    const data = await response.json();
+
+                    logContent.textContent = data.content || 'No activity logged for today yet';
+                    entryCount.textContent = data.entries || 0;
+
+                    const now = new Date();
+                    timestamp.textContent = now.toLocaleTimeString();
+
+                    // Auto-scroll to bottom
+                    logContent.scrollTop = logContent.scrollHeight;
+                } catch (error) {
+                    logContent.textContent = `Error loading activity log: ${error.message}`;
+                    console.error('Error:', error);
+                }
+            }
+
+            refreshBtn.addEventListener('click', loadActivityLog);
+
+            // Theme toggle
+            function initTheme() {
+                const savedTheme = localStorage.getItem('theme') || 'dark';
+                if (savedTheme === 'light') {
+                    document.body.classList.add('light-mode');
+                    themeToggle.textContent = '☀️';
+                } else {
+                    themeToggle.textContent = '🌙';
+                }
+            }
+
+            themeToggle.addEventListener('click', () => {
+                const isLight = document.body.classList.toggle('light-mode');
+                const theme = isLight ? 'light' : 'dark';
+                localStorage.setItem('theme', theme);
+                themeToggle.textContent = isLight ? '☀️' : '🌙';
+            });
+
+            // Auto-refresh every 5 seconds
+            setInterval(loadActivityLog, 5000);
+
+            initTheme();
+            loadActivityLog();
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
 
 @app.on_event("startup")
 async def startup_event():

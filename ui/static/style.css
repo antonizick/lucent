@@ -101,6 +101,25 @@ body {
     min-width: 180px;
 }
 
+.activity-log-btn {
+    padding: 6px 10px;
+    background-color: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--text-secondary);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.2s ease;
+    opacity: 0.7;
+}
+
+.activity-log-btn:hover {
+    opacity: 1;
+    border-color: var(--neon-cyan);
+    color: var(--neon-cyan);
+    box-shadow: 0 0 8px rgba(0, 229, 255, 0.2);
+}
+
 .theme-toggle {
     width: 40px;
     padding: 8px;
