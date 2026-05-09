@@ -143,6 +143,11 @@ function speakText(text) {
         voicePanelLabel.textContent = 'AI VOICE BOX — SPEAKING';
         voicePanelLabel.classList.add('speaking');
         status.textContent = 'Speaking...';
+
+        // Start character animation
+        if (window.character) {
+            window.character.startSpeaking();
+        }
     };
 
     utterance.onend = () => {
@@ -161,6 +166,11 @@ function speakText(text) {
         voicePanelLabel.textContent = 'AI VOICE BOX — IDLE';
         voicePanelLabel.classList.remove('speaking');
         status.textContent = 'Ready';
+
+        // Stop character animation
+        if (window.character) {
+            window.character.stopSpeaking();
+        }
     };
 
     utterance.onerror = (event) => {
@@ -185,6 +195,11 @@ function speakText(text) {
         speakingAnimation.style.display = 'none';
         voicePanelLabel.textContent = 'AI VOICE BOX — IDLE';
         voicePanelLabel.classList.remove('speaking');
+
+        // Stop character animation on error
+        if (window.character) {
+            window.character.stopSpeaking();
+        }
     };
 
     window.speechSynthesis.speak(utterance);
@@ -358,6 +373,11 @@ initTheme();
 setupSpeechListener();
 setupLogListener();
 setupServiceListener();
+
+// Initialize character animator
+const characterImg = document.getElementById('characterFrame');
+const characterPanel = document.getElementById('characterPanel');
+window.character = new CharacterAnimator(characterImg, characterPanel);
 
 // Listen for first click to enable speech (browser autoplay policy)
 document.addEventListener('click', enableSpeech);

@@ -3,6 +3,7 @@
 ## Projects
 
 - **Lucent** — Personal AI assistant framework. Skeleton complete: README.md, directory structure, sync script, per-project config (.lucentrc), .gitignore. Next: populate memory files, create sub-agents.
+- **Tally** — Personal finance dashboard for expense/income tracking and investment portfolio performance. Tech: FastAPI + HTMX + Tailwind + Chart.js. JSON file storage. Planning doc at `idea/Tally/planning.md`. Phase 1 MVP: manual entry, CSV import, dashboard, category charts.
 
 ## Preferences
 

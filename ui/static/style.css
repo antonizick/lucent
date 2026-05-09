@@ -376,7 +376,7 @@ body {
 /* Panels Grid */
 .panels-grid {
     display: grid;
-    grid-template-columns: 300px 1fr;
+    grid-template-columns: 300px 1fr 280px;
     gap: 20px;
     padding: 20px;
     margin: 0;
@@ -530,6 +530,55 @@ body {
     display: none;
 }
 
+/* Character Panel */
+.character-panel {
+    border: 1px solid var(--neon-cyan);
+    box-shadow: 0 0 10px var(--neon-cyan);
+    background: #0a0a0a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+    border-radius: 8px;
+    min-height: 230px;
+}
+
+.character-viewport {
+    position: relative;
+    width: 280px;
+    height: 380px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#characterFrame {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    image-rendering: crisp-edges;
+}
+
+.scanline-overlay {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+        to bottom,
+        transparent 0px,
+        transparent 3px,
+        rgba(0,0,0,0.15) 3px,
+        rgba(0,0,0,0.15) 4px
+    );
+    pointer-events: none;
+    z-index: 2;
+}
+
+.character-panel.speaking {
+    box-shadow: 0 0 18px var(--neon-cyan), 0 0 4px var(--neon-cyan);
+}
+
 /* Responsive */
 @media (max-width: 600px) {
     .header h1 {
@@ -557,5 +606,9 @@ body {
 
     .log-panel {
         margin: 0 10px 10px 10px;
+    }
+
+    .character-panel {
+        display: none;
     }
 }
