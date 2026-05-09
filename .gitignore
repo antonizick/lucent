@@ -16,6 +16,11 @@ ui/.env
 ui/__pycache__/
 ui/.venv/
 ui/venv/
+ui/logs/
+ui/.discord_model
+
+# Runtime checkpoint files
+memory/.ritual_checkpoint.json
 
 # Scratchpad for local working files
 scratchpad/

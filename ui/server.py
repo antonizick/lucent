@@ -3,6 +3,8 @@ import json
 import logging
 import requests
 import subprocess
+import tarfile
+import shutil
 from datetime import datetime, date
 from pathlib import Path
 from collections import deque
@@ -20,6 +22,72 @@ load_dotenv()
 from discord_logger import setup_discord_logging
 setup_discord_logging()
 logger = logging.getLogger(__name__)
+
+# Activity logging for Voice Box
+LOGS_DIR = Path(__file__).parent / "logs"
+LOG_ARCHIVES_DIR = LOGS_DIR / "archives"
+
+def init_logs_dirs():
+    """Initialize log directories."""
+    LOGS_DIR.mkdir(exist_ok=True)
+    LOG_ARCHIVES_DIR.mkdir(exist_ok=True)
+
+def log_activity(message: str, source: str = "voice_box"):
+    """Write activity to today's activity log with timestamp."""
+    init_logs_dirs()
+    today = date.today().isoformat()
+    activity_log = LOGS_DIR / f"activity_{today}.log"
+
+    timestamp = datetime.now().isoformat()
+    log_entry = f"[{timestamp}] [{source}] {message}\n"
+
+    try:
+        with open(activity_log, "a") as f:
+            f.write(log_entry)
+    except Exception as e:
+        logger.error(f"Failed to write activity log: {e}")
+
+def compress_monthly_logs():
+    """Compress all log files from the previous month into a tar.gz archive."""
+    init_logs_dirs()
+    today = date.today()
+
+    # Get previous month
+    if today.month == 1:
+        prev_month = today.replace(year=today.year - 1, month=12)
+    else:
+        prev_month = today.replace(month=today.month - 1)
+
+    month_str = prev_month.strftime("%Y-%m")
+
+    # Find logs matching the previous month
+    logs_to_compress = list(LOGS_DIR.glob(f"activity_{month_str}-*.log"))
+
+    if not logs_to_compress:
+        return {"status": "no_logs", "month": month_str}
+
+    archive_name = f"activity_{month_str}.tar.gz"
+    archive_path = LOG_ARCHIVES_DIR / archive_name
+
+    try:
+        with tarfile.open(archive_path, "w:gz") as tar:
+            for log_file in logs_to_compress:
+                tar.add(log_file, arcname=log_file.name)
+
+        # Remove original log files after archiving
+        for log_file in logs_to_compress:
+            log_file.unlink()
+
+        logger.info(f"Compressed logs for {month_str} into {archive_name}")
+        return {
+            "status": "success",
+            "month": month_str,
+            "archive": archive_name,
+            "logs_compressed": len(logs_to_compress)
+        }
+    except Exception as e:
+        logger.error(f"Failed to compress logs: {e}")
+        return {"status": "error", "message": str(e)}
 
 app = FastAPI()
 
@@ -84,6 +152,9 @@ async def speak(request: SpeakRequest):
         "timestamp": datetime.now().isoformat()
     }
     speech_queue.append(item)
+
+    # Log activity
+    log_activity(request.text)
 
     return {
         "status": "queued",
@@ -240,6 +311,76 @@ async def get_log():
             return {"content": f"Error reading log: {str(e)}"}
     else:
         return {"content": "No log for today yet."}
+
+@app.get("/activity-log")
+async def get_activity_log():
+    """Get today's activity log (Voice Box speech history)."""
+    init_logs_dirs()
+    today = date.today().isoformat()
+    activity_log = LOGS_DIR / f"activity_{today}.log"
+
+    if activity_log.exists():
+        try:
+            content = activity_log.read_text()
+            return {
+                "date": today,
+                "content": content,
+                "entries": len(content.strip().split("\n")) if content.strip() else 0
+            }
+        except Exception as e:
+            return {"error": f"Error reading activity log: {str(e)}"}
+    else:
+        return {
+            "date": today,
+            "content": "",
+            "entries": 0,
+            "message": "No activity logged for today yet"
+        }
+
+@app.post("/logs/compress-monthly")
+async def compress_logs_endpoint():
+    """Trigger monthly log compression."""
+    result = compress_monthly_logs()
+    return result
+
+@app.get("/logs/archives")
+async def list_archives():
+    """List all archived log files."""
+    init_logs_dirs()
+    archives = sorted(LOG_ARCHIVES_DIR.glob("activity_*.tar.gz"))
+
+    archive_list = []
+    for archive in archives:
+        stat = archive.stat()
+        archive_list.append({
+            "name": archive.name,
+            "size_bytes": stat.st_size,
+            "size_mb": round(stat.st_size / (1024 * 1024), 2),
+            "modified": datetime.fromtimestamp(stat.st_mtime).isoformat()
+        })
+
+    return {
+        "archives": sorted(archive_list, key=lambda x: x["name"], reverse=True),
+        "total": len(archive_list)
+    }
+
+@app.get("/logs/archives/{archive_name}")
+async def download_archive(archive_name: str):
+    """Download a specific archive file."""
+    # Validate archive name to prevent path traversal
+    if ".." in archive_name or "/" in archive_name:
+        raise HTTPException(status_code=400, detail="Invalid archive name")
+
+    archive_path = LOG_ARCHIVES_DIR / archive_name
+
+    if not archive_path.exists():
+        raise HTTPException(status_code=404, detail="Archive not found")
+
+    return FileResponse(
+        archive_path,
+        media_type="application/gzip",
+        filename=archive_name
+    )
 
 @app.get("/services/health")
 async def services_health():
@@ -408,6 +549,17 @@ async def invoke_agent_endpoint(request: AgentRequest):
             "status": "error"
         }, 500
 
+@app.on_event("startup")
+async def startup_event():
+    """Initialize logs directory on startup."""
+    init_logs_dirs()
+    logger.info("Voice Box activity logging initialized")
+    # Check if we need to compress logs (monthly task)
+    # This is a simple check at startup; for production use APScheduler
+    result = compress_monthly_logs()
+    if result.get("status") == "success":
+        logger.info(f"Monthly compression completed: {result}")
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8002)
+    uvicorn.run(app, host="127.0.0.1", port=8001)
