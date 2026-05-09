@@ -13,6 +13,7 @@ import sys
 import argparse
 from pathlib import Path
 from datetime import date, timedelta
+from verify_startup import ensure_startup_ritual, augment_system_prompt
 
 # Find Lucent root
 SCRIPT_DIR = Path(__file__).parent
@@ -59,8 +60,15 @@ def invoke_agent(agent_name, task, model="mistral:latest"):
     Returns:
         Response string prefixed with [AgentName]
     """
+    # Verify startup ritual has fired; if not, enforce it
+    ritual_context, executed = ensure_startup_ritual(LUCENT_ROOT, model)
+
     # Load agent context
     system_prompt = load_agent_context(agent_name)
+
+    # Prepend startup ritual context if it just executed
+    if executed:
+        system_prompt = augment_system_prompt(system_prompt, ritual_context)
 
     # Call Ollama
     try:
