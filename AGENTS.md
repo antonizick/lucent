@@ -91,9 +91,21 @@ Example: Nick asks "What should I work on next?"
 
 ### API-Based Invocation (Script, Discord, or Broker)
 
-For agents running outside Claude Code or in automation contexts:
+For agents running outside Claude Code or in automation contexts, use the **universal wrapper `scripts/lucent.py`**. This wrapper guarantees the startup ritual has fired before invoking any agent, regardless of entry point or model.
 
-**CLI:**
+**Universal Wrapper (Recommended):**
+```bash
+python3 /home/nick/dev/lucent/scripts/lucent.py agent git "Stage and commit all recent changes"
+python3 /home/nick/dev/lucent/scripts/lucent.py agent planner "Break down implementation of a new Discord command" --model qwen3.6:35b
+```
+
+The wrapper:
+- Checks startup ritual checkpoint (`memory/.ritual_checkpoint.json`)
+- Enforces ritual if checkpoint missing/stale/model-changed
+- Prepends context to agent system prompt if ritual executed
+- Works with any model (Mistral, Qwen, Claude, etc.)
+
+**Direct Agent Invocation (Legacy):**
 ```bash
 python3 /home/nick/dev/lucent/scripts/invoke_agent.py git "Stage and commit all recent changes"
 python3 /home/nick/dev/lucent/scripts/invoke_agent.py planner "Break down implementation of a new Discord command"

@@ -11,6 +11,10 @@ from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 
+# Import startup ritual verification
+sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from verify_startup import ensure_startup_ritual, augment_system_prompt
+
 load_dotenv()
 
 # Configuration
@@ -99,6 +103,9 @@ class DiscordInstructionMonitor:
     def process_instruction(self, message: dict) -> str:
         """Process Discord instruction through Ollama and return response."""
         try:
+            # Verify/enforce startup ritual
+            ritual_context, executed = ensure_startup_ritual(self.lucent_root, self.model)
+
             context = self.load_context()
             instruction_text = message.get("text", "")
 
@@ -109,6 +116,10 @@ class DiscordInstructionMonitor:
 Respond naturally and concisely to this instruction. Keep responses under 2-3 sentences unless more detail is needed.
 
 IMPORTANT: Do NOT use tool_use syntax or attempt to call tools. Generate only plain text responses. Do not output XML tags or tool calls."""
+
+            # Prepend startup ritual context if it just executed
+            if executed:
+                system_prompt = augment_system_prompt(ritual_context, system_prompt)
 
             # Call Ollama
             resp = requests.post(
