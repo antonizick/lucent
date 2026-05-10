@@ -15,6 +15,7 @@ const STATE_THRESHOLDS = {
 const ANIMATION_TIMING = {
   speak: { min: 80, max: 160 },        // mouth movement during talking
   idle: 3000,                           // idle expression change interval
+  bored: { min: 1500, max: 3500 },     // slow bored state animation
   stateCheck: 5000                      // check state transitions every 5 seconds
 };
 
@@ -173,24 +174,34 @@ class CharacterAnimator {
       this.img.src = frame;
     }
 
-    const doFlicker = Math.random() < 0.15; // 15% chance of rapid flicker
+    const isBored = this.currentState === AVATAR_STATES.BORED;
+    const holdTime = 300 + Math.floor(Math.random() * 300);
 
-    if (doFlicker) {
-      this._runFlickerBurst();
-    } else {
-      // Normal idle: hold frame for 300-600ms, then change every 3 seconds after
-      const holdTime = 300 + Math.floor(Math.random() * 300);
-      this.idleTimer = setTimeout(() => {
-        if (!this.speaking && this.currentStateImages.length > 0) {
-          const delay = ANIMATION_TIMING.idle;
-          this.idleTimer = setTimeout(() => {
-            if (!this.speaking && this.currentState === this._determineState()) {
-              this._runIdleCycle();
-            }
-          }, delay);
+    this.idleTimer = setTimeout(() => {
+      if (!this.speaking && this.currentStateImages.length > 0) {
+        let delay;
+
+        if (isBored) {
+          // Slow animation in bored state: 1.5-3.5 seconds
+          delay = ANIMATION_TIMING.bored.min +
+                  Math.floor(Math.random() * (ANIMATION_TIMING.bored.max - ANIMATION_TIMING.bored.min));
+        } else {
+          // Normal idle or waiting state behavior
+          const doFlicker = Math.random() < 0.15; // 15% chance of rapid flicker
+          if (doFlicker) {
+            this._runFlickerBurst();
+            return;
+          }
+          delay = ANIMATION_TIMING.idle;
         }
-      }, holdTime);
-    }
+
+        this.idleTimer = setTimeout(() => {
+          if (!this.speaking && this.currentState === this._determineState()) {
+            this._runIdleCycle();
+          }
+        }, delay);
+      }
+    }, holdTime);
   }
 
   _runFlickerBurst() {

@@ -615,8 +615,8 @@ body {
         to bottom,
         transparent 0px,
         transparent 3px,
-        rgba(0,0,0,0.15) 3px,
-        rgba(0,0,0,0.15) 4px
+        rgba(0,0,0,0.3) 3px,
+        rgba(0,0,0,0.3) 4px
     );
     pointer-events: none;
     z-index: 2;
