@@ -93,8 +93,27 @@
 
         <!-- Log Panel -->
         <div class="log-panel">
-            <div class="log-label">DAY'S LOG — LIVE FEED</div>
+            <div class="log-header">
+                <div class="log-label">DAY'S LOG — LIVE FEED</div>
+                <div class="font-controls">
+                    <button id="logFontDown" class="font-btn" title="Decrease font size">−</button>
+                    <button id="logFontUp" class="font-btn" title="Increase font size">+</button>
+                </div>
+            </div>
             <pre id="logContent" class="log-content"></pre>
+        </div>
+
+        <!-- Agents Directory Panel -->
+        <div class="agents-panel">
+            <div class="agents-header">
+                <div class="agents-label">AGENTS DIRECTORY</div>
+                <div class="agents-controls">
+                    <button id="agentsFontDown" class="font-btn" title="Decrease font size">−</button>
+                    <button id="agentsFontUp" class="font-btn" title="Increase font size">+</button>
+                    <button id="agentsToggle" class="agents-toggle" title="Toggle agents panel">▼</button>
+                </div>
+            </div>
+            <div id="agentsContainer" class="agents-container"></div>
         </div>
 
         <!-- Status indicator -->

@@ -599,6 +599,58 @@ async def get_avatar_images(avatar: str, state: str):
 
     return {"images": images}
 
+@app.get("/agents")
+async def list_agents():
+    """Discover available agents and their descriptions."""
+    agents_dir = Path(__file__).parent.parent / "agents"
+    agents = []
+
+    if agents_dir.exists():
+        for item in sorted(agents_dir.iterdir()):
+            if item.is_file() and item.suffix == ".md" and item.name != ".gitkeep":
+                try:
+                    content = item.read_text()
+                    lines = content.split("\n")
+                    name = None
+                    description = None
+
+                    # Find the description in the Identity section
+                    for i, line in enumerate(lines):
+                        if "## Identity" in line or "## Personality" in line:
+                            # Get the first non-empty paragraph after Identity/Personality
+                            for j in range(i + 1, min(i + 10, len(lines))):
+                                if lines[j].strip() and not lines[j].startswith("#"):
+                                    text = lines[j].strip()
+                                    description = text
+
+                                    # Extract agent name from bold text "You are **Name**"
+                                    import re
+                                    match = re.search(r'\*\*(\w+)\*\*', text)
+                                    if match:
+                                        name = match.group(1)
+                                    break
+                            break
+
+                    # If name not found in description, extract from heading
+                    if not name:
+                        for line in lines:
+                            if line.startswith("# ") and "Agent" in line:
+                                # Extract name: "# Memory Curator Agent" -> "Curator"
+                                extracted = line.replace("# ", "").replace(" Agent", "").strip()
+                                # Take the last word as the agent name
+                                name = extracted.split()[-1]
+                                break
+
+                    if name:
+                        agents.append({
+                            "name": name,
+                            "description": description or "Agent specializing in this domain"
+                        })
+                except Exception as e:
+                    logger.error(f"Error parsing agent file {item.name}: {e}")
+
+    return {"agents": agents}
+
 @app.get("/activity-log-viewer")
 async def activity_log_viewer():
     """Serve the activity log viewer page."""

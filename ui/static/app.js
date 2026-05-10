@@ -378,6 +378,177 @@ async function pollForAgentState() {
     }
 }
 
+// Poll for available agents
+async function pollForAgents() {
+    try {
+        const response = await fetch('/agents');
+        const data = await response.json();
+        renderAgentsDirectory(data.agents);
+    } catch (error) {
+        console.error('Error polling for agents:', error);
+    }
+}
+
+// Render agents directory table
+function renderAgentsDirectory(agents) {
+    const container = document.getElementById('agentsContainer');
+
+    // Preserve the font size before clearing
+    const savedFontSize = container.style.fontSize;
+
+    container.innerHTML = '';
+
+    if (!agents || agents.length === 0) {
+        container.innerHTML = '<p class="no-agents">No agents available</p>';
+        // Restore font size
+        if (savedFontSize) {
+            container.style.fontSize = savedFontSize;
+        }
+        return;
+    }
+
+    const table = document.createElement('table');
+    table.className = 'agents-table';
+
+    agents.forEach(agent => {
+        const row = document.createElement('tr');
+        row.className = 'agent-row';
+
+        const nameCell = document.createElement('td');
+        nameCell.className = 'agent-name';
+        nameCell.textContent = agent.name;
+
+        const descCell = document.createElement('td');
+        descCell.className = 'agent-description';
+        descCell.textContent = agent.description;
+
+        row.appendChild(nameCell);
+        row.appendChild(descCell);
+        table.appendChild(row);
+    });
+
+    container.appendChild(table);
+
+    // Restore font size after rendering
+    if (savedFontSize) {
+        container.style.fontSize = savedFontSize;
+    }
+}
+
+// Track agents panel state and polling interval
+let agentsPollInterval = null;
+let agentsPanelCollapsed = true; // Default to collapsed
+
+// Font size management
+const MIN_FONT_SIZE = 9;
+const MAX_FONT_SIZE = 18;
+const FONT_SIZE_STEP = 1;
+
+let logFontSize = parseInt(localStorage.getItem('logFontSize')) || 11;
+let agentsFontSize = parseInt(localStorage.getItem('agentsFontSize')) || 11;
+
+// Font size adjustment functions
+function adjustFontSize(panel, increase) {
+    let fontSize;
+    let storageKey;
+    let element;
+
+    if (panel === 'log') {
+        fontSize = logFontSize;
+        storageKey = 'logFontSize';
+        element = document.getElementById('logContent');
+    } else if (panel === 'agents') {
+        fontSize = agentsFontSize;
+        storageKey = 'agentsFontSize';
+        element = document.querySelector('.agents-table');
+        if (!element) element = document.getElementById('agentsContainer');
+    }
+
+    if (!element) return;
+
+    const newSize = increase ?
+        Math.min(fontSize + FONT_SIZE_STEP, MAX_FONT_SIZE) :
+        Math.max(fontSize - FONT_SIZE_STEP, MIN_FONT_SIZE);
+
+    element.style.fontSize = newSize + 'px';
+    localStorage.setItem(storageKey, newSize);
+
+    if (panel === 'log') {
+        logFontSize = newSize;
+    } else if (panel === 'agents') {
+        agentsFontSize = newSize;
+    }
+}
+
+// Apply saved font sizes on load
+function applySavedFontSizes() {
+    const logContent = document.getElementById('logContent');
+    const agentsContainer = document.getElementById('agentsContainer');
+
+    if (logContent) {
+        logContent.style.fontSize = logFontSize + 'px';
+    }
+
+    if (agentsContainer) {
+        agentsContainer.style.fontSize = agentsFontSize + 'px';
+    }
+}
+
+// Toggle agents panel collapse state
+function toggleAgentsPanel() {
+    const panel = document.querySelector('.agents-panel');
+    const container = document.getElementById('agentsContainer');
+    const toggle = document.getElementById('agentsToggle');
+
+    agentsPanelCollapsed = !agentsPanelCollapsed;
+
+    if (agentsPanelCollapsed) {
+        panel.classList.add('collapsed');
+        container.classList.add('hidden');
+        // Stop polling when collapsed
+        if (agentsPollInterval) {
+            clearInterval(agentsPollInterval);
+            agentsPollInterval = null;
+        }
+    } else {
+        panel.classList.remove('collapsed');
+        container.classList.remove('hidden');
+        // Resume polling when expanded
+        pollForAgents();
+        agentsPollInterval = setInterval(pollForAgents, 300000);
+    }
+
+    // Save state to localStorage
+    localStorage.setItem('agentsPanelCollapsed', agentsPanelCollapsed);
+}
+
+// Set up polling for agents directory
+function setupAgentsListener() {
+    // Start with collapsed state (default true)
+    const panel = document.querySelector('.agents-panel');
+    const container = document.getElementById('agentsContainer');
+
+    if (agentsPanelCollapsed) {
+        panel.classList.add('collapsed');
+        container.classList.add('hidden');
+    } else {
+        // Only poll if not collapsed
+        pollForAgents();
+        agentsPollInterval = setInterval(pollForAgents, 300000);
+    }
+
+    // Add event listeners
+    const toggleBtn = document.getElementById('agentsToggle');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', toggleAgentsPanel);
+    }
+
+    const agentsFontUp = document.getElementById('agentsFontUp');
+    const agentsFontDown = document.getElementById('agentsFontDown');
+    if (agentsFontUp) agentsFontUp.addEventListener('click', () => adjustFontSize('agents', true));
+    if (agentsFontDown) agentsFontDown.addEventListener('click', () => adjustFontSize('agents', false));
+}
+
 // Theme toggle
 function initTheme() {
     const savedTheme = localStorage.getItem('theme') || 'dark';
@@ -426,9 +597,18 @@ window.addEventListener('resize', constrainAnimationHeight);
 window.addEventListener('load', constrainAnimationHeight);
 
 initTheme();
+applySavedFontSizes();
+
+// Set up font size controls for log panel
+const logFontUp = document.getElementById('logFontUp');
+const logFontDown = document.getElementById('logFontDown');
+if (logFontUp) logFontUp.addEventListener('click', () => adjustFontSize('log', true));
+if (logFontDown) logFontDown.addEventListener('click', () => adjustFontSize('log', false));
+
 setupSpeechListener();
 setupLogListener();
 setupServiceListener();
+setupAgentsListener();
 
 // Poll for agent state changes every 2 seconds
 setInterval(pollForAgentState, 2000);
