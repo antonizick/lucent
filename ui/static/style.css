@@ -388,6 +388,17 @@ body {
     gap: 12px;
 }
 
+.log-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.log-label-group {
+    display: flex;
+    align-items: center;
+}
+
 .log-label {
     font-family: 'Courier New', monospace;
     font-size: 12px;
@@ -395,6 +406,39 @@ body {
     color: var(--neon-cyan);
     text-shadow: 0 0 8px rgba(0, 229, 255, 0.5);
     text-transform: uppercase;
+}
+
+/* Log tabs */
+.log-tabs {
+    display: flex;
+    gap: 8px;
+}
+
+.log-tab {
+    padding: 6px 12px;
+    background-color: rgba(0, 229, 255, 0.05);
+    color: var(--neon-cyan);
+    border: 1px solid rgba(0, 229, 255, 0.3);
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.log-tab:hover {
+    background-color: rgba(0, 229, 255, 0.1);
+    border-color: var(--neon-cyan);
+    box-shadow: 0 0 8px rgba(0, 229, 255, 0.2);
+}
+
+.log-tab.active {
+    background-color: rgba(0, 229, 255, 0.2);
+    border-color: var(--neon-cyan);
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+    font-weight: 600;
 }
 
 /* Font controls */

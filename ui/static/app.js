@@ -18,6 +18,9 @@ let lastLogContent = '';
 let fadeTimeout = null;
 let speechEnabled = false;
 let currentAgent = null;  // null = Lucent mode, string = named agent
+let currentLogTab = 'daily';  // 'daily', 'weekly', or 'memory'
+let lastWeeklyContent = '';
+let lastMemoryContent = '';
 
 // Load and populate available voices
 function loadVoices() {
@@ -280,22 +283,79 @@ function setupSpeechListener() {
 // Poll for log updates
 async function pollForLog() {
     try {
-        const response = await fetch('/log');
-        const data = await response.json();
-        if (data.content && data.content !== lastLogContent) {
-            logContent.textContent = data.content;
-            lastLogContent = data.content;
-            logContent.scrollTop = logContent.scrollHeight;
+        if (currentLogTab === 'daily') {
+            const response = await fetch('/log');
+            const data = await response.json();
+            if (data.content && data.content !== lastLogContent) {
+                logContent.textContent = data.content;
+                lastLogContent = data.content;
+                logContent.scrollTop = logContent.scrollHeight;
+            }
+        } else if (currentLogTab === 'weekly') {
+            const response = await fetch('/log/weekly');
+            const data = await response.json();
+            if (data.content && data.content !== lastWeeklyContent) {
+                logContent.textContent = data.content;
+                lastWeeklyContent = data.content;
+                logContent.scrollTop = logContent.scrollHeight;
+            }
+        } else if (currentLogTab === 'memory') {
+            const response = await fetch('/log/memory');
+            const data = await response.json();
+            if (data.content && data.content !== lastMemoryContent) {
+                logContent.textContent = data.content;
+                lastMemoryContent = data.content;
+                logContent.scrollTop = logContent.scrollHeight;
+            }
         }
     } catch (error) {
         console.error('Error polling for log:', error);
     }
 }
 
+// Switch log tab
+function switchLogTab(tab) {
+    currentLogTab = tab;
+
+    // Clear cache for this tab to force a fresh fetch
+    if (tab === 'daily') {
+        lastLogContent = '';
+    } else if (tab === 'weekly') {
+        lastWeeklyContent = '';
+    } else if (tab === 'memory') {
+        lastMemoryContent = '';
+    }
+
+    // Update button states
+    document.querySelectorAll('.log-tab').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+
+    // Update labels
+    document.getElementById('logLabelDaily').classList.toggle('hidden', tab !== 'daily');
+    document.getElementById('logLabelWeekly').classList.toggle('hidden', tab !== 'weekly');
+    document.getElementById('logLabelMemory').classList.toggle('hidden', tab !== 'memory');
+
+    // Clear content and poll immediately
+    logContent.textContent = 'Loading...';
+    pollForLog();
+}
+
 // Set up polling for log updates
 function setupLogListener() {
+    // Load immediately on page load
     pollForLog();
-    setInterval(pollForLog, 3000);
+
+    // Poll every 5 minutes (300 seconds)
+    setInterval(pollForLog, 300000);
+
+    // Set up tab switching with immediate fetch
+    document.querySelectorAll('.log-tab').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            switchLogTab(e.target.dataset.tab);
+        });
+    });
 }
 
 // Poll for service health
