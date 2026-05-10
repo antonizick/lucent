@@ -17,6 +17,7 @@ let isSpeaking = false;
 let lastLogContent = '';
 let fadeTimeout = null;
 let speechEnabled = false;
+let currentAgent = null;  // null = Lucent mode, string = named agent
 
 // Load and populate available voices
 function loadVoices() {
@@ -65,6 +66,46 @@ if (savedVoice && voiceSelect.options[savedVoice]) {
     voiceSelect.value = savedVoice;
     const voices = window.speechSynthesis.getVoices();
     currentVoice = voices[savedVoice];
+}
+
+// Avatar auto-switching helpers
+function findAvatarByName(name) {
+    if (!name) return null;
+    const lower = name.toLowerCase();
+    return avatarManager.avatars.find(a => a.toLowerCase() === lower) || null;
+}
+
+async function selectAvatarProfile(name) {
+    avatarSelect.value = name || '';
+    await window.character.setAvatar(name || null);
+    localStorage.setItem('selectedAvatar', name || '');
+}
+
+async function applyAgentAvatar(agentName) {
+    const isLucent = !agentName || agentName === 'Lucent';
+    const wasLucent = !currentAgent;
+
+    if (isLucent) {
+        currentAgent = null;
+        // Restore Lucent's avatar via fallback chain
+        const last = localStorage.getItem('lucentAvatar');
+        const target = findAvatarByName(last) ||
+                       findAvatarByName('Lucent') ||
+                       findAvatarByName('Emma') ||
+                       avatarManager.avatars[0] ||
+                       null;
+        await selectAvatarProfile(target);
+    } else {
+        // Save Lucent's current avatar before switching away
+        if (wasLucent) {
+            localStorage.setItem('lucentAvatar', avatarSelect.value || '');
+        }
+        currentAgent = agentName;
+        const match = findAvatarByName(agentName);
+        if (match) {
+            await selectAvatarProfile(match);
+        }
+    }
 }
 
 // Update timestamp display
@@ -323,6 +364,20 @@ function setupServiceListener() {
     setInterval(pollServiceHealth, 10000);
 }
 
+// Poll for agent state changes
+async function pollForAgentState() {
+    try {
+        const res = await fetch('/agent/current');
+        const data = await res.json();
+        const agentName = data.agent === 'Lucent' ? null : data.agent;
+        if (agentName !== currentAgent) {
+            await applyAgentAvatar(agentName);
+        }
+    } catch (e) {
+        // Silent failure - agent polling is optional
+    }
+}
+
 // Theme toggle
 function initTheme() {
     const savedTheme = localStorage.getItem('theme') || 'dark';
@@ -375,6 +430,9 @@ setupSpeechListener();
 setupLogListener();
 setupServiceListener();
 
+// Poll for agent state changes every 2 seconds
+setInterval(pollForAgentState, 2000);
+
 // Initialize avatar manager and character animator
 const characterImg = document.getElementById('characterFrame');
 const characterPanel = document.getElementById('characterPanel');
@@ -400,17 +458,8 @@ async function loadAvatars() {
             avatarSelect.appendChild(option);
         });
 
-        // Load saved avatar from localStorage, or default to first avatar if not saved
-        let selectedAvatar = localStorage.getItem('selectedAvatar');
-        if (!selectedAvatar && avatars.length > 0) {
-            selectedAvatar = avatars[0];
-            localStorage.setItem('selectedAvatar', selectedAvatar);
-        }
-
-        avatarSelect.value = selectedAvatar || '';
-        if (selectedAvatar) {
-            window.character.setAvatar(selectedAvatar);
-        }
+        // Initialize with Lucent avatar using fallback chain
+        await applyAgentAvatar(null);
     } catch (error) {
         console.error('Error loading avatars:', error);
         avatarSelect.innerHTML = '<option value="">No Avatar</option>';
@@ -421,6 +470,10 @@ async function loadAvatars() {
 avatarSelect.addEventListener('change', async (e) => {
     const avatar = e.target.value || null;
     localStorage.setItem('selectedAvatar', avatar || '');
+    if (!currentAgent) {
+        // In Lucent mode: save as Lucent's preference
+        localStorage.setItem('lucentAvatar', avatar || '');
+    }
     await window.character.setAvatar(avatar);
 });
 

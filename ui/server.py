@@ -96,6 +96,9 @@ speech_queue = deque(maxlen=100)  # Voice UI speech (backward compat)
 message_queue = deque(maxlen=100)  # Generic message queue (Discord, terminal, voice input)
 discord_pending = deque(maxlen=100)  # Pending Discord messages for terminal delivery
 
+# Agent state
+current_agent = "Lucent"
+
 # CORS for local development
 app.add_middleware(
     CORSMiddleware,
@@ -132,6 +135,10 @@ class ResponseRequest(BaseModel):
     user_id: Optional[str] = None
     response: str
     timestamp: Optional[str] = Field(default_factory=lambda: datetime.now().isoformat())
+
+class AgentSwitchRequest(BaseModel):
+    """Request to switch the current active agent."""
+    agent: str
 
 @app.get("/")
 async def root():
@@ -548,6 +555,18 @@ async def invoke_agent_endpoint(request: AgentRequest):
             "error": f"Failed to invoke agent: {str(e)}",
             "status": "error"
         }, 500
+
+@app.post("/agent/switch")
+async def switch_agent(request: AgentSwitchRequest):
+    """Switch the current active agent for avatar auto-selection."""
+    global current_agent
+    current_agent = request.agent
+    return {"agent": current_agent}
+
+@app.get("/agent/current")
+async def get_current_agent():
+    """Get the currently active agent."""
+    return {"agent": current_agent}
 
 @app.get("/api/avatars")
 async def list_avatars():
