@@ -116,6 +116,20 @@ curl -s http://localhost:8001/health
 
 ✓ Voice Box verified online.
 
+### STEP 4B: Initialize Session Logging (MANDATORY)
+
+Create today's daily note with session start marker. This ensures all work is logged.
+
+```bash
+python3 scripts/session_logger.py /home/nick/dev/lucent
+```
+
+Expected output: `✓ Session initialized:` and `✓ Checkpoint verified`
+
+**If this fails, STOP.** Cannot proceed without session logging initialized.
+
+✓ Session logging initialized. All work will be captured.
+
 ### STEP 5: Send Startup Acknowledgment via Voice + Text (MANDATORY)
 
 Compose startup message with: greeting, current priorities (from LTMemory), any reminders, ask for updates.
@@ -131,7 +145,14 @@ Then send same text as response in Claude Code.
 
 ### STEP 6: Begin Work
 
-All 5 steps complete. Proceed with user request. All responses: voice + text (framework validates).
+All steps complete. Proceed with user request.
+
+**FOR EVERY RESPONSE TO NICK, MANDATORY SEQUENCE:**
+1. **Log to daily note** — Append progress/work to memory/YYYY-MM-DD.md
+2. **Send voice** — curl to localhost:8001/speak
+3. **Send text** — Response in Claude Code
+
+Cannot skip any. Framework will validate.
 
 ### STEP 7: Update Daily Note at Session End
 

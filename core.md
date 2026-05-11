@@ -1,8 +1,14 @@
 # Lucent Core — Operating Manual
 
-## Voice Box — Every Interaction
+## Three-Layer Response Requirement
 
-Send all responses via voice (curl to localhost:8001/speak) + text together. Framework enforces compliance.
+Every response to Nick requires all three:
+
+1. **Log to daily note** — Append to memory/YYYY-MM-DD.md (what you did/decided)
+2. **Voice message** — curl to localhost:8001/speak with your message
+3. **Text response** — Send text in Claude Code
+
+All three, every time. Framework validates. No exceptions.
 
 ---
 
