@@ -19,6 +19,15 @@ from verify_startup import ensure_startup_ritual, augment_system_prompt
 SCRIPT_DIR = Path(__file__).parent
 LUCENT_ROOT = SCRIPT_DIR.parent
 OLLAMA_URL = "http://localhost:11434"
+VOICE_BOX_URL = "localhost:8001/speak"
+
+def validate_voice_box_included(response):
+    """
+    Check if response includes a voice box curl call.
+    Returns True if voice box call is present, False otherwise.
+    """
+    # Check for curl to voice box endpoint
+    return VOICE_BOX_URL in response or "curl" in response and "8001" in response
 
 def load_agent_context(agent_name):
     """Load all context files for an agent invocation."""
@@ -96,6 +105,13 @@ def invoke_agent(agent_name, task, model="mistral:latest"):
             data = resp.json()
             response_text = data.get("response", "").strip()
             if response_text:
+                # Validate voice box compliance
+                if not validate_voice_box_included(response_text):
+                    raise ValueError(
+                        f"[VOICE BOX REQUIRED] {agent_name.capitalize()}'s response did not include voice box curl to {VOICE_BOX_URL}.\n"
+                        f"Agent must include: curl -X POST http://{VOICE_BOX_URL} -H \"Content-Type: application/json\" -d '{{\"text\": \"...\"}}'\n"
+                        f"Response:\n{response_text}"
+                    )
                 # Format with agent prefix
                 agent_display_name = agent_name.capitalize()
                 return f"[{agent_display_name}] {response_text}"
