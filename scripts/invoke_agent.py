@@ -61,7 +61,15 @@ def invoke_agent(agent_name, task, model="mistral:latest"):
         Response string prefixed with [AgentName]
     """
     # Verify startup ritual has fired; if not, enforce it
-    ritual_context, executed = ensure_startup_ritual(LUCENT_ROOT, model)
+    ritual_context, executed, compression_needed = ensure_startup_ritual(LUCENT_ROOT, model)
+
+    # Check if compression is needed but hasn't been done
+    if compression_needed:
+        raise RuntimeError(
+            f"Startup ritual incomplete: Yesterday's daily note ({compression_needed}.md) needs compression. "
+            f"Invoke Curator first: python3 scripts/invoke_agent.py curator 'Compress {compression_needed}.md'\n"
+            f"Or run the startup ritual manually in Claude Code to compress via Lucent."
+        )
 
     # Load agent context
     system_prompt = load_agent_context(agent_name)

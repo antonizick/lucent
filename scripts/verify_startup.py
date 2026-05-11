@@ -14,7 +14,7 @@ Usage:
 import json
 import hashlib
 from pathlib import Path
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Optional, Tuple
 
 def compute_context_hash(lucent_root: Path) -> str:
@@ -54,7 +54,32 @@ def read_checkpoint(lucent_root: Path) -> Optional[dict]:
     except (json.JSONDecodeError, IOError):
         return None
 
-def is_checkpoint_valid(checkpoint: dict, current_hash: str, current_model: Optional[str] = None) -> bool:
+def needs_compression(lucent_root: Path) -> Optional[str]:
+    """
+    Check if yesterday's daily note exists and needs compression.
+
+    Returns:
+        Date string (YYYY-MM-DD) if compression is needed, None otherwise
+    """
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    yesterday_path = lucent_root / "memory" / f"{yesterday.strftime('%Y-%m-%d')}.md"
+
+    return yesterday.strftime("%Y-%m-%d") if yesterday_path.exists() else None
+
+def compression_marker_exists(lucent_root: Path, yesterday_date: str) -> bool:
+    """Check if today's note contains the compression marker for yesterday."""
+    today = date.today().strftime("%Y-%m-%d")
+    today_path = lucent_root / "memory" / f"{today}.md"
+
+    if not today_path.exists():
+        return False
+
+    content = today_path.read_text()
+    marker = f"Compressed {yesterday_date} at session start"
+    return marker in content
+
+def is_checkpoint_valid(checkpoint: dict, current_hash: str, current_model: Optional[str] = None, lucent_root: Optional[Path] = None) -> bool:
     """Check if checkpoint is valid and not stale."""
     if not checkpoint:
         return False
@@ -73,9 +98,20 @@ def is_checkpoint_valid(checkpoint: dict, current_hash: str, current_model: Opti
     if checkpoint_date != today:
         return False
 
+    # NEW: Check if compression was done (if needed)
+    if lucent_root:
+        yesterday_date = needs_compression(lucent_root)
+        if yesterday_date:
+            # Compression was needed; verify it was done
+            if not checkpoint.get("compressed_yesterday"):
+                return False
+            # Double-check the marker exists in today's note
+            if not compression_marker_exists(lucent_root, yesterday_date):
+                return False
+
     return True
 
-def write_checkpoint(lucent_root: Path, context_hash: str, model: Optional[str] = None) -> None:
+def write_checkpoint(lucent_root: Path, context_hash: str, model: Optional[str] = None, compressed_yesterday: bool = False) -> None:
     """Write/update the ritual checkpoint."""
     checkpoint_path = get_checkpoint_path(lucent_root)
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
@@ -85,7 +121,8 @@ def write_checkpoint(lucent_root: Path, context_hash: str, model: Optional[str] 
         "date": date.today().isoformat(),
         "context_hash": context_hash,
         "model": model,
-        "version": 1
+        "compressed_yesterday": compressed_yesterday,
+        "version": 2
     }
 
     checkpoint_path.write_text(json.dumps(checkpoint, indent=2))
@@ -114,7 +151,7 @@ def ensure_startup_ritual(
     lucent_root: Optional[Path] = None,
     model_name: Optional[str] = None,
     force: bool = False
-) -> Tuple[str, bool]:
+) -> Tuple[str, bool, Optional[str]]:
     """
     Verify startup ritual has fired. If not, load context and return it.
 
@@ -124,9 +161,10 @@ def ensure_startup_ritual(
         force: Force ritual execution even if checkpoint is valid
 
     Returns:
-        Tuple of (context_string, ritual_was_executed)
+        Tuple of (context_string, ritual_was_executed, yesterday_date_if_compression_needed)
         If ritual was executed, prepend context_string to system prompt.
         If ritual already ran, context_string is empty.
+        If compression is needed, third element contains yesterday's date.
     """
     # Auto-detect Lucent root if not provided
     if lucent_root is None:
@@ -135,22 +173,53 @@ def ensure_startup_ritual(
 
     lucent_root = Path(lucent_root)
 
+    # Check if compression is needed
+    yesterday_date = needs_compression(lucent_root)
+
     # Compute current context hash
     current_hash = compute_context_hash(lucent_root)
 
     # Check existing checkpoint
     checkpoint = read_checkpoint(lucent_root)
-    checkpoint_valid = is_checkpoint_valid(checkpoint, current_hash, model_name)
+    checkpoint_valid = is_checkpoint_valid(checkpoint, current_hash, model_name, lucent_root)
 
     if checkpoint_valid and not force:
         # Ritual already fired and is still valid
-        return "", False
+        return "", False, None
 
     # Ritual needs to fire (checkpoint missing, stale, or forced)
     context = load_context_files(lucent_root)
-    write_checkpoint(lucent_root, current_hash, model_name)
 
-    return context, True
+    # Mark compression as done if no compression needed, or let caller handle it
+    compressed = not bool(yesterday_date)  # Mark as done if no compression needed
+    write_checkpoint(lucent_root, current_hash, model_name, compressed_yesterday=compressed)
+
+    return context, True, yesterday_date
+
+def mark_compression_complete(lucent_root: Path) -> None:
+    """
+    Mark yesterday's compression as complete in the checkpoint.
+
+    Call this after Curator finishes compressing yesterday's note.
+    Verifies the compression marker exists in today's note before updating checkpoint.
+    """
+    lucent_root = Path(lucent_root)
+    yesterday_date = needs_compression(lucent_root)
+
+    if yesterday_date and compression_marker_exists(lucent_root, yesterday_date):
+        # Marker exists; update checkpoint
+        checkpoint = read_checkpoint(lucent_root)
+        if checkpoint:
+            checkpoint["compressed_yesterday"] = True
+            checkpoint_path = get_checkpoint_path(lucent_root)
+            checkpoint_path.write_text(json.dumps(checkpoint, indent=2))
+    elif not yesterday_date:
+        # No compression needed; mark as done anyway
+        checkpoint = read_checkpoint(lucent_root)
+        if checkpoint:
+            checkpoint["compressed_yesterday"] = True
+            checkpoint_path = get_checkpoint_path(lucent_root)
+            checkpoint_path.write_text(json.dumps(checkpoint, indent=2))
 
 def augment_system_prompt(system_prompt: str, additional_context: str) -> str:
     """Prepend additional context to system prompt."""
@@ -166,11 +235,13 @@ if __name__ == "__main__":
     lucent_root = Path("/home/nick/dev/lucent") if len(sys.argv) < 2 else Path(sys.argv[1])
     model = sys.argv[2] if len(sys.argv) > 2 else None
 
-    context, executed = ensure_startup_ritual(lucent_root, model)
+    context, executed, compression_needed = ensure_startup_ritual(lucent_root, model)
 
     if executed:
         print(f"✓ Startup ritual executed for model: {model or 'unspecified'}")
         print(f"✓ Context checkpoint written")
+        if compression_needed:
+            print(f"⚠ Compression needed for: {compression_needed}")
         print(f"✓ Ready to proceed")
     else:
         print(f"✓ Startup ritual already valid (checkpoint OK)")
