@@ -1,16 +1,8 @@
 # Lucent Core — Operating Manual
 
-## Voice Box — Every Single Interaction
+## Voice Box — Every Interaction
 
-**You MUST use the voice box + text for EVERY response to Nick. This is non-negotiable.**
-
-- All answers must be sent via voice + text (never one without the other)
-- All questions must be sent via voice + text
-- All acknowledgments, clarifications, status updates, errors — voice + text
-- Voice box is mandatory; it is how Nick is notified
-- See CLAUDE.md "VOICE BOX REQUIREMENT" section for exact instructions and HTTP format
-
-No exceptions. Every interaction = voice + text together.
+Send all responses via voice (curl to localhost:8001/speak) + text together. Framework enforces compliance.
 
 ---
 

@@ -2,169 +2,20 @@
 
 ---
 
-## ⚠️ VOICE BOX REQUIREMENT — MANDATORY FOR ALL INTERACTIONS
+## Voice Box Requirement
 
-**YOU MUST USE THE VOICE BOX FOR EVERY SINGLE INTERACTION WITH NICK.**
+Send all responses via voice + text:
+1. `curl -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text": "your message"}'`
+2. Then send the same text as your response
 
-This is non-negotiable. Every time you respond to Nick — whether answering a question, asking for clarification, acknowledging a request, reporting status — you MUST:
-
-1. **Send voice message via curl to localhost:8001/speak**
-2. **Also send text response** (in Claude Code terminal, or equivalent output)
-3. **Voice + text together** — never voice-only, never text-only
-
----
-
-### STEP-BY-STEP: HOW TO USE VOICE BOX
-
-**STEP 1: Compose your message**
-Write the message you want to say to Nick. Example: "I found the bug in the login code."
-
-**STEP 2: Format the curl command**
-Copy this template exactly. Replace only the part that says "YOUR MESSAGE HERE":
-
+Example:
 ```bash
-curl -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text": "YOUR MESSAGE HERE"}'
+curl -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text": "Task complete."}'
 ```
 
-**STEP 3: Substitute your message**
-Put your message in place of "YOUR MESSAGE HERE". Example:
+Then respond with text: `Task complete.`
 
-```bash
-curl -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text": "I found the bug in the login code."}'
-```
-
-**STEP 4: Execute the curl command**
-Run this command in bash. It will send the message to the voice box.
-
-**STEP 5: Wait for response**
-You should see a response like:
-```json
-{"status":"queued","text":"...","timestamp":"..."}
-```
-
-If you see `"status":"queued"`, the message was sent successfully.
-
-**STEP 6: Send the same message as text**
-After the curl command succeeds, type the same message as your text response in Claude Code. For example:
-
-```
-I found the bug in the login code. It is in userAuth.js on line 42 where the token validation is skipped.
-```
-
-**Both the voice command (curl) AND the text response must happen.**
-
----
-
-### VOICE BOX ENDPOINT DETAILS
-
-- **Endpoint:** `http://localhost:8001/speak`
-- **Method:** POST (always POST, never GET)
-- **Header:** `Content-Type: application/json` (tells the server this is JSON)
-- **Body:** `{"text": "your message"}` (JSON object with a "text" field)
-
-**What each flag means:**
-- `-X POST` = use the POST method
-- `-H "Content-Type: application/json"` = tell server we're sending JSON
-- `-d '{"text": "..."}` = the data/body to send
-
----
-
-### COMPLETE EXAMPLES (COPY-PASTE THESE)
-
-**Example 1: Answering a question**
-```bash
-curl -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text": "The answer to your question is yes because of the following reason."}'
-```
-
-**Example 2: Status report**
-```bash
-curl -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text": "I have completed the task. The changes have been committed and pushed to main."}'
-```
-
-**Example 3: Asking for clarification**
-```bash
-curl -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text": "I need clarification on this request. Do you want me to do X or Y?"}'
-```
-
-**Example 4: Startup greeting**
-```bash
-curl -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text": "Good morning. Current priorities are Lucent compression and Tally MVP. Any updates needed?"}'
-```
-
----
-
-### WHEN TO USE VOICE BOX (ALL OF THESE)
-
-- ✅ **Answering questions** — voice + text
-- ✅ **Asking for clarification** — voice + text
-- ✅ **Acknowledging commands** — voice + text
-- ✅ **Status reports** — voice + text
-- ✅ **Startup greeting** — voice + text
-- ✅ **Errors or blockers** — voice + text
-- ✅ **Session end summary** — voice + text
-- ✅ **Progress updates** — voice + text
-- ✅ **Anything else you communicate to Nick** — voice + text
-
-**Rule:** If you are sending information to Nick, you use voice box + text. No exceptions.
-
----
-
-### VOICE BOX MUST ALWAYS BE RUNNING
-
-Before you can send voice messages, the voice box service must be running.
-
-**Check if it's running:**
-```bash
-curl -s http://localhost:8001/health
-```
-
-**Expected response (success):**
-```json
-{"status":"ok"}
-```
-
-**If you get NO response or an error:**
-1. Start the voice box:
-```bash
-cd /home/nick/dev/lucent/ui && nohup bash start.sh > /tmp/lucent-voice-box.log 2>&1 &
-sleep 3
-```
-
-2. Verify it started:
-```bash
-curl -s http://localhost:8001/health
-```
-
-3. If still failing, check the log:
-```bash
-tail -20 /tmp/lucent-voice-box.log
-```
-
-**STOP and do not proceed with responding to Nick until voice box is confirmed running.**
-
----
-
-### TROUBLESHOOTING
-
-**Problem: curl command fails or times out**
-- Check: Is the voice box running? Run `curl -s http://localhost:8001/health`
-- If not, start it (see section above)
-
-**Problem: I get an error like "connection refused"**
-- The voice box is not running on localhost:8001
-- Start it: `cd /home/nick/dev/lucent/ui && nohup bash start.sh > /tmp/lucent-voice-box.log 2>&1 &`
-- Wait 3 seconds and try again
-
-**Problem: My message didn't appear in voice**
-- Check the response: Do you see `"status":"queued"`?
-- If yes: The message was sent successfully. You also need to send the text response.
-- If no: There was an error. Check the response message for details.
-
-**Problem: I'm not sure if my curl command is correct**
-- Copy one of the COMPLETE EXAMPLES above
-- Replace only the text inside `"text": "YOUR MESSAGE HERE"`
-- Do not change anything else
-- Run it
+Framework validates all responses include voice call.
 
 ---
 
@@ -245,67 +96,42 @@ Load (already injected via hook, but verify):
 
 ### STEP 4: Verify Voice Box is Running (MANDATORY)
 
-**This step ensures you can send voice messages. You CANNOT proceed without it.**
-
 Check if port 8001 is responding:
 ```bash
 curl -s http://localhost:8001/health
 ```
 
-**Expected response:** `{"status": "ok"}` or similar success indicator
-
-**If you get NO response or an error:**
-1. Start voice box:
+If no response, start it:
 ```bash
 cd /home/nick/dev/lucent/ui && nohup bash start.sh > /tmp/lucent-voice-box.log 2>&1 &
 sleep 3
 ```
-2. Verify it started:
+
+Verify startup:
 ```bash
 curl -s http://localhost:8001/health
 ```
-3. If still failing, check the log:
-```bash
-tail -20 /tmp/lucent-voice-box.log
-```
-4. **STOP. Do not proceed with responding to Nick until voice box is confirmed online.** Nick needs voice responses.
 
-✓ Voice Box verified online and responding to health check.
+**STOP if voice box fails. Cannot proceed without it.**
+
+✓ Voice Box verified online.
 
 ### STEP 5: Send Startup Acknowledgment via Voice + Text (MANDATORY)
 
-**First voice interaction. Use the format from VOICE BOX REQUIREMENT section above.**
+Compose startup message with: greeting, current priorities (from LTMemory), any reminders, ask for updates.
 
-1. Compose your startup message:
-   - Greet Nick
-   - List current priorities (from LTMemory → Current Priorities)
-   - List any pattern-based reminders due today
-   - Ask: "Any updates to priorities? Anything new to track?"
-
-2. Send via voice box using HTTP POST:
+Send via voice box:
 ```bash
-curl -X POST http://localhost:8001/speak \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Good morning Nick. Current priorities: Lucent compression system, Tally Phase 1 MVP. Any pattern reminders due today? Should I surface anything specific?"}'
+curl -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text": "Good morning. Current priorities: [list from LTMemory]. Any updates?"}'
 ```
 
-3. Then send the same message as text in Claude Code (your response in the terminal)
+Then send same text as response in Claude Code.
 
-Example greeting: `"Good morning. Current priorities: Lucent compression system, Tally Phase 1 MVP. Any pattern reminders due today? Should I surface anything specific?"`
+✓ Ritual complete. Ready for work.
 
-This confirms the entire ritual has finished, surfaces what matters, and invites input. **Both voice AND text must be sent.**
+### STEP 6: Begin Work
 
-✓ Ritual verified complete. Startup voice acknowledgment sent. Priorities & reminders surfaced. Ready for work.
-
-### STEP 6: Begin Work — Remember: Voice Box for ALL Interactions
-
-Only after all 5 steps are verified complete should you proceed with the user's request.
-
-**CRITICAL REMINDER:** From this point forward, EVERY response to Nick includes:
-1. HTTP POST to `localhost:8001/speak` with your message (see VOICE BOX REQUIREMENT section)
-2. Text response in Claude Code
-
-This applies to ALL interactions: answering questions, asking for clarification, status updates, errors, everything. Never send text-only. Never send voice-only. Always both.
+All 5 steps complete. Proceed with user request. All responses: voice + text (framework validates).
 
 ### STEP 7: Update Daily Note at Session End
 
@@ -430,44 +256,8 @@ Changes are typically:
 
 ---
 
-## VOICE BOX QUICK REFERENCE — BEGINNER CHECKLIST
+## Voice Box Template
 
-Every single response to Nick must follow this sequence:
+`curl -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text": "message"}'`
 
-### Checklist:
-- [ ] **Step 1:** Compose your response message (what you want to tell Nick)
-- [ ] **Step 2:** Copy the curl template below
-- [ ] **Step 3:** Replace `"YOUR MESSAGE HERE"` with your actual message (keep the quotes)
-- [ ] **Step 4:** Run the curl command in bash
-- [ ] **Step 5:** Look for `"status":"queued"` in the response (success)
-- [ ] **Step 6:** Type the same message as text output in Claude Code
-
-### Template (COPY THIS EXACTLY):
-```bash
-curl -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text": "YOUR MESSAGE HERE"}'
-```
-
-### Usage Example:
-
-**You want to say:** "The task is complete."
-
-**Step 1-3: Substitute your message into the template:**
-```bash
-curl -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text": "The task is complete."}'
-```
-
-**Step 4: Run that command in bash (you'll see a response with "status":"queued")**
-
-**Step 5-6: Type as text output:**
-```
-The task is complete.
-```
-
-**Result:** Voice notification sent to Nick AND text response visible in Claude Code. ✓
-
-### Critical Rules:
-- **BOTH voice AND text required** — never skip either one
-- **Run the curl command first**, then send text
-- **Always include the quotes** around your message text
-- **Always replace "YOUR MESSAGE HERE"** — don't leave the template as-is
-- **This applies to everything** — questions, answers, status, errors, acknowledgments, all of it
+Send voice first, then text response. Framework validates both are present.

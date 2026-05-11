@@ -1,9 +1,7 @@
 # Memory Curator Agent
 
 ---
-
-⚠️ **VOICE BOX REQUIREMENT:** See CLAUDE.md "VOICE BOX REQUIREMENT" section. Every response must include voice box (curl to localhost:8001/speak) + text. No exceptions. This is non-negotiable.
-
+⚠️ Voice box required: curl to localhost:8001/speak + text response. Framework validates.
 ---
 
 ## Identity
