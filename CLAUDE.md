@@ -67,6 +67,14 @@ Load and mentally ingest:
 
 ✓ Identity established.
 
+### STEP 3B: Load Priorities & Reminders
+
+Load (already injected via hook, but verify):
+- **LTMemory.md → Current Priorities section** — 3-5 active focus areas (loaded in context)
+- **memory/REMINDERS.md** — Pattern-based, context-triggered, opportunistic reminders
+
+✓ Priorities and reminders in context.
+
 ### STEP 4: Ensure Voice Box is Running
 
 Check if port 8001 is responding:
@@ -82,17 +90,18 @@ sleep 3
 
 ✓ Voice Box online.
 
-### STEP 5: Send Startup Acknowledgment via Voice
+### STEP 5: Send Startup Acknowledgment via Voice + Ask About Priorities/Reminders
 
-Send: `"Startup ritual complete. Ready for your input."`
+Early in the session, send voice message:
+- List current priorities (from LTMemory → Current Priorities)
+- List any pattern-based reminders due today
+- Ask: "Any updates to priorities? Anything new to track?"
 
-This confirms the entire ritual has finished and you're ready to work.
+Example: `"Good morning. Current priorities: Lucent compression system, Tally Phase 1 MVP. Any pattern reminders due today? Should I surface anything specific?"`
 
-```bash
-curl -s -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text":"Startup ritual complete. Ready for your input."}'
-```
+This confirms the entire ritual has finished, surfaces what matters, and invites input.
 
-✓ Ritual verified complete. Checkpoint updated.
+✓ Ritual verified complete. Priorities & reminders surfaced. Ready for work.
 
 ### STEP 6: Begin Work
 
@@ -100,7 +109,14 @@ Only after all 5 steps are verified complete should you proceed with the user's 
 
 ### STEP 7: Update Daily Note at Session End
 
-At the end of the session, append to today's daily note. Follow the Note Summary Protocol in core.md: max 1-2 paragraphs, include decisions made, tasks completed, and what's next. Never write transcripts.
+At the end of the session, append to today's daily note. Capture:
+- **Code/Project Work** — What we shipped, built, decided
+- **Ambitions & Progress** — Building toward what matters (relate to priorities)
+- **To Remember** — Decisions, lists, reference items, standing directives
+- **Blockers/Constraints** — What's slowing progress
+- **Next Steps** — What's coming, what changed in priorities
+
+Follow Note Summary Protocol in core.md: quality over form (1-5 paragraphs per section as needed). Capture decisions made, tasks completed, what's next. Never write transcripts.
 
 ---
 

@@ -36,9 +36,28 @@ Only then begin work. The startup ritual creates session-to-session continuity. 
 
 ## Note Summary Protocol
 
-- **Today's note:** Detailed working log, token-efficient. Record as you work — progress, decisions, ideas, context changes. Compact language, high information density.
-- **Past notes:** Essence-only, one paragraph max. Outcomes and key decisions only.
-- **Never delete notes.** Compress at end-of-day, promote content to LTMemory.md as needed.
-- **At session start of new day:** Compress previous day's note to essence-only, mark completed.
+**Today's note (detailed working log):**
+- Record as you work — progress, decisions, ideas, context changes, ambitions
+- Flexible structure: Code Work, Ambitions & Progress, To Remember, Blockers, Next Steps (as many sections as needed)
+- Compact language, high information density
+- Scope: not just code, but also personal goals, priorities, things to remember
+- Update during work, not just at session end
 
-Last 7 days are loaded in the hook context.
+**Past notes (compressed):**
+- Essence-only: outcomes, key decisions, standing directives
+- Format: 1-3 paragraphs max (quality over form — more if needed for understanding)
+- No implementation details or trial-and-error debugging
+- Marked with "Compressed [date] at session start" to prevent re-processing
+
+**Promotion to LTMemory.md:**
+- Weekly by Curator: extract recurring decisions, lessons, patterns, priorities
+- Discard details, preserve the WHY
+- Maintain density: 1500-2500 words in 5-7 sections
+
+**Archival:**
+- Completed initiatives, dated context, superseded decisions → memory/archive/YYYY-MM.md
+- Kept for historical reference, not active context
+
+**Never delete notes.** Only compress, promote, or archive. Git has full history.
+
+Last 7 days loaded in hook context. Current Priorities section always in context.

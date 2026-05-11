@@ -18,6 +18,14 @@
 - .gitignore excludes private/, IDE files, .DS_Store.
 - Daily notes accumulate forever — no deletion of completed notes. Daily notes can and should be edited, refined, and summarized during their day. Once the day is over, the note is never deleted — only its content promoted to LTMemory.md.
 
+## Current Priorities
+
+Active focus areas (3-5 max). Updated weekly by Curator. Loaded in startup ritual—always in Lucent's context during sessions.
+
+- *[To be populated by Nick]*
+
+Format: `**[Priority]** — Why it matters, deadline/urgency, current status/blockers`
+
 ## Lessons Learned
 
 - Start sessions with a clean README before populating memory. A framework with no content is still a template.
