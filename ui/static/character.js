@@ -15,7 +15,7 @@ const STATE_THRESHOLDS = {
 const ANIMATION_TIMING = {
   speak: { min: 80, max: 160 },        // mouth movement during talking
   idle: 3000,                           // idle expression change interval
-  bored: { min: 1500, max: 3500 },     // slow bored state animation
+  bored: { min: 4000, max: 7000 },     // bored state animation: randomized 4-7 seconds
   stateCheck: 5000                      // check state transitions every 5 seconds
 };
 
@@ -175,14 +175,14 @@ class CharacterAnimator {
     }
 
     const isBored = this.currentState === AVATAR_STATES.BORED;
-    const holdTime = 300 + Math.floor(Math.random() * 300);
+    const holdTime = isBored ? 0 : 300 + Math.floor(Math.random() * 300);
 
     this.idleTimer = setTimeout(() => {
       if (!this.speaking && this.currentStateImages.length > 0) {
         let delay;
 
         if (isBored) {
-          // Slow animation in bored state: 1.5-3.5 seconds
+          // Slow animation in bored state: 4-7 seconds
           delay = ANIMATION_TIMING.bored.min +
                   Math.floor(Math.random() * (ANIMATION_TIMING.bored.max - ANIMATION_TIMING.bored.min));
         } else {
