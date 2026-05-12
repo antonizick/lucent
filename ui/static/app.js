@@ -10,6 +10,7 @@ const status = document.getElementById('status');
 const voicePanelLabel = document.getElementById('voicePanelLabel');
 const logContent = document.getElementById('logContent');
 const servicesList = document.getElementById('servicesList');
+const refreshTimer = document.getElementById('refreshTimer');
 
 // State
 let currentVoice = null;
@@ -21,6 +22,8 @@ let currentAgent = null;  // null = Lucent mode, string = named agent
 let currentLogTab = 'daily';  // 'daily', 'weekly', or 'memory'
 let lastWeeklyContent = '';
 let lastMemoryContent = '';
+let refreshCountdown = 30;
+let refreshTimerInterval = null;
 
 // Load and populate available voices
 function loadVoices() {
@@ -342,13 +345,39 @@ function switchLogTab(tab) {
     pollForLog();
 }
 
+// Update refresh timer countdown
+function startRefreshTimer() {
+    refreshCountdown = 30;
+    refreshTimer.textContent = '30s';
+
+    // Clear any existing interval
+    if (refreshTimerInterval) {
+        clearInterval(refreshTimerInterval);
+    }
+
+    // Count down every second
+    refreshTimerInterval = setInterval(() => {
+        refreshCountdown--;
+        if (refreshCountdown >= 0) {
+            refreshTimer.textContent = refreshCountdown + 's';
+        }
+        if (refreshCountdown < 0) {
+            clearInterval(refreshTimerInterval);
+        }
+    }, 1000);
+}
+
 // Set up polling for log updates
 function setupLogListener() {
     // Load immediately on page load
     pollForLog();
+    startRefreshTimer();
 
     // Poll every 30 seconds
-    setInterval(pollForLog, 30000);
+    setInterval(() => {
+        pollForLog();
+        startRefreshTimer();
+    }, 30000);
 
     // Set up tab switching with immediate fetch
     document.querySelectorAll('.log-tab').forEach(btn => {

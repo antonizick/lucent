@@ -464,6 +464,16 @@ body {
     box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
 }
 
+.refresh-timer {
+    font-size: 11px;
+    color: var(--text-secondary);
+    opacity: 0.6;
+    padding-right: 12px;
+    line-height: 1.2;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 0.5px;
+}
+
 .log-content {
     flex: 1;
     font-family: 'Courier New', monospace;
