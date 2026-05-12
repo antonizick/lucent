@@ -37,7 +37,7 @@ launch() {
     echo -e "${GREEN}${BOLD}[*] Launching opencode with model: ${CYAN}${model}${NC}"
     echo -e "${YELLOW}    Press Ctrl+C to cancel${NC}"
     echo ""
-    exec opencode --model "${model}"
+    exec ollama launch opencode --model "${model}"
 }
 
 # ─── Pull a new model ───
