@@ -13,6 +13,7 @@ Usage:
 
 import json
 import hashlib
+import os
 from pathlib import Path
 from datetime import datetime, date, timedelta
 from typing import Optional, Tuple
@@ -228,22 +229,100 @@ def augment_system_prompt(system_prompt: str, additional_context: str) -> str:
 
     return f"{additional_context}\n\n---\n\n{system_prompt}"
 
+def cli_check(lucent_root: Path) -> None:
+    """Check-only mode: validate checkpoint, write nothing. Exit 1 if ritual needed."""
+    from pathlib import Path
+
+    current_hash = compute_context_hash(lucent_root)
+    checkpoint = read_checkpoint(lucent_root)
+    checkpoint_valid = is_checkpoint_valid(checkpoint, current_hash, lucent_root=lucent_root)
+
+    yesterday = needs_compression(lucent_root)
+
+    if checkpoint_valid:
+        print("RITUAL OK")
+        if yesterday and not compression_marker_exists(lucent_root, yesterday):
+            print(f"⚠ Needs compression: {yesterday}")
+        sys.exit(0)
+    else:
+        print("RITUAL NEEDED")
+        print("Execute startup ritual steps before responding:")
+        print(f"  lucent_root={lucent_root}")
+        if yesterday:
+            print(f"  compression_needed={yesterday}")
+        if not checkpoint:
+            print("  reason=no_checkpoint")
+        elif checkpoint.get("date") != date.today().isoformat():
+            print(f"  reason=stale_checkpoint ({checkpoint.get('date')})")
+            print(f"  today={date.today().isoformat()}")
+        elif checkpoint.get("context_hash") != current_hash:
+            print("  reason=context_changed")
+        elif not checkpoint.get("compressed_yesterday", False) and yesterday:
+            print("  reason=compression_pending")
+        sys.exit(1)
+
+
+def cli_mark_complete(lucent_root: Path, model: Optional[str] = None) -> None:
+    """Mark the startup ritual as complete in the checkpoint."""
+    import hashlib
+
+    current_hash = compute_context_hash(lucent_root)
+    yesterday = needs_compression(lucent_root)
+    compressed = not bool(yesterday)
+
+    if yesterday:
+        if compression_marker_exists(lucent_root, yesterday):
+            compressed = True
+        else:
+            print(f"⚠ Warning: {yesterday} compression marker not found in today's note")
+
+    write_checkpoint(lucent_root, current_hash, model, compressed_yesterday=compressed)
+    print(f"✓ Ritual checkpoint written (compressed_yesterday={compressed})")
+    sys.exit(0)
+
+
 if __name__ == "__main__":
-    # Simple test: Check if ritual needs to run
     import sys
 
-    lucent_root = Path("/home/nick/dev/lucent") if len(sys.argv) < 2 else Path(sys.argv[1])
-    model = sys.argv[2] if len(sys.argv) > 2 else None
+    args = sys.argv[1:]
+    model = os.environ.get("OPENCODE_MODEL")
 
-    context, executed, compression_needed = ensure_startup_ritual(lucent_root, model)
+    # Determine command and path
+    cmd = None
+    lucent_root = Path("/home/nick/dev/lucent")
 
-    if executed:
-        print(f"✓ Startup ritual executed for model: {model or 'unspecified'}")
-        print(f"✓ Context checkpoint written")
-        if compression_needed:
-            print(f"⚠ Compression needed for: {compression_needed}")
-        print(f"✓ Ready to proceed")
+    if args:
+        first = args[0]
+        if first in ("check", "mark-complete"):
+            cmd = first
+            if len(args) > 1:
+                lucent_root = Path(args[1])
+        else:
+            # Legacy mode: first arg is path, second is model
+            lucent_root = Path(first)
+            if len(args) > 1:
+                model = args[1]
+            context, executed, compression_needed = ensure_startup_ritual(lucent_root, model)
+            if executed:
+                print(f"✓ Startup ritual executed")
+                if compression_needed:
+                    print(f"⚠ Compression needed for: {compression_needed}")
+                print(f"✓ Ready to proceed")
+            else:
+                print(f"✓ Startup ritual already valid (checkpoint OK)")
+            sys.exit(0)
+
+    if cmd == "check":
+        cli_check(lucent_root)
+    elif cmd == "mark-complete":
+        cli_mark_complete(lucent_root, model)
     else:
-        print(f"✓ Startup ritual already valid (checkpoint OK)")
-
-    sys.exit(0)
+        context, executed, compression_needed = ensure_startup_ritual(lucent_root, model)
+        if executed:
+            print(f"✓ Startup ritual executed")
+            if compression_needed:
+                print(f"⚠ Compression needed for: {compression_needed}")
+            print(f"✓ Ready to proceed")
+        else:
+            print(f"✓ Startup ritual already valid (checkpoint OK)")
+        sys.exit(0)
