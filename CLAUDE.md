@@ -49,11 +49,14 @@ Then send same text as response in Claude Code. ✓
 ### STEP 7: Respond to Nick's Input
 
 **FOR EVERY RESPONSE, MANDATORY SEQUENCE:**
-1. **Log to daily note** — Append to memory/YYYY-MM-DD.md
-2. **Send voice** — curl to localhost:8001/speak
-3. **Send text** — Response in Claude Code
+1. **Call `validate_response` tool** — Provide daily_note_entry, voice_message, text_response
+   - Tool validates all three layers present
+   - Only proceed if tool returns `OK_TO_SEND`
+2. **Log to daily note** — Append to memory/YYYY-MM-DD.md
+3. **Send voice** — curl to localhost:8001/speak
+4. **Send text** — Response in Claude Code
 
-All three, every time. Framework validates.
+All three, every time. Tool validates before sending.
 
 ### STEP 8: Session End
 Append to daily note: Code/Project Work, Ambitions & Progress, To Remember, Blockers/Constraints, Next Steps. Follow Note Summary Protocol in core.md.
