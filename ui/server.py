@@ -361,7 +361,7 @@ async def get_weekly_log():
 @app.get("/log/memory")
 async def get_memory_log():
     """Get long-term memory insights."""
-    memory_file = Path(__file__).parent.parent / "LTMemory.md"
+    memory_file = Path(__file__).parent.parent / "memory" / "LTMemory.md"
 
     if memory_file.exists():
         try:
