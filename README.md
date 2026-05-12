@@ -34,6 +34,8 @@ The Voice Box web UI (port 8001) provides voice acknowledgment for every interac
 **Features:**
 - **Dynamic Refresh Timer:** The daily log displays a countdown timer (left of font controls) showing seconds until the next automatic refresh. Counts down from 30 to 0, resets on each cycle. Styled subtly to avoid visual clutter.
 - **Daily Log Tabs:** Switch between Daily (live), Weekly insights, and Long-term memory views
+  - **Long-term Memory Tab:** Displays `memory/LTMemory.md` — distilled knowledge and priorities
+  - **Daily Tab:** Live view of today's session notes (`memory/YYYY-MM-DD.md`)
 - **Font Controls:** Adjust daily log text size with +/− buttons
 
 ### Discord Integration
