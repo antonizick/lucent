@@ -41,7 +41,13 @@ class CharacterAnimator {
 
   async setAvatar(avatar) {
     if (this.currentAvatar === avatar) return;
+
+    // Clear any running animation timers from the previous avatar
+    clearTimeout(this.speakTimer);
+    clearTimeout(this.idleTimer);
+
     this.currentAvatar = avatar;
+    this.currentStateImages = [];
 
     if (!avatar) {
       this._showNoAvatar();
