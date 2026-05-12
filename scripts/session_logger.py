@@ -16,6 +16,7 @@ Usage:
 """
 
 import json
+import subprocess
 from pathlib import Path
 from datetime import datetime, date
 import sys
@@ -52,6 +53,17 @@ def initialize_session_log(lucent_root, topic=""):
     # Append to file (create if doesn't exist)
     with open(note_path, "a") as f:
         f.write(marker)
+
+    # Check for due reminders (idempotent)
+    try:
+        subprocess.run(
+            ["python3", str(Path(lucent_root) / "scripts" / "check_reminders.py")],
+            check=False,
+            capture_output=True
+        )
+    except Exception as e:
+        # Silently fail if reminder check fails—don't block session startup
+        pass
 
     # Return session metadata for later validation
     return {

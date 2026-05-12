@@ -11,6 +11,7 @@ Usage:
   context = ensure_startup_ritual(project_root="/home/nick/dev/lucent")
 """
 
+import sys
 import json
 import hashlib
 import os
@@ -281,48 +282,62 @@ def cli_mark_complete(lucent_root: Path, model: Optional[str] = None) -> None:
     sys.exit(0)
 
 
-if __name__ == "__main__":
-    import sys
+def main():
+    """CLI entry point with argparse."""
+    import argparse
 
-    args = sys.argv[1:]
-    model = os.environ.get("OPENCODE_MODEL")
+    parser = argparse.ArgumentParser(
+        description="Startup ritual verification and enforcement.",
+    )
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=["check", "mark-complete", "run"],
+        default="run",
+        help="Command to run (default: run)",
+    )
+    parser.add_argument(
+        "-p", "--project-root",
+        type=Path,
+        default=None,
+        help="Root of the Lucent project (default: auto-detect)",
+    )
+    parser.add_argument(
+        "-m", "--model",
+        type=str,
+        default=os.environ.get("OPENCODE_MODEL"),
+        help="Model name for checkpoint tracking (default: $OPENCODE_MODEL)",
+    )
+    parser.add_argument(
+        "-f", "--force",
+        action="store_true",
+        help="Force ritual execution even if checkpoint is valid",
+    )
 
-    # Determine command and path
-    cmd = None
-    lucent_root = Path("/home/nick/dev/lucent")
+    args = parser.parse_args()
 
-    if args:
-        first = args[0]
-        if first in ("check", "mark-complete"):
-            cmd = first
-            if len(args) > 1:
-                lucent_root = Path(args[1])
-        else:
-            # Legacy mode: first arg is path, second is model
-            lucent_root = Path(first)
-            if len(args) > 1:
-                model = args[1]
-            context, executed, compression_needed = ensure_startup_ritual(lucent_root, model)
-            if executed:
-                print(f"✓ Startup ritual executed")
-                if compression_needed:
-                    print(f"⚠ Compression needed for: {compression_needed}")
-                print(f"✓ Ready to proceed")
-            else:
-                print(f"✓ Startup ritual already valid (checkpoint OK)")
-            sys.exit(0)
+    lucent_root = args.project_root
+    if lucent_root is None:
+        lucent_root = Path(__file__).parent.parent
 
-    if cmd == "check":
+    if args.command == "check":
         cli_check(lucent_root)
-    elif cmd == "mark-complete":
-        cli_mark_complete(lucent_root, model)
+    elif args.command == "mark-complete":
+        cli_mark_complete(lucent_root, args.model)
     else:
-        context, executed, compression_needed = ensure_startup_ritual(lucent_root, model)
+        # run (default)
+        context, executed, compression_needed = ensure_startup_ritual(
+            lucent_root, args.model, force=args.force
+        )
         if executed:
-            print(f"✓ Startup ritual executed")
+            print("✓ Startup ritual executed")
             if compression_needed:
                 print(f"⚠ Compression needed for: {compression_needed}")
-            print(f"✓ Ready to proceed")
+            print("✓ Ready to proceed")
         else:
-            print(f"✓ Startup ritual already valid (checkpoint OK)")
+            print("✓ Startup ritual already valid (checkpoint OK)")
         sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
