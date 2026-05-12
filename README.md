@@ -129,14 +129,111 @@ Source your aliases and run `brain` to perform the initial push.
 
 ## Usage
 
-### The Startup Ritual
+### The Startup Ritual — Complete Reference
 
-Every agent session begins by reading these files in order:
+Every agent session executes an 8-step startup ritual that ensures continuity and reliable operation. This section documents what happens, what context is available, and what may be missing.
 
-1. **lucentIdent.md** — Who the assistant is
-2. **userIdent.md** — Who Nick is
-3. **LTMemory.md** — What matters (long-term memory)
-4. **Today's daily note** — What's happened recently
+#### **What Happens at Startup (Step-by-Step)**
+
+1. **Hook injects context** (automated)
+   - LTMemory.md (long-term knowledge)
+   - Last 7 days of daily notes (compressed to 1-2 paragraphs each, except today in full)
+   - core.md, lucentIdent.md, userIdent.md (identity and rules)
+   - These files appear in system context automatically
+
+2. **Compress yesterday's note** (mandatory)
+   - If yesterday's daily note exists, invoke Curator to compress it to 1-2 paragraphs (outcomes + key decisions only)
+   - Verify "Compressed [date]" marker in today's note
+   - Update ritual checkpoint
+
+3. **Load priorities and reminders** (automated)
+   - Read Current Priorities section in LTMemory.md (injected by hook)
+   - Read REMINDERS.md (now injected by hook alongside LTMemory.md)
+   - Review pattern-based reminders (due today), context-triggered reminders, opportunistic reminders
+
+4. **Verify Voice Box** (mandatory for Claude Code)
+   - Check `curl -s http://localhost:8001/health`
+   - Start if missing: `cd /home/nick/dev/lucent/ui && nohup bash start.sh &`
+   - **STOP if voice box fails** — cannot proceed
+
+5. **Initialize session logging** (mandatory for Claude Code)
+   - Run `python3 scripts/session_logger.py /home/nick/dev/lucent`
+   - Creates session marker in daily note
+   - **STOP if this fails** — cannot proceed
+
+6. **Send proactive greeting** (mandatory for Claude Code)
+   - Greet Nick warmly via voice + text (Lucent speaks first, no waiting)
+   - Include current priorities, active reminders, open-ended invitation
+
+7. **Wait for Nick's input** (ready state)
+   - Ritual complete; ready to respond
+
+8. **Respond using three-layer requirement**
+   - Log to daily note (append to memory/YYYY-MM-DD.md)
+   - Send voice (curl to localhost:8001/speak)
+   - Send text (response in Claude Code)
+   - All three, every time. Framework validates.
+
+#### **Context Available at Startup**
+
+**Automatically injected by hook:**
+- `LTMemory.md` — Distilled long-term knowledge (3-5 active priorities, preferences, lessons learned, archival policy)
+- Last 7 days of daily notes: `memory/2026-05-XX.md` (compressed, except today in full)
+- `core.md` — Operating rules (voice box requirement, three-layer response, core rules, archival policy)
+- `lucentIdent.md` — Lucent's personality and core operating principles
+- `userIdent.md` — Nick's role, preferences, constraints, how to work with him
+
+**Must be read manually (not auto-injected):**
+- `AGENTS.md` — Top-level agent instructions (when to invoke which agent)
+- `AGENT_ASSIGNMENTS.md` — Detailed task ownership (what each agent owns)
+
+**Available but not loaded at startup:**
+- Individual agent files: `agents/{name}-agent.md` (Curator, Git, Writer, Reviewer, Planner)
+- Archived notes: `memory/archive/` (historical reference only, not active)
+- Project-local notes: `idea/*/` (working area, not core memory)
+
+#### **Memory Files by Category**
+
+| File | Category | Startup | Purpose |
+|------|----------|---------|---------|
+| LTMemory.md | Core | ✓ Injected | Distilled knowledge, priorities, lessons, archival policy |
+| core.md | Core | ✓ Injected | Operating rules, startup ritual, core guidelines |
+| lucentIdent.md | Core | ✓ Injected | Lucent's identity and operating principles |
+| userIdent.md | Core | ✓ Injected | Nick's identity, preferences, working style |
+| memory/YYYY-MM-DD.md | Daily | ✓ Injected (last 7) | Session logs, decisions, progress (compressed except today) |
+| REMINDERS.md | Active | ✓ Injected | Pattern, context, and opportunistic reminders |
+| AGENTS.md | Reference | — Manual read | Agent invocation guidance |
+| AGENT_ASSIGNMENTS.md | Reference | — Manual read | Task ownership matrix |
+| agents/*.md | Reference | — On-demand | Individual agent definitions |
+| memory/archive/ | Archive | — On-demand | Historical reference (never deleted, not active) |
+
+#### **Platform-Specific Details**
+
+**Claude Code** (`CLAUDE.md`):
+- Startup ritual includes voice box check and session logging initialization (mandatory)
+- Hook handles context injection automatically
+- Checkpoint system tracks ritual completion
+
+**OpenCode and others**:
+- Read the same memory files (core.md, lucentIdent.md, userIdent.md, LTMemory.md)
+- Platform-agnostic rules apply identically
+- Voice box requirement may differ (OpenCode doesn't have port 8001 integration)
+- See AGENTS.md for platform-agnostic invocation patterns
+
+#### **Potential Gaps in Startup Context**
+
+**Currently NOT auto-injected (by design):**
+- `AGENTS.md` — Not loaded at startup. Manual read needed to determine when to invoke other agents.
+- Agent files (`agents/*.md`) — Not loaded at startup. Read on-demand when invoking a specific agent.
+- `AGENT_ASSIGNMENTS.md` — Not auto-injected. Manual read when designing new task delegation.
+
+**Note:** REMINDERS.md gap has been resolved — now auto-injected by hook alongside LTMemory.md.
+
+---
+
+### Daily Notes
+
+The agent writes a daily note to `memory/YYYY-MM-DD.md` at the end of each session. Notes are never deleted — they accumulate over time. Every 7 days the agent reviews recent notes and promotes lasting knowledge to LTMemory.md.
 
 ### Daily Notes
 

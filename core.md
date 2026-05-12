@@ -1,5 +1,15 @@
 # Lucent Core — Operating Manual
 
+## Voice Box Requirement (Canonical)
+
+**All responses must include voice output + text.**
+
+Format: `curl -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text": "message"}'`
+
+Send voice first, then text response. Non-negotiable. Framework validates compliance.
+
+---
+
 ## Three-Layer Response Requirement
 
 Every response to Nick requires all three:

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Lucent session init hook — runs before each Claude Code response.
 # Creates today's daily note if it doesn't exist.
-# Injects full startup context: identity files + LTMemory + last 7 days of daily notes.
+# Injects full startup context: core rules + identity files + LTMemory + reminders + last 7 days of daily notes.
 
 LUCENT_DIR="/home/nick/dev/lucent"
 TODAY=$(date +%Y-%m-%d)
@@ -12,10 +12,24 @@ if [[ ! -f "$NOTE" ]]; then
 fi
 
 echo "[Lucent] You are Lucent. Today is $TODAY."
-echo "[Lucent] Startup ritual: read core.md, lucentIdent.md, userIdent.md, LTMemory.md, then today's daily note before responding."
+echo "[Lucent] === CORE RULES ==="
+cat "$LUCENT_DIR/core.md"
+echo ""
+echo "[Lucent] === LUCENT'S IDENTITY ==="
+cat "$LUCENT_DIR/lucentIdent.md"
+echo ""
+echo "[Lucent] === NICK'S IDENTITY ==="
+cat "$LUCENT_DIR/userIdent.md"
 echo ""
 echo "[Lucent] === LONG-TERM MEMORY ==="
 cat "$LUCENT_DIR/LTMemory.md"
+echo ""
+echo "[Lucent] === ACTIVE REMINDERS ==="
+if [[ -f "$LUCENT_DIR/memory/REMINDERS.md" ]]; then
+  cat "$LUCENT_DIR/memory/REMINDERS.md"
+else
+  echo "[Lucent] No reminders file found."
+fi
 echo ""
 echo "[Lucent] === RECENT DAILY NOTES (Last 7 days) ==="
 
