@@ -128,16 +128,20 @@ The `lucentrc` file at the repo root contains the full configuration. Copy it to
 cp lucentrc ~/.opencode/settings.json
 ```
 
-### 3. Set up sync aliases
+### 3. Set up aliases
 
 Add to `~/.bash_aliases` (or `~/.zsh_aliases`):
 
 ```bash
+# Launcher aliases (select platform & model)
+alias lucent='bash /home/nick/dev/lucent/scripts/ai-launcher.sh'
+alias luc='bash /home/nick/dev/lucent/scripts/ai-launcher.sh'
+
+# Sync alias
 alias brain='/home/nick/dev/lucent/lucent-sync.sh'
-alias lucent='/home/nick/dev/lucent/lucent-sync.sh'
 ```
 
-Source your aliases and run `brain` to perform the initial push.
+Source your aliases and run `brain` to perform the initial push, or `lucent` to launch your chosen AI platform.
 
 ## Usage
 
@@ -257,11 +261,63 @@ Create focused sub-agents in `agents/{name}-agent.md`. Each has its own identity
 - **Cross-file investigations**
 - **Single-task, narrow-scope work**
 
+### Multi-AI Platform Launcher
+
+The `ai-launcher.py` Python launcher provides a polished, interactive interface for launching Claude or OpenCode with your choice of AI model — Anthropic models (Opus, Sonnet, Haiku), local Ollama models, or OpenCode's free online models.
+
+**Aliases:**
+```bash
+lucent             # Interactive launcher menu (recommended)
+luc                # Same as lucent (short form)
+```
+
+Both aliases run the Python launcher: `python3 /home/nick/dev/lucent/scripts/ai-launcher.py`
+
+**Usage:**
+
+Interactive menu (select platform and model):
+```bash
+lucent
+```
+
+Quick-launch (skip menu, direct to Claude or OpenCode):
+```bash
+lucent claude opus                      # Claude + Opus
+lucent claude sonnet                    # Claude + Sonnet
+lucent opencode big-pickle              # OpenCode + Big Pickle
+lucent opencode deepseek-v4-flash-free  # OpenCode + DeepSeek V4
+```
+
+**Features:**
+- **Polished UI:** Built with Questionary and Rich for a sharp, professional look
+- **Clean navigation:** Arrow keys to move through menus, back button to navigate back
+- **Graceful exit:** Exit option on every menu with confirmation message
+- **Color-coded models:** Magenta for Anthropic, Blue for Ollama, Green for OpenCode free models
+- **Clean screen:** Terminal clears before each menu for focused, uncluttered display
+- **Auto-launch:** Sessions start in `/home/nick/dev/lucent` with your chosen platform and model
+- **Model detection:** Automatically determines model type (Anthropic/Ollama/OpenCode free) based on selection
+- **Quick-launch mode:** Skip the menu entirely with CLI arguments
+
+**Available Models:**
+
+*Claude:*
+- `opus` (Claude Opus 4.7)
+- `sonnet` (Claude Sonnet 4.6)
+- `haiku` (Claude Haiku 4.5)
+- Any local Ollama model
+
+*OpenCode:*
+- `big-pickle`
+- `deepseek-v4-flash-free`
+- `minimax-m2.5-free`
+- `nemotron-3-super-free`
+- `ring-2.6-1t-free`
+- Any local Ollama model
+
 ### Syncing
 
 ```bash
 brain              # Sync the entire repo to GitHub
-lucaent            # Same as brain (alias)
 ```
 
 The sync script:

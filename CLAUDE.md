@@ -34,7 +34,7 @@ If no response, start: `cd /home/nick/dev/lucent/ui && nohup bash start.sh > /tm
 
 ### STEP 5: Initialize Session Logging
 ```bash
-python3 scripts/session_logger.py /home/nick/dev/lucent
+python3 scripts/session_logger.py init
 ```
 **STOP if this fails.** ✓
 
