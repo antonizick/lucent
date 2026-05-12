@@ -27,7 +27,7 @@ Hook injects REMINDERS.md alongside LTMemory. Review Current Priorities section 
 
 ### STEP 4: Verify Voice Box Online
 ```bash
-curl -s http://localhost:8001/health
+curl -s http://localhost:8001/services/health | grep -q "Voice box" && echo "✓ Voice box online"
 ```
 If no response, start: `cd /home/nick/dev/lucent/ui && nohup bash start.sh > /tmp/lucent-voice-box.log 2>&1 &`
 **STOP if voice box fails.** ✓
