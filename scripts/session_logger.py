@@ -15,7 +15,7 @@ Usage:
   validate_session_log_updated(lucent_root, session_start)
 """
 
-import json
+import argparse
 import subprocess
 from pathlib import Path
 from datetime import datetime, date
@@ -180,15 +180,81 @@ def check_session_log_checkpoint(lucent_root):
             f"Initialize session logging at startup."
         )
 
+def get_lucent_root() -> Path:
+    """Auto-detect Lucent root from script location (scripts/ is under root)."""
+    return Path(__file__).resolve().parent.parent
+
+def init_session(args: argparse.Namespace) -> None:
+    """Initialize a new session log entry."""
+    root = Path(args.root) if args.root else get_lucent_root()
+    try:
+        session = initialize_session_log(str(root), topic=args.topic)
+        print(f"✓ Session initialized: {session}")
+        check_session_log_checkpoint(str(root))
+        print("✓ Checkpoint verified")
+    except Exception as e:
+        print(f"✗ Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+def append_entry(args: argparse.Namespace) -> None:
+    """Append content to today's daily note."""
+    root = Path(args.root) if args.root else get_lucent_root()
+    today = date.today()
+    note_path = root / "memory" / f"{today.strftime('%Y-%m-%d')}.md"
+
+    if not note_path.exists():
+        print(f"✗ Daily note not found: {note_path}", file=sys.stderr)
+        print("Run init first to create the note.", file=sys.stderr)
+        sys.exit(1)
+
+    content = args.content.strip()
+    if not content:
+        print("✗ No content to append.", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        with open(note_path, "a") as f:
+            f.write(f"\n{content}\n")
+        print(f"✓ Appended to {note_path.name}")
+    except Exception as e:
+        print(f"✗ Error writing to daily note: {e}", file=sys.stderr)
+        sys.exit(1)
+
+def check_checkpoint(args: argparse.Namespace) -> None:
+    """Check if today's daily note has a valid session start."""
+    root = Path(args.root) if args.root else get_lucent_root()
+    try:
+        check_session_log_checkpoint(str(root))
+        print("✓ Checkpoint valid")
+    except RuntimeError as e:
+        print(f"✗ Checkpoint invalid: {e}", file=sys.stderr)
+        sys.exit(1)
+
 if __name__ == "__main__":
-    # Test mode
-    if len(sys.argv) > 1:
-        root = Path(sys.argv[1])
-        try:
-            session = initialize_session_log(root, "Test session")
-            print(f"✓ Session initialized: {session}")
-            check_session_log_checkpoint(root)
-            print("✓ Checkpoint verified")
-        except Exception as e:
-            print(f"✗ Error: {e}", file=sys.stderr)
-            sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Lucent session logger — daily note initialization and validation"
+    )
+    subparsers = parser.add_subparsers(dest="command", help="Command to run")
+
+    # init command
+    p_init = subparsers.add_parser("init", help="Initialize session log for today")
+    p_init.add_argument("--topic", "-t", default="Test session", help="Session topic")
+    p_init.add_argument("root", nargs="?", default=None, help="Lucent root directory")
+    p_init.set_defaults(func=init_session)
+
+    # append command
+    p_append = subparsers.add_parser("append", help="Append content to today's daily note")
+    p_append.add_argument("content", help="Content to append")
+    p_append.add_argument("root", nargs="?", default=None, help="Lucent root directory")
+    p_append.set_defaults(func=append_entry)
+
+    # check command
+    p_check = subparsers.add_parser("check", help="Verify today's checkpoint")
+    p_check.add_argument("root", nargs="?", default=None, help="Lucent root directory")
+    p_check.set_defaults(func=check_checkpoint)
+
+    args = parser.parse_args()
+    if args.command is None:
+        parser.print_help()
+        sys.exit(1)
+    args.func(args)
