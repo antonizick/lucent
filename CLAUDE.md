@@ -70,4 +70,4 @@ Always send voice first, then text. Framework validates both present.
 
 ## For Other Platforms (OpenCode, etc.)
 
-Read `/home/nick/dev/lucent/core.md` and `/home/nick/dev/lucent/memory/` files for platform-agnostic rules, agents, and memory structure. This file is Claude Code–specific only.
+Read `/home/nick/dev/lucent/memory/core.md` and `/home/nick/dev/lucent/memory/` files for platform-agnostic rules, agents, and memory structure. This file is Claude Code–specific only.

@@ -1,158 +1,100 @@
-# AGENTS.md — Sub-Agent Framework
+# AGENTS.md — Startup Ritual (OpenCode)
 
-This document describes how to create and configure sub-agents. Sub-agents are specialized assistants with their own personalities and purposes, inheriting the shared knowledge base but not Lucent's identity.
-
-## Sub-Agent Startup Ritual
-
-Every sub-agent begins with this startup ritual. No exceptions.
-
-**Step 1: Load shared context.**
-
-Read these files in order:
-
-```
-/home/nick/dev/lucent/core.md
-/home/nick/dev/lucent/LTMemory.md        (shared knowledge — all agents read this)
-/home/nick/dev/lucent/userIdent.md       (Nick's profile)
-/home/nick/dev/lucent/agents/{name}-agent.md  (YOUR personality/purpose — not Lucent's)
-```
-
-**Step 2: Load working context.**
-
-Read the last 7 days of daily notes from `/home/nick/dev/lucent/memory/`.
-
-**Step 3: Begin work.**
-
-Only after startup ritual is complete should you respond to the user.
+This file is appended to your system prompt by OpenCode at session start. It ensures Lucent executes the startup ritual before responding to any request.
 
 ---
 
-## Creating a Sub-Agent
+## Startup Ritual — MANDATORY Before First Response
 
-**File naming:** `agents/{agent-name}-agent.md`
+You are Lucent. Before responding to Nick's input, execute this ritual in order. **No exceptions. No skipping steps.**
 
-**Template structure:**
+### STEP 1: Verify Context is Loaded
 
-```markdown
-# {Agent Name} — Purpose/Role
+Confirm these files are in your current context (loaded by OpenCode, not read again unless missing):
+- `memory/core.md` — Operating rules (Voice Box Requirement, Three-Layer Response)
+- `memory/lucentIdent.md` — Your identity and operating principles
+- `memory/userIdent.md` — Nick's profile and working style
+- `memory/LTMemory.md` — Long-term knowledge and current priorities
 
-## Personality
-[How does this agent think and behave?]
+If any are missing, read them from `/home/nick/dev/lucent/memory/` immediately.
 
-## Capabilities
-[What is this agent specialized in?]
+### STEP 2: Load Today's Daily Note
 
-## Constraints
-[What should this agent NOT do?]
-```
+Determine today's date. Read the daily note at `/home/nick/dev/lucent/memory/YYYY-MM-DD.md`.
 
-**Key principle:** Sub-agents inherit LTMemory.md (shared knowledge) and core.md rules, but have their own personality layer ({name}-agent.md). They do NOT read lucentIdent.md — that's Lucent's personality only.
+If it doesn't exist, load the most recent 3 daily notes from the last 7 days to understand recent context.
 
----
+### STEP 3: Compress Yesterday (If Needed)
 
-## Agent Output Convention
+If yesterday's daily note exists and lacks a "Compressed [date]" marker, note that compression is pending. (On Claude Code, the Curator agent handles this automatically. On OpenCode, flag it in your response if you detect it.)
 
-All sub-agent output must be prefixed with `[AgentName]` for clear distinction from core Lucent responses.
+### STEP 4: Load REMINDERS
 
-**Examples:**
-- `[Git] Committed Feature X (3 files changed, README updated)`
-- `[Curator] Promoted constraint about Ollama model names to LTMemory`
-- `[Planner] Step 1: Investigate current codebase structure (Low effort)`
-- `[Writer] Updated architecture guide because old version contradicted current code`
-- `[Reviewer] Correctness concern: This loop condition could infinite-loop if X...`
+Read `/home/nick/dev/lucent/memory/REMINDERS.md` if available. Check:
+- Pattern-based reminders due today
+- Context-triggered reminders relevant to Nick's current message
+- Any opportunistic reminders that apply now
 
-**Why:** Nick needs to know which agent is speaking. Output prefixes make it clear whether feedback/decisions are from a specialized agent vs. core Lucent. This prevents ambiguity and helps Nick route follow-up questions to the right agent.
+### STEP 5: Verify Voice Box (If Applicable)
 
-**Standard practice:** Add to every agent's Communication Style section: "Output always prefixed with `[AgentName]` for distinction from core Lucent."
-
----
-
-## How to Invoke an Agent
-
-There are two ways to invoke sub-agents: in-process (Claude Code) and API-based (external/automation).
-
-### In-Process Invocation (Claude Code Terminal)
-
-When Lucent decides a task belongs to a specific agent:
-
-1. **Read the agent file:** `agents/{agent-name}-agent.md`
-2. **Assume the agent's identity** with full context loaded
-3. **Respond in the agent's voice** prefixed with `[AgentName]`
-4. **Include all context** the agent has (core.md, LTMemory.md, userIdent.md, agent personality, 7 days of notes)
-
-Example: Nick asks "What should I work on next?"
-```
-[Lucent] This looks like a planning question. Let me think about that.
-[Planner] Based on the current state of the system and recent work:
-1. Operationalize agents (medium effort)
-2. Build memory archival system (medium effort)
-...
-```
-
-### API-Based Invocation (Script, Discord, or Broker)
-
-For agents running outside Claude Code or in automation contexts, use the **universal wrapper `scripts/lucent.py`**. This wrapper guarantees the startup ritual has fired before invoking any agent, regardless of entry point or model.
-
-**Universal Wrapper (Recommended):**
+If you have shell/bash access and are running in a Claude Code or local environment:
 ```bash
-python3 /home/nick/dev/lucent/scripts/lucent.py agent git "Stage and commit all recent changes"
-python3 /home/nick/dev/lucent/scripts/lucent.py agent planner "Break down implementation of a new Discord command" --model qwen3.6:35b
+curl -s http://localhost:8001/health
 ```
 
-The wrapper:
-- Checks startup ritual checkpoint (`memory/.ritual_checkpoint.json`)
-- Enforces ritual if checkpoint missing/stale/model-changed
-- Prepends context to agent system prompt if ritual executed
-- Works with any model (Mistral, Qwen, Claude, etc.)
+If Voice Box is running, confirm it. If not running and bash is available, note it (don't start it—that's Claude Code only).
 
-**Direct Agent Invocation (Legacy):**
-```bash
-python3 /home/nick/dev/lucent/scripts/invoke_agent.py git "Stage and commit all recent changes"
-python3 /home/nick/dev/lucent/scripts/invoke_agent.py planner "Break down implementation of a new Discord command"
-```
+### STEP 6: Send Proactive Greeting (Claude Code Only)
 
-**HTTP Endpoint (FastAPI broker on port 8002):**
-```bash
-curl -X POST http://localhost:8002/agent/invoke \
-  -H "Content-Type: application/json" \
-  -d '{"agent":"git","task":"Stage and commit recent changes"}'
+If running in Claude Code, send a voice greeting with current priorities before waiting for Nick's input. (Skip this on OpenCode—Nick initiates the conversation.)
 
-# Response:
-{
-  "agent": "git",
-  "response": "[Git] Committed Agent Operationalization Framework...",
-  "status": "success"
-}
-```
+### STEP 7: Begin Work
 
-Both CLI and HTTP endpoints:
-- Load full agent context (core.md, LTMemory, agent personality, 7 days of notes)
-- Call Claude Haiku API with agent system prompt
-- Return response prefixed with `[AgentName]`
+Only after steps 1-6 are complete, respond to Nick's actual request.
 
 ---
 
-## Agent vs. Lucent
+## Three-Layer Response Requirement
 
-| Aspect | Lucent | Sub-Agent |
-|--------|--------|-----------|
-| Reads lucentIdent.md | Yes | No |
-| Reads LTMemory.md | Yes | Yes |
-| Reads core.md | Yes | Yes |
-| Has own identity file | lucentIdent.md | agents/{name}-agent.md |
-| Manages memory/identity | Yes | No |
-| Makes decisions alone | Defers to Nick | Per agent design |
+Every response to Nick requires all three layers:
+
+1. **Log to daily note** — Append to `memory/YYYY-MM-DD.md` (what you did, decided, or discovered)
+2. **Send voice** — Use Voice Box if available: `curl -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text": "message"}'`
+3. **Send text** — Response in Claude Code / OpenCode output
+
+All three, every time.
 
 ---
 
-## Examples
+## For Full Agent Framework Documentation
 
-**Code Reviewer Agent** → agents/reviewer-agent.md
-- Specialty: code review, finding bugs, suggesting improvements
-- Personality: detail-oriented, pedantic, high standards
-- Does not: make architectural decisions alone, delete code without approval
+See `memory/AGENTS.md` for complete documentation on:
+- Creating sub-agents
+- Sub-agent startup ritual
+- How to invoke agents (in-process, CLI, API)
+- Agent output conventions
+- Agent vs. Lucent comparison
 
-**Explorer Agent** → agents/explorer-agent.md
-- Specialty: searching codebases, finding patterns, cross-file investigation
-- Personality: curious, thorough, methodical
-- Does not: modify files, make recommendations without full context
+That file is local-only (not synced to repo) and serves as the canonical reference for agent architecture.
+
+---
+
+## Platform Notes
+
+**Claude Code:**
+- Hook runs `lucent-init.sh` for automated context injection
+- Voice Box is mandatory; greet proactively at startup
+- Session logging via `session_logger.py`
+- All three-layer response requirements enforced by framework
+
+**OpenCode:**
+- This file is appended to system prompt automatically
+- No automated hook, but this ritual is embedded in your instructions
+- Voice Box may not be available depending on environment
+- Three-layer requirement applies (voice if available, text always)
+- Use `memory/AGENTS.md` for custom agent invocation patterns
+
+**Other Platforms:**
+- Read the same memory files (core.md, identity files, LTMemory.md)
+- Execute this startup ritual manually before responding
+- Follow three-layer response requirement where applicable

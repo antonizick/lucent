@@ -19,8 +19,8 @@ ui/venv/
 ui/logs/
 ui/.discord_model
 
-# Runtime checkpoint files
-memory/.ritual_checkpoint.json
+# Memory files (local-only, not synced to repo)
+memory/
 
 # Scratchpad for local working files
 scratchpad/

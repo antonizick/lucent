@@ -44,30 +44,37 @@ Lucent integrates with Discord for monitoring and async responses. A background 
 
 ## Core Files
 
+All core memory files are consolidated in the `memory/` directory:
+
 | File | Purpose |
 |------|---------|
-| `core.md` | Operating manual — startup ritual, rules, safety guidelines |
-| `lucentIdent.md` | Lucent's identity — personality, behaviors, habits |
-| `userIdent.md` | Nick's identity — facts, preferences, working style |
-| `LTMemory.md` | Long-term memory — distilled from daily notes into lasting knowledge |
+| `memory/core.md` | Operating manual — startup ritual, rules, safety guidelines |
+| `memory/lucentIdent.md` | Lucent's identity — personality, behaviors, habits |
+| `memory/userIdent.md` | Nick's identity — facts, preferences, working style |
+| `memory/LTMemory.md` | Long-term memory — distilled from daily notes into lasting knowledge |
 
 ## Directory Structure
 
 ```
 lucent/
-├── core.md                Startup ritual, rules, safety
-├── lucentIdent.md         Lucent's identity
-├── userIdent.md           Nick's identity
-├── LTMemory.md            Long-term memory (agent-curated)
-├── AGENTS.md              Top-level instructions
 ├── CLAUDE.md              Claude Code guidance
+├── README.md              This file
 ├── .lucentrc              Per-project config for session loading
 ├── lucent-sync.sh         Sync script — commit + push to GitHub
 ├── lucentrc               Sync config (remote URL, log dedup)
 ├── .sync.log              Sync history (30-day auto-cleanup)
 ├── agents/                Sub-agent definitions: {name}-agent.md
 ├── idea/                  Working directory for projects
-├── memory/                Daily episodic notes: YYYY-MM-DD.md
+├── memory/                Core memory + daily notes
+│   ├── core.md            Startup ritual, rules, safety
+│   ├── lucentIdent.md     Lucent's identity
+│   ├── userIdent.md       Nick's identity
+│   ├── LTMemory.md        Long-term memory (agent-curated)
+│   ├── REMINDERS.md       Active reminders
+│   ├── AGENTS.md          Top-level instructions
+│   ├── AGENT_ASSIGNMENTS.md Agent task ownership
+│   ├── YYYY-MM-DD.md      Daily episodic notes
+│   └── archive/           Historical notes (never deleted)
 ├── private/               Sensitive context (git-ignored)
 ├── ui/                    Voice Box web UI & Discord integration
 │   ├── server.py          FastAPI server (voice feedback, Discord webhooks)
@@ -98,14 +105,14 @@ Add to `~/.claude/settings.json` or use the config command:
 
 ```json
 {
-  "systemPrompt": "You are Lucent, a personal AI assistant. Before doing anything, read the startup ritual: core.md, lucentIdent.md, userIdent.md, LTMemory.md, and today's daily note."
+  "systemPrompt": "You are Lucent, a personal AI assistant. Before doing anything, read the startup ritual: memory/core.md, memory/lucentIdent.md, memory/userIdent.md, memory/LTMemory.md, and today's daily note."
 }
 ```
 
 Or set it via CLI:
 
 ```bash
-claude config set --key system-prompt "You are Lucent, a personal AI assistant. Before doing anything, read core.md, lucentIdent.md, userIdent.md, LTMemory.md, and today's daily note."
+claude config set --key system-prompt "You are Lucent, a personal AI assistant. Before doing anything, read memory/core.md, memory/lucentIdent.md, memory/userIdent.md, memory/LTMemory.md, and today's daily note."
 ```
 
 #### OpenCode
@@ -136,9 +143,9 @@ Every agent session executes an 8-step startup ritual that ensures continuity an
 #### **What Happens at Startup (Step-by-Step)**
 
 1. **Hook injects context** (automated)
-   - LTMemory.md (long-term knowledge)
+   - memory/LTMemory.md (long-term knowledge)
    - Last 7 days of daily notes (compressed to 1-2 paragraphs each, except today in full)
-   - core.md, lucentIdent.md, userIdent.md (identity and rules)
+   - memory/core.md, memory/lucentIdent.md, memory/userIdent.md (identity and rules)
    - These files appear in system context automatically
 
 2. **Compress yesterday's note** (mandatory)
@@ -177,15 +184,15 @@ Every agent session executes an 8-step startup ritual that ensures continuity an
 #### **Context Available at Startup**
 
 **Automatically injected by hook:**
-- `LTMemory.md` — Distilled long-term knowledge (3-5 active priorities, preferences, lessons learned, archival policy)
+- `memory/LTMemory.md` — Distilled long-term knowledge (3-5 active priorities, preferences, lessons learned, archival policy)
 - Last 7 days of daily notes: `memory/2026-05-XX.md` (compressed, except today in full)
-- `core.md` — Operating rules (voice box requirement, three-layer response, core rules, archival policy)
-- `lucentIdent.md` — Lucent's personality and core operating principles
-- `userIdent.md` — Nick's role, preferences, constraints, how to work with him
+- `memory/core.md` — Operating rules (voice box requirement, three-layer response, core rules, archival policy)
+- `memory/lucentIdent.md` — Lucent's personality and core operating principles
+- `memory/userIdent.md` — Nick's role, preferences, constraints, how to work with him
 
 **Must be read manually (not auto-injected):**
-- `AGENTS.md` — Top-level agent instructions (when to invoke which agent)
-- `AGENT_ASSIGNMENTS.md` — Detailed task ownership (what each agent owns)
+- `memory/AGENTS.md` — Top-level agent instructions (when to invoke which agent)
+- `memory/AGENT_ASSIGNMENTS.md` — Detailed task ownership (what each agent owns)
 
 **Available but not loaded at startup:**
 - Individual agent files: `agents/{name}-agent.md` (Curator, Git, Writer, Reviewer, Planner)
@@ -196,14 +203,14 @@ Every agent session executes an 8-step startup ritual that ensures continuity an
 
 | File | Category | Startup | Purpose |
 |------|----------|---------|---------|
-| LTMemory.md | Core | ✓ Injected | Distilled knowledge, priorities, lessons, archival policy |
-| core.md | Core | ✓ Injected | Operating rules, startup ritual, core guidelines |
-| lucentIdent.md | Core | ✓ Injected | Lucent's identity and operating principles |
-| userIdent.md | Core | ✓ Injected | Nick's identity, preferences, working style |
+| memory/LTMemory.md | Core | ✓ Injected | Distilled knowledge, priorities, lessons, archival policy |
+| memory/core.md | Core | ✓ Injected | Operating rules, startup ritual, core guidelines |
+| memory/lucentIdent.md | Core | ✓ Injected | Lucent's identity and operating principles |
+| memory/userIdent.md | Core | ✓ Injected | Nick's identity, preferences, working style |
 | memory/YYYY-MM-DD.md | Daily | ✓ Injected (last 7) | Session logs, decisions, progress (compressed except today) |
-| REMINDERS.md | Active | ✓ Injected | Pattern, context, and opportunistic reminders |
-| AGENTS.md | Reference | — Manual read | Agent invocation guidance |
-| AGENT_ASSIGNMENTS.md | Reference | — Manual read | Task ownership matrix |
+| memory/REMINDERS.md | Active | ✓ Injected | Pattern, context, and opportunistic reminders |
+| memory/AGENTS.md | Reference | — Manual read | Agent invocation guidance |
+| memory/AGENT_ASSIGNMENTS.md | Reference | — Manual read | Task ownership matrix |
 | agents/*.md | Reference | — On-demand | Individual agent definitions |
 | memory/archive/ | Archive | — On-demand | Historical reference (never deleted, not active) |
 
@@ -215,19 +222,17 @@ Every agent session executes an 8-step startup ritual that ensures continuity an
 - Checkpoint system tracks ritual completion
 
 **OpenCode and others**:
-- Read the same memory files (core.md, lucentIdent.md, userIdent.md, LTMemory.md)
+- Read the same memory files (memory/core.md, memory/lucentIdent.md, memory/userIdent.md, memory/LTMemory.md)
 - Platform-agnostic rules apply identically
 - Voice box requirement may differ (OpenCode doesn't have port 8001 integration)
-- See AGENTS.md for platform-agnostic invocation patterns
+- See memory/AGENTS.md for platform-agnostic invocation patterns
 
 #### **Potential Gaps in Startup Context**
 
 **Currently NOT auto-injected (by design):**
-- `AGENTS.md` — Not loaded at startup. Manual read needed to determine when to invoke other agents.
+- `memory/AGENTS.md` — Not loaded at startup. Manual read needed to determine when to invoke other agents.
 - Agent files (`agents/*.md`) — Not loaded at startup. Read on-demand when invoking a specific agent.
-- `AGENT_ASSIGNMENTS.md` — Not auto-injected. Manual read when designing new task delegation.
-
-**Note:** REMINDERS.md gap has been resolved — now auto-injected by hook alongside LTMemory.md.
+- `memory/AGENT_ASSIGNMENTS.md` — Not auto-injected. Manual read when designing new task delegation.
 
 ---
 
