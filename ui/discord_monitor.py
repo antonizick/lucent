@@ -104,7 +104,7 @@ class DiscordInstructionMonitor:
         """Process Discord instruction through Ollama and return response."""
         try:
             # Verify/enforce startup ritual
-            ritual_context, executed = ensure_startup_ritual(self.lucent_root, self.model)
+            ritual_context, executed, compression_needed = ensure_startup_ritual(self.lucent_root, self.model)
 
             context = self.load_context()
             instruction_text = message.get("text", "")

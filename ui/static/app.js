@@ -347,8 +347,8 @@ function setupLogListener() {
     // Load immediately on page load
     pollForLog();
 
-    // Poll every 5 minutes (300 seconds)
-    setInterval(pollForLog, 300000);
+    // Poll every 30 seconds
+    setInterval(pollForLog, 30000);
 
     // Set up tab switching with immediate fetch
     document.querySelectorAll('.log-tab').forEach(btn => {

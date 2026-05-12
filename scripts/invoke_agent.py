@@ -14,6 +14,7 @@ import argparse
 from pathlib import Path
 from datetime import date, timedelta
 from verify_startup import ensure_startup_ritual, augment_system_prompt
+from session_logger import initialize_session_log, validate_session_log_updated
 
 # Find Lucent root
 SCRIPT_DIR = Path(__file__).parent
@@ -72,6 +73,12 @@ def invoke_agent(agent_name, task, model="mistral:latest"):
     # Verify startup ritual has fired; if not, enforce it
     ritual_context, executed, compression_needed = ensure_startup_ritual(LUCENT_ROOT, model)
 
+    # Initialize session logging if not already done
+    try:
+        session_start = initialize_session_log(LUCENT_ROOT, f"Invoke {agent_name}: {task[:50]}")
+    except Exception as e:
+        raise RuntimeError(f"Session logging initialization failed: {e}")
+
     # Check if compression is needed but hasn't been done
     if compression_needed:
         raise RuntimeError(
@@ -112,6 +119,18 @@ def invoke_agent(agent_name, task, model="mistral:latest"):
                         f"Agent must include: curl -X POST http://{VOICE_BOX_URL} -H \"Content-Type: application/json\" -d '{{\"text\": \"...\"}}'\n"
                         f"Response:\n{response_text}"
                     )
+
+                # Validate session logging happened
+                try:
+                    validate_session_log_updated(LUCENT_ROOT, session_start)
+                except RuntimeError as e:
+                    raise ValueError(
+                        f"[SESSION LOGGING REQUIRED] Session log not updated.\n"
+                        f"Agent must append to memory/YYYY-MM-DD.md during work.\n"
+                        f"Error: {e}\n"
+                        f"Response:\n{response_text}"
+                    )
+
                 # Format with agent prefix
                 agent_display_name = agent_name.capitalize()
                 return f"[{agent_display_name}] {response_text}"

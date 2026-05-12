@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "memory/STARTUP_RITUAL.md",
+    "memory/core.md",
+    "memory/lucentIdent.md",
+    "memory/userIdent.md",
+    "memory/LTMemory.md",
+    "memory/REMINDERS.md"
+  ]
+}
