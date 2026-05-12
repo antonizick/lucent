@@ -31,6 +31,11 @@ The Voice Box web UI (port 8001) provides voice acknowledgment for every interac
 - **Startup:** `bash ui/start.sh`
 - **Voice Send:** `bash ui/speak.sh "Your message"`
 
+**Features:**
+- **Dynamic Refresh Timer:** The daily log displays a countdown timer (left of font controls) showing seconds until the next automatic refresh. Counts down from 30 to 0, resets on each cycle. Styled subtly to avoid visual clutter.
+- **Daily Log Tabs:** Switch between Daily (live), Weekly insights, and Long-term memory views
+- **Font Controls:** Adjust daily log text size with +/− buttons
+
 ### Discord Integration
 Lucent integrates with Discord for monitoring and async responses. A background monitor watches for messages, forwards them to Claude, and posts responses back to Discord.
 
