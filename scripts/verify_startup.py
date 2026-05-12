@@ -24,15 +24,12 @@ def compute_context_hash(lucent_root: Path) -> str:
     hasher = hashlib.sha256()
 
     files_to_hash = [
-        "core.md",
-        "lucentIdent.md",
-        "userIdent.md",
-        "LTMemory.md",
+        "memory/core.md",
+        "memory/lucentIdent.md",
+        "memory/userIdent.md",
+        "memory/LTMemory.md",
+        f"memory/{date.today().strftime('%Y-%m-%d')}.md",
     ]
-
-    # Add today's daily note
-    today = date.today().strftime("%Y-%m-%d")
-    files_to_hash.append(f"memory/{today}.md")
 
     for filename in files_to_hash:
         path = lucent_root / filename
@@ -133,9 +130,9 @@ def load_context_files(lucent_root: Path) -> str:
     """Load all context files needed for startup ritual."""
     context_parts = []
 
-    # Core identity files
+    # Core identity files (in memory/ subdirectory)
     for filename in ["core.md", "lucentIdent.md", "userIdent.md", "LTMemory.md"]:
-        path = lucent_root / filename
+        path = lucent_root / "memory" / filename
         if path.exists():
             content = path.read_text()
             context_parts.append(f"=== {filename} ===\n{content}")
