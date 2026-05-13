@@ -754,18 +754,49 @@ document.addEventListener('click', enableSpeech);
 status.textContent = 'Click anywhere to enable speech';
 status.classList.add('not-ready');
 
-// Portal: Services panel mouseover/mouseout handlers
+// Portal: Services panel mouseover/mouseout handlers with dynamic positioning
 const voicePanel = document.getElementById('voicePanel');
 const servicesPanel = document.getElementById('servicesPanel');
 
 if (voicePanel && servicesPanel) {
+    // Track mouse position and update services panel position
+    voicePanel.addEventListener('mousemove', function(e) {
+        if (servicesPanel.classList.contains('visible')) {
+            const rect = voicePanel.getBoundingClientRect();
+            const mouseX = e.clientX;
+            const mouseY = e.clientY;
+
+            // Position panel diagonally up and to the left of mouse
+            const offsetX = -150;  // Move left
+            const offsetY = -20;   // Move up slightly
+
+            const panelX = mouseX + offsetX;
+            const panelY = mouseY + offsetY;
+
+            servicesPanel.style.position = 'fixed';
+            servicesPanel.style.left = panelX + 'px';
+            servicesPanel.style.top = panelY + 'px';
+        }
+    });
+
     // Show services on mouseover voice panel
-    voicePanel.addEventListener('mouseenter', function() {
+    voicePanel.addEventListener('mouseenter', function(e) {
         servicesPanel.classList.add('visible');
+        // Initial positioning
+        const mouseX = e.clientX;
+        const mouseY = e.clientY;
+        const offsetX = -150;
+        const offsetY = -20;
+        servicesPanel.style.position = 'fixed';
+        servicesPanel.style.left = (mouseX + offsetX) + 'px';
+        servicesPanel.style.top = (mouseY + offsetY) + 'px';
     });
 
     // Hide services on mouseout voice panel
     voicePanel.addEventListener('mouseleave', function() {
         servicesPanel.classList.remove('visible');
+        servicesPanel.style.position = 'absolute';
+        servicesPanel.style.left = '';
+        servicesPanel.style.top = '';
     });
 }
