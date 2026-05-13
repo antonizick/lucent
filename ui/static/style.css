@@ -507,7 +507,7 @@ body {
 /* Panels Grid */
 .panels-grid {
     display: grid;
-    grid-template-columns: 300px 1fr 280px;
+    grid-template-columns: 300px 1fr minmax(280px, 30%);
     gap: 20px;
     padding: 20px;
     margin: 0;
@@ -677,8 +677,9 @@ body {
 
 .character-viewport {
     position: relative;
-    width: 280px;
-    height: 380px;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 280/380;
     display: flex;
     align-items: center;
     justify-content: center;
