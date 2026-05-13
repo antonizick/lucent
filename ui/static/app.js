@@ -769,9 +769,16 @@ if (voicePanel && servicesPanel) {
         }
         pendingPositionUpdate = requestAnimationFrame(() => {
             if (isServicesPanelVisible) {
-                // Position well away from cursor: far left, higher up
-                const offsetX = -320;  // Move significantly left
-                const offsetY = -80;   // Move significantly up
+                // Get panel dimensions to position based on right/bottom edges
+                const panelWidth = servicesPanel.offsetWidth;
+                const panelHeight = servicesPanel.offsetHeight;
+
+                // Minimum 100px separation from cursor on right and bottom edges
+                const minGap = 100;
+
+                // Position: right edge 100px left of cursor, bottom edge 100px above cursor
+                const offsetX = -(panelWidth + minGap);
+                const offsetY = -(panelHeight + minGap);
 
                 servicesPanel.style.position = 'fixed';
                 servicesPanel.style.left = (mouseX + offsetX) + 'px';
