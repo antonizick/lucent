@@ -25,8 +25,10 @@
 
         <!-- Main grid layout -->
         <div class="main-grid">
-            <!-- Log Panel (Left column) -->
-            <div class="log-panel">
+            <!-- Left column (Log + Agents) -->
+            <div class="left-column">
+                <!-- Log Panel -->
+                <div class="log-panel">
             <div class="log-header">
                 <div class="log-header-left">
                     <div class="log-label-group">
@@ -116,19 +118,20 @@
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Agents Directory Panel -->
-        <div class="agents-panel">
-            <div class="agents-header">
-                <div class="agents-label">AGENTS DIRECTORY</div>
-                <div class="agents-controls">
-                    <button id="agentsFontDown" class="font-btn" title="Decrease font size">−</button>
-                    <button id="agentsFontUp" class="font-btn" title="Increase font size">+</button>
-                    <button id="agentsToggle" class="agents-toggle" title="Toggle agents panel">▼</button>
+            <!-- Agents Directory Panel (moved to left column) -->
+            <div class="agents-panel">
+                <div class="agents-header">
+                    <div class="agents-label">AGENTS DIRECTORY</div>
+                    <div class="agents-controls">
+                        <button id="agentsFontDown" class="font-btn" title="Decrease font size">−</button>
+                        <button id="agentsFontUp" class="font-btn" title="Increase font size">+</button>
+                        <button id="agentsToggle" class="agents-toggle" title="Toggle agents panel">▼</button>
+                    </div>
                 </div>
+                <div id="agentsContainer" class="agents-container"></div>
             </div>
-            <div id="agentsContainer" class="agents-container"></div>
+            </div>
         </div>
 
         <!-- Status indicator -->

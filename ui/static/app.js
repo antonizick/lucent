@@ -828,8 +828,8 @@ function updateLogPanelHeight() {
 
         // Only set if we have valid measurements (not 0)
         if (combinedHeight > 0) {
-            // Calculate 80% of combined height
-            const targetHeight = combinedHeight * 0.8;
+            // Calculate 85% of combined height
+            const targetHeight = combinedHeight * 0.85;
 
             // Apply to log panel max-height
             logPanel.style.maxHeight = targetHeight + 'px';
