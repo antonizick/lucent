@@ -759,44 +759,50 @@ const voicePanel = document.getElementById('voicePanel');
 const servicesPanel = document.getElementById('servicesPanel');
 
 if (voicePanel && servicesPanel) {
-    // Track mouse position and update services panel position
-    voicePanel.addEventListener('mousemove', function(e) {
-        if (servicesPanel.classList.contains('visible')) {
-            const rect = voicePanel.getBoundingClientRect();
-            const mouseX = e.clientX;
-            const mouseY = e.clientY;
+    let pendingPositionUpdate = null;
+    let isServicesPanelVisible = false;
 
-            // Position panel diagonally up and to the left of mouse
-            const offsetX = -150;  // Move left
-            const offsetY = -20;   // Move up slightly
-
-            const panelX = mouseX + offsetX;
-            const panelY = mouseY + offsetY;
-
-            servicesPanel.style.position = 'fixed';
-            servicesPanel.style.left = panelX + 'px';
-            servicesPanel.style.top = panelY + 'px';
+    // Throttled positioning using requestAnimationFrame
+    function updateServicesPanelPosition(mouseX, mouseY) {
+        if (pendingPositionUpdate) {
+            cancelAnimationFrame(pendingPositionUpdate);
         }
-    });
+        pendingPositionUpdate = requestAnimationFrame(() => {
+            if (isServicesPanelVisible) {
+                // Position well away from cursor: far left, higher up
+                const offsetX = -320;  // Move significantly left
+                const offsetY = -80;   // Move significantly up
+
+                servicesPanel.style.position = 'fixed';
+                servicesPanel.style.left = (mouseX + offsetX) + 'px';
+                servicesPanel.style.top = (mouseY + offsetY) + 'px';
+            }
+        });
+    }
 
     // Show services on mouseover voice panel
     voicePanel.addEventListener('mouseenter', function(e) {
+        isServicesPanelVisible = true;
         servicesPanel.classList.add('visible');
-        // Initial positioning
-        const mouseX = e.clientX;
-        const mouseY = e.clientY;
-        const offsetX = -150;
-        const offsetY = -20;
-        servicesPanel.style.position = 'fixed';
-        servicesPanel.style.left = (mouseX + offsetX) + 'px';
-        servicesPanel.style.top = (mouseY + offsetY) + 'px';
+        updateServicesPanelPosition(e.clientX, e.clientY);
+    });
+
+    // Track mouse position and update services panel position
+    voicePanel.addEventListener('mousemove', function(e) {
+        if (isServicesPanelVisible) {
+            updateServicesPanelPosition(e.clientX, e.clientY);
+        }
     });
 
     // Hide services on mouseout voice panel
     voicePanel.addEventListener('mouseleave', function() {
+        isServicesPanelVisible = false;
         servicesPanel.classList.remove('visible');
         servicesPanel.style.position = 'absolute';
         servicesPanel.style.left = '';
         servicesPanel.style.top = '';
+        if (pendingPositionUpdate) {
+            cancelAnimationFrame(pendingPositionUpdate);
+        }
     });
 }
