@@ -41,14 +41,20 @@ The Voice Box web UI (port 8001) provides voice acknowledgment for every interac
 - **Font Controls:** Adjust daily log text size with +/− buttons
 
 ### Discord Integration
-Lucent integrates with Discord for monitoring and async responses. A background monitor watches for messages, forwards them to Claude, and posts responses back to Discord.
+Lucent integrates with Discord for monitoring and async responses. A background monitor watches for messages, forwards them to Ollama, and posts responses back to Discord with intelligent web search integration and emoji feedback.
 
-- **Components:**
-  - `discord_bot.py` — Bot client (webhook responses)
-  - `discord_monitor.py` — Message monitor & Mistral response handler
-  - `discord_logger.py` — Logging forwarder
-- **Setup:** Configure `.env` with `DISCORD_WEBHOOK_URL` and `DISCORD_CHANNEL_ID`
-- **Run:** `python discord_monitor.py`
+**Architecture Overview:**
+Discord message → `/message/pending` queue → discord_monitor (Ollama processing + web search) → `/response` endpoint → discord_bot (posts to Discord + emoji reactions) → Voice Box (simultaneous voice feedback)
+
+- **Main Components:**
+  - `discord_bot.py` — Discord.py bot (message reception + Flask webhook for responses + emoji reactions)
+  - `discord_monitor.py` — Background monitor (message fetch, Ollama processing, web search decision, voice feedback)
+  - `server.py` — FastAPI backbone (message queue, response routing, all endpoints)
+  - `discord_test_client.py` — Automated integration testing tool
+  - `discord_message_logger.py` — Full message exchange logging (human-readable + JSON)
+- **Setup:** Configure `.env` with `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID`, and `OLLAMA_URL`
+- **Run Monitor:** `python discord_monitor.py` (polls `/message/pending` every 3 seconds)
+- **Run Bot:** `python discord_bot.py` (starts bot + Flask webhook on 8003)
 
 ## Core Files
 
@@ -247,6 +253,191 @@ Every agent session executes an 8-step startup ritual that ensures continuity an
 
 ---
 
+### Logging System — Complete Reference
+
+Lucent maintains a comprehensive multi-layer logging system for debugging, auditing, and understanding system behavior. This section documents what gets logged, where, and how to use logs for troubleshooting.
+
+#### **Activity Log (Voice Box Speech History)**
+
+**Purpose:** Record every message sent to the Voice Box for voice/text synthesis.
+
+**Location:** `ui/logs/activity_YYYY-MM-DD.log`
+
+**Content:** Timestamp + message text (one entry per `/speak` endpoint call)
+
+**Example:**
+```
+[2026-05-13T14:23:45.123456] Welcome Nick, it's great to see you again
+[2026-05-13T14:24:12.654321] Weather forecast for Austin: Partly cloudy, 78°F
+```
+
+**Access:**
+- Web UI: `http://localhost:8001/activity-log-viewer` (auto-refreshing dashboard)
+- Direct: `curl http://localhost:8001/activity-log` (JSON response with full content)
+
+**Archival:** Compressed monthly to `ui/logs/archives/activity_YYYY-MM.tar.gz` on first request after month change.
+
+#### **Discord Monitor Logging**
+
+**Purpose:** Track message receipt, search detection decisions, Ollama processing, and response generation.
+
+**Logging Points:**
+
+| Event | Log Entry | Purpose |
+|-------|-----------|---------|
+| Message fetch | `[FETCH] Fetched N pending message(s)` | Confirms polling succeeded |
+| Search detection (Stage 1) | `[SEARCH] Stage 1 (keywords): MATCH/NO MATCH` | Fast keyword matching result |
+| Search detection (Stage 2) | `[SEARCH] Stage 2 (AI): MATCH/NO MATCH - AI says 'yes'/'no'` | AI fallback decision |
+| Web search execution | `[SEARCH] Searching DuckDuckGo for: {query}` | Confirms search initiated |
+| Web search results | `[SEARCH] Found N results` | Number of results returned |
+| Context loading | `[PROCESS] Loaded context (N chars)` | Memory files successfully loaded |
+| Ollama call | `[OLLAMA] Calling Ollama with model={model}` | Request sent to Ollama |
+| Ollama response | `[OLLAMA] Generated response (N chars): {text[:100]}` | Success + response preview |
+| Response posting | `[RESPONSE] Posting to /response with search_used={flag}` | Sending back to server |
+| Response success | `[RESPONSE] Successfully posted: {response[:80]}` | Confirmation |
+
+**Log Level:** INFO by default (all events captured), ERROR for failures
+
+**Format:** `%(asctime)s - %(name)s - %(levelname)s - %(message)s`
+
+**Real-Time Monitoring:**
+```bash
+# Follow Discord monitor logs in real-time
+tail -f discord_monitor.py output  # if running in foreground
+ps aux | grep discord_monitor  # find the process
+```
+
+#### **Discord Bot Logging**
+
+**Purpose:** Track message reception, webhook requests, and emoji reactions.
+
+**Logging Points:**
+
+| Event | Log Entry | Purpose |
+|-------|-----------|---------|
+| Bot ready | `Logged in as {username}` | Bot successfully connected |
+| Webhook received | `[WEBHOOK] Received response: message_id={id}, search_used={flag}` | Response from server arrived |
+| Message posted | `[DISCORD] Posted response to message {id} (search_used={flag})` | Discord message sent |
+| Emoji added | `[DISCORD] Added newspaper emoji to response` | Newspaper reaction added successfully |
+| Emoji error | `[ERROR] Failed to add newspaper emoji: {reason}` | Emoji reaction failed (common: invalid message ID) |
+
+**Log Output:** stdout/stderr (printed to console when running in foreground)
+
+**Flask Webhook Server:** Runs on `http://127.0.0.1:8003` in background thread
+
+#### **Discord Test Client**
+
+**Purpose:** Automated integration testing without manual Discord messages.
+
+**Usage:**
+```bash
+python discord_test_client.py
+```
+
+**Test Results Log:** `/tmp/discord_test_results.log`
+
+**Tests Included:**
+- Weather query (triggers web search)
+- General knowledge question (no search needed)
+- Current events query (news search)
+- Store hours query (location-based search)
+
+**Output:**
+```
+[2026-05-13 14:25:30] Bot connected as Lucent#1234
+[2026-05-13 14:25:31] Queued: What's the weather tomorrow?... (ID: abc-123-def)
+[2026-05-13 14:25:45] Response received with search_used=true
+```
+
+#### **Discord Message Logger**
+
+**Purpose:** Human-readable + machine-readable full message exchange logging for debugging and auditing.
+
+**Usage:**
+```bash
+python discord_message_logger.py
+```
+
+**Log Locations:**
+- Human-readable: `/tmp/discord_messages/message_exchange.log`
+- Machine-readable (JSON): `/tmp/discord_messages/messages.jsonl`
+
+**Message Exchange Log Format:**
+```
+======================================================================
+[2026-05-13T14:25:30.123456] RECEIVED
+Message ID: 1234567890
+Author: nick
+Channel: lucent-commands
+Content: What's the weather tomorrow?
+
+======================================================================
+[2026-05-13T14:25:45.654321] SENT
+Message ID: 1234567890
+Author: Lucent
+Channel: lucent-commands
+Response: The weather tomorrow will be partly cloudy...
+Reactions: 📰
+Search Used: true
+```
+
+**JSON Log Format (line-delimited):**
+```json
+{"timestamp": "2026-05-13T14:25:30.123456", "direction": "RECEIVED", "message_id": "1234567890", "author": "nick", "content": "What's the weather tomorrow?"}
+{"timestamp": "2026-05-13T14:25:45.654321", "direction": "SENT", "message_id": "1234567890", "response": "The weather tomorrow...", "search_used": true, "reactions": ["📰"]}
+```
+
+**Querying JSON Logs:**
+```bash
+# Find all messages that used web search
+grep '"search_used": true' /tmp/discord_messages/messages.jsonl
+
+# Extract all responses
+jq 'select(.direction == "SENT") | .response' /tmp/discord_messages/messages.jsonl
+
+# Find messages by author
+jq 'select(.author == "nick")' /tmp/discord_messages/messages.jsonl
+```
+
+#### **Server.py Activity Logging**
+
+**Purpose:** General FastAPI request/response logging for debugging backend issues.
+
+**Setup:** Configured via Python logging module, logs to stdout by default
+
+**Endpoints Logging:**
+- `/message/pending` POST → Logs message queued with source
+- `/response` POST → Logs response routed to destination
+- `/speak` POST → Logs activity entry + queues SSE broadcast
+- All health checks logged to activity log
+
+#### **Debugging with Logs**
+
+**Scenario: Newspaper emoji not appearing**
+1. Check `discord_bot.py` logs for: `Added newspaper emoji` or `Failed to add newspaper emoji`
+2. Check `discord_monitor.py` logs for: `[SEARCH] Stage 1/2: MATCH` → confirms search was detected
+3. Check `server.py` logs: Verify `search_used=true` in response payload
+4. If emoji error: Message may have been deleted before emoji add, or invalid message_id
+
+**Scenario: Web search not triggering**
+1. Check `discord_monitor.py` logs for: `[SEARCH] Stage 1 (keywords): NO MATCH`
+2. Check `[SEARCH] Stage 2 (AI): NO MATCH` → AI didn't think search needed
+3. Add keyword or adjust Stage 2 AI prompt if legitimate search case not detected
+4. Current keywords: weather, news, hours, trending, location-based queries, years (2025/2026)
+
+**Scenario: Ollama not responding**
+1. Check `discord_monitor.py` logs for: `[OLLAMA] Calling Ollama with model=...`
+2. If followed by `[OLLAMA] Ollama error: 504` → Ollama service down, try: `curl http://localhost:11434/api/tags`
+3. If no Ollama log → Message never reached processing (check fetch logs)
+
+**Scenario: Response never posted to Discord**
+1. Check `discord_monitor.py` logs for: `[RESPONSE] Successfully posted`
+2. Check `discord_bot.py` logs for: `[DISCORD] Posted response to message`
+3. If missing: Check Flask webhook is running (`curl http://127.0.0.1:8003/`)
+4. Verify BACKEND_URL in `discord_monitor.py` matches server port (8001 for server.py)
+
+---
+
 ### Daily Notes
 
 The agent writes a daily note to `memory/YYYY-MM-DD.md` at the end of each session. Notes are never deleted — they accumulate over time. Every 7 days the agent reviews recent notes and promotes lasting knowledge to LTMemory.md.
@@ -262,6 +453,156 @@ Create focused sub-agents in `agents/{name}-agent.md`. Each has its own identity
 - **Routine analysis** (code review, debugging, searching)
 - **Cross-file investigations**
 - **Single-task, narrow-scope work**
+
+### Discord Integration — Detailed Architecture
+
+#### **Message Flow (Complete Pipeline)**
+
+```
+1. Discord User Message
+   ↓
+2. discord_bot.py (on_message event)
+   - Listens to configured DISCORD_CHANNEL_ID
+   - Posts to http://localhost:8001/message/pending
+   - Adds ✅ reaction (confirm receipt)
+   ↓
+3. server.py (/message/pending endpoint)
+   - Accepts MessageRequest with source="discord_command"
+   - Stores in memory queue (deque)
+   ↓
+4. discord_monitor.py (polling loop, 3-second interval)
+   - Fetches from /message/pending
+   - Detects if web search needed (two-stage: keywords + AI)
+   - Calls Ollama with system prompt (including search results if applicable)
+   - Generates response
+   ↓
+5. discord_monitor.py (post_response)
+   - Sends voice feedback to Voice Box (/speak)
+   - POSTs response to server.py (/response endpoint)
+   - Includes search_used flag
+   ↓
+6. server.py (/response endpoint)
+   - Routes response to discord_bot via Flask webhook
+   - Forwards to http://127.0.0.1:8003/webhook/response
+   ↓
+7. discord_bot.py (webhook_response)
+   - Receives from Flask
+   - Calls post_response() async function
+   - Posts message to Discord (reply or thread)
+   - If search_used=true, adds 📰 emoji reaction
+   ↓
+8. Voice Box broadcasts simultaneously
+   - User hears voice + sees text transcription
+```
+
+#### **Web Search Integration (Two-Stage Detection)**
+
+**Stage 1 — Keyword Matching (Fast, Zero Overhead)**
+Checks text against regex patterns for obvious search-needing queries:
+- Time-sensitive: "today", "latest", "current", "tomorrow", "next week", "weekend"
+- News/events: "news", "happening", "event", "what's on"
+- Specific domains: "weather", "forecast", "hours", "open", "restaurant"
+- Location-based: "what in", "things to do", "visit"
+- Trending: "viral", "trending", "popular"
+
+**Stage 2 — AI Fallback (Smart, 1-2 second latency)**
+If Stage 1 doesn't match, asks Ollama:
+```
+"Does this require real-time information from the internet?"
+```
+Examples: "How does photosynthesis work?" → No. "What's the weather?" → Yes.
+
+**Search Engine:** DuckDuckGo via `ddgs` library (v9.14.2)
+- Returns 3 results per query by default
+- Results formatted as: Title + body snippet
+- Included in system prompt context for Ollama to reference
+
+**Triggering Search:**
+```python
+if needs_web_search(instruction_text):
+    search_results = search_duckduckgo(instruction_text)
+    # Search results added to system prompt
+    # search_used flag set to True
+```
+
+#### **Newspaper Emoji Feature (📰)**
+
+**Purpose:** Visual indicator that a response used real-time web search
+
+**When it appears:** Added as reaction to Lucent's response message when `search_used=true`
+
+**Root Cause (Fixed in commit 184a48e):** Three-layer bug that prevented emoji from appearing:
+1. `server.py /response` endpoint was dropping `search_used` field when forwarding
+2. `ResponseRequest` Pydantic model didn't define `search_used` field
+3. `discord_bot.py` had emoji code but never received the flag
+
+**Current Implementation (Works):**
+```python
+# discord_bot.py post_response()
+if search_used:
+    try:
+        await msg.add_reaction("📰")
+        print(f"[DISCORD] Added newspaper emoji to response")
+    except Exception as emoji_error:
+        print(f"[ERROR] Failed to add newspaper emoji: {emoji_error}")
+```
+
+#### **Testing and Debugging Tools**
+
+**discord_test_client.py — Automated Integration Testing**
+- Posts test messages programmatically
+- Simulates weather, news, and knowledge queries
+- Logs results to `/tmp/discord_test_results.log`
+- Useful for validating web search without manual Discord interaction
+
+**discord_message_logger.py — Full Exchange Visibility**
+- Logs every Discord message received and sent
+- Two formats: human-readable + machine-readable JSON
+- Enables post-mortem analysis of message exchanges
+- Useful for debugging: "Why didn't my message get a response?"
+
+#### **Environment Configuration**
+
+Required `.env` variables for Discord integration:
+```bash
+DISCORD_BOT_TOKEN=your_bot_token_here
+DISCORD_SERVER_ID=your_server_id
+DISCORD_CHANNEL_ID=your_command_channel_id
+DISCORD_LOG_CHANNEL_ID=your_log_channel_id  # Optional
+DISCORD_LOG_WEBHOOK_URL=your_webhook_url    # Optional
+BACKEND_URL=http://localhost:8002           # discord_monitor talks to this
+OLLAMA_URL=http://localhost:11434
+LUCENT_ROOT=/home/nick/dev/lucent
+```
+
+Note: `BACKEND_URL` for discord_monitor defaults to `http://localhost:8002` but server.py runs on 8001. Check actual configuration in `discord_monitor.py`.
+
+#### **Service Lifecycle**
+
+**Starting Discord Integration:**
+```bash
+# Terminal 1: Start Voice Box (includes server.py)
+cd /home/nick/dev/lucent/ui && bash start.sh
+
+# Terminal 2: Start Discord Bot
+cd /home/nick/dev/lucent/ui && python discord_bot.py
+
+# Terminal 3: Start Discord Monitor
+cd /home/nick/dev/lucent/ui && python discord_monitor.py
+```
+
+**Health Check:**
+```bash
+curl http://localhost:8001/services/health | jq .
+# Returns status of: Ollama, Voice Box, Discord Bot, Discord Monitor, Lucent Server
+```
+
+**Stopping:**
+- Monitor: `Ctrl+C` in monitor terminal
+- Bot: `Ctrl+C` in bot terminal
+- Voice Box: `Ctrl+C` in start.sh terminal
+
+---
 
 ### Multi-AI Platform Launcher
 
