@@ -844,7 +844,6 @@ setTimeout(updateLogPanelHeight, 500);
 window.addEventListener('resize', updateLogPanelHeight);
 
 // Update when avatar changes (since avatar height might change)
-const avatarSelect = document.getElementById('avatarSelect');
 if (avatarSelect) {
     avatarSelect.addEventListener('change', function() {
         setTimeout(updateLogPanelHeight, 300);
