@@ -381,7 +381,8 @@ body {
     box-shadow: var(--neon-glow-cyan);
     border-radius: 8px;
     overflow: hidden;
-    max-height: calc(80vh - 200px);
+    min-height: 300px;
+    max-height: calc(100vh - 400px);
 }
 
 .log-header {

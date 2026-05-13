@@ -826,16 +826,19 @@ function updateLogPanelHeight() {
         const voiceHeight = voicePanel.offsetHeight;
         const combinedHeight = characterHeight + voiceHeight;
 
-        // Calculate 80% of combined height
-        const targetHeight = combinedHeight * 0.8;
+        // Only set if we have valid measurements (not 0)
+        if (combinedHeight > 0) {
+            // Calculate 80% of combined height
+            const targetHeight = combinedHeight * 0.8;
 
-        // Apply to log panel max-height
-        logPanel.style.maxHeight = targetHeight + 'px';
+            // Apply to log panel max-height
+            logPanel.style.maxHeight = targetHeight + 'px';
+        }
     }
 }
 
-// Call on initial load
-setTimeout(updateLogPanelHeight, 100);
+// Call on initial load with longer delay to ensure DOM is ready
+setTimeout(updateLogPanelHeight, 500);
 
 // Update on window resize
 window.addEventListener('resize', updateLogPanelHeight);
@@ -844,6 +847,6 @@ window.addEventListener('resize', updateLogPanelHeight);
 const avatarSelect = document.getElementById('avatarSelect');
 if (avatarSelect) {
     avatarSelect.addEventListener('change', function() {
-        setTimeout(updateLogPanelHeight, 100);
+        setTimeout(updateLogPanelHeight, 300);
     });
 }
