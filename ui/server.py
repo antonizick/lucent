@@ -893,6 +893,9 @@ async def activity_log_viewer():
             const refreshBtn = document.getElementById('refreshBtn');
             const themeToggle = document.getElementById('themeToggle');
 
+            let autoRefreshInterval = null;
+            let isRefreshPaused = false;
+
             async function loadActivityLog() {
                 try {
                     const response = await fetch('/activity-log');
@@ -912,7 +915,29 @@ async def activity_log_viewer():
                 }
             }
 
+            function startAutoRefresh() {
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                }
+                autoRefreshInterval = setInterval(loadActivityLog, 5000);
+                isRefreshPaused = false;
+                refreshBtn.style.opacity = '1.0';
+            }
+
+            function pauseAutoRefresh() {
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                }
+                isRefreshPaused = true;
+                refreshBtn.style.opacity = '0.6';
+            }
+
             refreshBtn.addEventListener('click', loadActivityLog);
+
+            // Pause refresh on hover, resume on mouse leave
+            logContent.addEventListener('mouseenter', pauseAutoRefresh);
+            logContent.addEventListener('mouseleave', startAutoRefresh);
 
             // Theme toggle
             function initTheme() {
@@ -932,11 +957,9 @@ async def activity_log_viewer():
                 themeToggle.textContent = isLight ? '☀️' : '🌙';
             });
 
-            // Auto-refresh every 5 seconds
-            setInterval(loadActivityLog, 5000);
-
             initTheme();
             loadActivityLog();
+            startAutoRefresh();
         </script>
     </body>
     </html>
