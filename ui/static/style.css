@@ -53,6 +53,7 @@ body {
     flex-direction: column;
     height: 100vh;
     padding: 0;
+    padding-bottom: 50px;
     gap: 0;
 }
 
@@ -508,7 +509,7 @@ body {
 /* Panels Grid */
 .main-grid {
     display: grid;
-    grid-template-columns: 1fr minmax(300px, 35%);
+    grid-template-columns: 1fr minmax(250px, 25%);
     gap: 20px;
     padding: 20px;
     margin: 0;
@@ -536,6 +537,11 @@ body {
     align-self: start;
     min-height: auto;
     transition: all 0.2s ease;
+    position: absolute;
+    z-index: 100;
+    right: 0;
+    bottom: 100%;
+    margin-bottom: 10px;
 }
 
 .services-panel.visible {
@@ -636,7 +642,10 @@ body {
 
 /* Status */
 .status {
-    flex: 0 0 auto;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
     padding: 8px 20px;
     font-size: 12px;
     color: var(--text-secondary);
@@ -646,6 +655,7 @@ body {
     background-color: var(--bg-secondary);
     box-shadow: 0 -5px 15px rgba(0, 229, 255, 0.1);
     transition: all 0.3s ease;
+    z-index: 1000;
 }
 
 .status.not-ready {
