@@ -153,11 +153,14 @@ Runs `.opencode/startup-helper.py`, which:
 - Returns JSON status with `voice_box_online`, `session_logger_init`, `ritual_ready`
 
 **Step 2 — Dynamic context injection**  
-Reads `memory/YYYY-MM-DD.md` (today's date) and returns its content. This is the part
-that cannot be static — the daily note changes every session and every day. The tool
-injects its last 3000 characters to provide the most recent activity without flooding
-context. If today's note is sparse (< 200 chars), yesterday's compressed note is also
-included for continuity.
+Reads the last 3 daily notes and injects them into the conversation:
+- **Today** (`memory/YYYY-MM-DD.md`): last 3000 chars — most detail, current in-progress work
+- **Yesterday**: last 1500 chars — recent context; already Curator-compressed to 1–2 paragraphs
+- **Two days ago**: last 1000 chars — background context; already compressed
+
+This is the part that cannot be static — daily notes change every session and day. Previous
+notes are compressed by Curator at session start, so token cost is low. This mirrors Claude
+Code's 7-day window but scoped to 3 days to avoid excessive context in the tool return value.
 
 **Step 3 — Protocol assertion**  
 Returns a protocol reminder: voice curl command format, daily note path for today, and
@@ -209,6 +212,8 @@ common with weaker local models. See Failure Modes below.
 | `memory/REMINDERS.md` | opencode.json instructions | Active deadlines, recurring tasks, context triggers | Ensures the model surfaces time-sensitive information proactively. |
 | `AGENTS.md` | Auto-discovered by OpenCode | Startup directive, three-layer requirement, key rules | Platform-specific binding directive for OpenCode. |
 | Today's daily note | `lucent_startup` tool | What happened today, work in progress, recent decisions | Live session context. Changes every day — cannot be in static instructions. |
+| Yesterday's note | `lucent_startup` tool | Most recent completed session summary (Curator-compressed) | Continuity from previous session. |
+| Two days ago note | `lucent_startup` tool | Background context (Curator-compressed) | Recent history without going too far back. |
 
 **What is deliberately NOT loaded:**
 

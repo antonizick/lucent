@@ -61,45 +61,45 @@ export const server: Plugin = async (input) => {
             helperStatus = `WARNING: startup-helper.py failed — ${String(e)}`
           }
 
-          // ── Step 2: Today's daily note ────────────────────────────────────────────
-          // The daily note is NOT in opencode.json instructions (it's dynamic — a new
-          // file each day). This tool injects it into the conversation at startup.
-          // We take the last 3000 chars to capture the most recent activity without
-          // flooding the context with an entire day's history.
-          let dailyNote = "(no daily note exists for today yet — this is the first session of the day)"
-          let noteLength = 0
-          try {
-            const result = await $`cat ${directory}/memory/${today}.md`
-              .nothrow()
-              .quiet()
-            if (result.exitCode === 0) {
-              const raw = result.text()
-              noteLength = raw.length
-              dailyNote =
-                raw.length > 3000
-                  ? `[truncated — showing most recent 3000 chars of ${raw.length} total]\n...\n${raw.slice(-3000)}`
-                  : raw
-            }
-          } catch { /* file not found is expected on a fresh day */ }
+          // ── Step 2: Daily notes (today + 2 previous days) ────────────────────────
+          // Daily notes are NOT in opencode.json instructions — they're dynamic (a new
+          // file each day). This tool injects them at startup to provide session continuity.
+          //
+          // Loading strategy:
+          //   Today:         last 3000 chars — most detail, current in-progress work
+          //   Yesterday:     last 1500 chars — recent context; already Curator-compressed
+          //   Two days ago:  last 1000 chars — background context; already compressed
+          //
+          // Previous notes are compressed to 1–2 paragraphs by Curator at each session
+          // start, so token cost is low. This mirrors Claude Code's 7-day window
+          // but scoped to 3 days to avoid excessive context in the tool return value.
 
-          // ── Step 3: Yesterday's note (if today's is sparse) ─────────────────────
-          // If today's note has fewer than 200 chars, the session just started and
-          // there's little context yet. Pull in yesterday's compressed note for continuity.
-          let recentContext = ""
-          if (noteLength < 200) {
+          const readNote = async (date: string, maxChars: number): Promise<string | null> => {
             try {
-              const yesterday = new Date(Date.now() - 86_400_000).toISOString().split("T")[0]
-              const result = await $`cat ${directory}/memory/${yesterday}.md`
-                .nothrow()
-                .quiet()
-              if (result.exitCode === 0) {
-                const raw = result.text()
-                recentContext =
-                  `\n── YESTERDAY (${yesterday}) ─────────────────────────────────────\n` +
-                  (raw.length > 1500 ? raw.slice(-1500) : raw)
-              }
-            } catch {}
+              const result = await $`cat ${directory}/memory/${date}.md`.nothrow().quiet()
+              if (result.exitCode !== 0) return null
+              const raw = result.text()
+              return raw.length > maxChars
+                ? `[truncated — showing most recent ${maxChars} of ${raw.length} chars]\n...\n${raw.slice(-maxChars)}`
+                : raw
+            } catch {
+              return null
+            }
           }
+
+          const yesterday   = new Date(Date.now() - 86_400_000).toISOString().split("T")[0]
+          const twoDaysAgo  = new Date(Date.now() - 172_800_000).toISOString().split("T")[0]
+
+          const todayNote      = await readNote(today,      3000)
+          const yesterdayNote  = await readNote(yesterday,  1500)
+          const twoDaysAgoNote = await readNote(twoDaysAgo, 1000)
+
+          const dailyNote = todayNote ?? "(no daily note exists for today yet — this is the first session of the day)"
+
+          const recentContext = [
+            yesterdayNote  ? `\n── YESTERDAY (${yesterday}) ──────────────────────────────────────\n${yesterdayNote}`  : "",
+            twoDaysAgoNote ? `\n── TWO DAYS AGO (${twoDaysAgo}) ──────────────────────────────────\n${twoDaysAgoNote}` : "",
+          ].join("")
 
           // ── Assemble return value ─────────────────────────────────────────────────
           // This string becomes part of the tool result the model sees. Everything
