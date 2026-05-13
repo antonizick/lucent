@@ -30,6 +30,12 @@ function loadVoices() {
     const voices = window.speechSynthesis.getVoices();
     voiceSelect.innerHTML = '';
 
+    // Add "None" option for muting
+    const noneOption = document.createElement('option');
+    noneOption.value = 'none';
+    noneOption.textContent = 'None (muted)';
+    voiceSelect.appendChild(noneOption);
+
     voices.forEach((voice, index) => {
         const option = document.createElement('option');
         option.value = index;
@@ -60,18 +66,30 @@ loadVoices();
 
 // Voice selection change
 voiceSelect.addEventListener('change', (e) => {
-    const voices = window.speechSynthesis.getVoices();
-    currentVoice = voices[e.target.value];
     localStorage.setItem('selectedVoice', e.target.value);
-    status.textContent = `Voice: ${currentVoice.name}`;
+
+    if (e.target.value === 'none') {
+        currentVoice = null;
+        status.textContent = 'Voice: Muted (visualizations only)';
+    } else {
+        const voices = window.speechSynthesis.getVoices();
+        currentVoice = voices[e.target.value];
+        status.textContent = `Voice: ${currentVoice.name}`;
+    }
 });
 
 // Restore selected voice from localStorage
 const savedVoice = localStorage.getItem('selectedVoice');
-if (savedVoice && voiceSelect.options[savedVoice]) {
-    voiceSelect.value = savedVoice;
-    const voices = window.speechSynthesis.getVoices();
-    currentVoice = voices[savedVoice];
+if (savedVoice) {
+    if (savedVoice === 'none') {
+        voiceSelect.value = 'none';
+        currentVoice = null;
+        status.textContent = 'Voice: Muted (visualizations only)';
+    } else if (voiceSelect.options[savedVoice]) {
+        voiceSelect.value = savedVoice;
+        const voices = window.speechSynthesis.getVoices();
+        currentVoice = voices[savedVoice];
+    }
 }
 
 // Avatar auto-switching helpers
@@ -143,12 +161,6 @@ function speakText(text) {
         return;
     }
 
-    if (!currentVoice || !window.speechSynthesis) {
-        console.error('Speech synthesis not available');
-        status.textContent = 'Error: TTS not available';
-        return;
-    }
-
     // Cancel any ongoing speech
     window.speechSynthesis.cancel();
 
@@ -164,6 +176,50 @@ function speakText(text) {
     // Display the text with timestamp
     currentTextContent.textContent = text;
     updateTimestamp();
+
+    // If muted (currentVoice is null), just display text and animations without speaking
+    if (!currentVoice) {
+        isSpeaking = true;
+        const scanner = document.getElementById('scanner');
+        const speakingAnimation = document.getElementById('speakingAnimation');
+        scanner.style.display = 'none';
+        speakingAnimation.classList.remove('hidden');
+        speakingAnimation.style.display = 'flex';
+        voicePanelLabel.textContent = 'AI VOICE BOX — VISUALIZING';
+        voicePanelLabel.classList.add('speaking');
+        status.textContent = 'Visualizing (muted)...';
+
+        if (window.character) {
+            window.character.startSpeaking();
+        }
+
+        // Auto-stop after 3 seconds in muted mode
+        setTimeout(async () => {
+            isSpeaking = false;
+            scanner.style.display = 'flex';
+            speakingAnimation.classList.add('hidden');
+            speakingAnimation.style.display = 'none';
+            voicePanelLabel.textContent = 'AI VOICE BOX — IDLE';
+            voicePanelLabel.classList.remove('speaking');
+            status.textContent = 'Ready';
+
+            if (window.character) {
+                await window.character.stopSpeaking();
+            }
+
+            fadeTimeout = setTimeout(() => {
+                currentText.style.opacity = '0.2';
+                fadeTimeout = null;
+            }, 120000);
+        }, 3000);
+        return;
+    }
+
+    if (!window.speechSynthesis) {
+        console.error('Speech synthesis not available');
+        status.textContent = 'Error: TTS not available';
+        return;
+    }
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.voice = currentVoice;
@@ -261,26 +317,31 @@ async function pollForSpeech() {
     // For now, this is handled via the /speak endpoint being called directly
 }
 
-// Poll for pending speech from terminal
-async function pollForPendingSpeech() {
-    try {
-        const response = await fetch('/speak/pending');
-        const data = await response.json();
-
-        if (data.speech && data.speech.text) {
-            speakText(data.speech.text);
-        }
-    } catch (error) {
-        console.error('Error polling for speech:', error);
-    }
-}
-
-// Set up polling for speech requests from terminal
+// Set up SSE streaming for speech requests (multi-client broadcast)
 function setupSpeechListener() {
-    // Poll every 500ms for pending speech requests
-    setInterval(pollForPendingSpeech, 500);
+    const eventSource = new EventSource('/speak/stream');
 
-    status.textContent = 'Listening for speech requests...';
+    eventSource.onopen = () => {
+        status.textContent = 'Listening for speech requests...';
+    };
+
+    eventSource.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if (data && data.text) {
+                speakText(data.text);
+            }
+        } catch (error) {
+            console.error('Error parsing speech event:', error);
+        }
+    };
+
+    eventSource.onerror = () => {
+        status.textContent = 'Reconnecting to speech stream...';
+        eventSource.close();
+        // Attempt to reconnect after 3 seconds
+        setTimeout(setupSpeechListener, 3000);
+    };
 }
 
 // Poll for log updates

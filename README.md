@@ -32,6 +32,8 @@ The Voice Box web UI (port 8001) provides voice acknowledgment for every interac
 - **Voice Send:** `bash ui/speak.sh "Your message"`
 
 **Features:**
+- **Multi-Client Broadcasting:** When multiple browsers have the Voice Box open, all instances receive and speak messages simultaneously via Server-Sent Events (SSE). No more "only one browser speaks" limitation.
+- **Voice Mute Option:** Select "None (muted)" from the voice dropdown to see visualizations (scanner animation, avatar animation) without audio output. Useful for presentations or silent monitoring. Selection persists across sessions.
 - **Dynamic Refresh Timer:** The daily log displays a countdown timer (left of font controls) showing seconds until the next automatic refresh. Counts down from 30 to 0, resets on each cycle. Styled subtly to avoid visual clutter.
 - **Daily Log Tabs:** Switch between Daily (live), Weekly insights, and Long-term memory views
   - **Long-term Memory Tab:** Displays `memory/LTMemory.md` — distilled knowledge and priorities

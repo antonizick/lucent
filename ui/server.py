@@ -9,12 +9,13 @@ from datetime import datetime, date
 from pathlib import Path
 from collections import deque
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Set
 from dotenv import load_dotenv
+import asyncio
 
 load_dotenv()
 
@@ -96,6 +97,10 @@ speech_queue = deque(maxlen=100)  # Voice UI speech (backward compat)
 message_queue = deque(maxlen=100)  # Generic message queue (Discord, terminal, voice input)
 discord_pending = deque(maxlen=100)  # Pending Discord messages for terminal delivery
 
+# SSE client tracking for multi-client broadcasting
+speech_event = asyncio.Event()
+last_speech = None
+
 # Agent state
 current_agent = "Lucent"
 
@@ -150,7 +155,9 @@ async def root():
 
 @app.post("/speak")
 async def speak(request: SpeakRequest):
-    """Queue text to be spoken via TTS on the frontend."""
+    """Queue text to be spoken via TTS on the frontend (broadcast to all SSE clients)."""
+    global last_speech
+
     if not request.text or not request.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
 
@@ -158,7 +165,13 @@ async def speak(request: SpeakRequest):
         "text": request.text,
         "timestamp": datetime.now().isoformat()
     }
+
+    # Keep for backward compat polling
     speech_queue.append(item)
+
+    # Broadcast to SSE clients
+    last_speech = item
+    speech_event.set()
 
     # Log activity
     log_activity(request.text)
@@ -209,6 +222,23 @@ async def get_pending_speech():
         return {"speech": speech_queue.popleft()}
     else:
         return {"speech": None}
+
+@app.get("/speak/stream")
+async def speak_stream():
+    """SSE endpoint for multi-client speech broadcasting."""
+    async def event_generator():
+        # Send last speech item if exists (for reconnecting clients)
+        if last_speech:
+            yield f"data: {json.dumps(last_speech)}\n\n"
+
+        # Keep connection open and wait for new speech events
+        while True:
+            await speech_event.wait()
+            if last_speech:
+                yield f"data: {json.dumps(last_speech)}\n\n"
+            speech_event.clear()
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @app.post("/response")
 async def handle_response(request: ResponseRequest):
