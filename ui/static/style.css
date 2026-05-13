@@ -176,6 +176,7 @@ body {
 
 /* Voice Panel */
 .voice-panel {
+    width: 100%;
     flex: 0 1 auto;
     display: flex;
     flex-direction: column;
@@ -189,7 +190,6 @@ body {
     box-shadow: var(--neon-glow-cyan);
     border-radius: 8px;
     overflow: visible;
-    width: auto;
     align-self: start;
     min-height: auto;
 }
@@ -521,6 +521,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    position: relative;
 }
 
 /* Services Panel */
@@ -529,6 +530,7 @@ body {
     flex-direction: column;
     gap: 12px;
     padding: 20px;
+    width: 100%;
     background-color: var(--bg-secondary);
     border: 1px solid var(--neon-cyan);
     box-shadow: var(--neon-glow-cyan);
@@ -539,6 +541,7 @@ body {
     transition: all 0.2s ease;
     position: absolute;
     z-index: 100;
+    left: 0;
     right: 0;
     bottom: 100%;
     margin-bottom: 10px;
@@ -685,6 +688,7 @@ body {
 
 /* Character Panel */
 .character-panel {
+    width: 100%;
     border: 1px solid var(--neon-cyan);
     box-shadow: 0 0 10px var(--neon-cyan);
     background: #0a0a0a;
