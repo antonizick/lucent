@@ -4,11 +4,10 @@
   },
   "memory": {
     "files": [
-      "core.md",
-      "lucentIdent.md",
-      "userIdent.md",
-      "LTMemory.md",
-      "memory/TODAY.md"
+      "memory/core.md",
+      "memory/lucentIdent.md",
+      "memory/userIdent.md",
+      "memory/LTMemory.md"
     ],
     "updatePrompt": "At the end of each session, summarize the session into a daily note in memory/."
   }
