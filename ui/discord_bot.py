@@ -35,16 +35,20 @@ def webhook_response():
         message_id = data.get("message_id")
         thread_id = data.get("thread_id")
         response_text = data.get("response")
+        search_used = data.get("search_used", False)
+
+        print(f"[WEBHOOK] Received response: message_id={message_id}, search_used={search_used}")
 
         if not response_text:
             return jsonify({"error": "Missing response text"}), 400
 
         # Schedule the async post_response to run in the bot's event loop
         asyncio.run_coroutine_threadsafe(
-            post_response(message_id, thread_id, response_text),
+            post_response(message_id, thread_id, response_text, search_used),
             bot.loop
         )
 
+        print(f"[WEBHOOK] Scheduled post_response with search_used={search_used}")
         return jsonify({"status": "scheduled"}), 200
     except Exception as e:
         print(f"[ERROR] Webhook error: {e}")
@@ -108,7 +112,7 @@ async def queue_message(message: discord.Message):
         print(f"[ERROR] Exception posting to queue: {e}")
         await message.add_reaction("❌")
 
-async def post_response(message_id: str, thread_id: str, response_text: str):
+async def post_response(message_id: str, thread_id: str, response_text: str, search_used: bool = False):
     """Post Lucent's response back to Discord thread."""
     try:
         channel = bot.get_channel(DISCORD_CHANNEL_ID)
@@ -119,15 +123,22 @@ async def post_response(message_id: str, thread_id: str, response_text: str):
         # If there's a thread_id, post in thread; otherwise post as reply
         if thread_id and thread_id != "None":
             thread = await channel.fetch_thread(int(thread_id))
-            await thread.send(f"**Lucent:** {response_text}")
+            msg = await thread.send(f"**Lucent:** {response_text}")
         else:
             try:
                 original_msg = await channel.fetch_message(int(message_id))
-                await original_msg.reply(f"**Lucent:** {response_text}")
+                msg = await original_msg.reply(f"**Lucent:** {response_text}")
             except discord.NotFound:
-                await channel.send(f"**Lucent:** {response_text}")
+                msg = await channel.send(f"**Lucent:** {response_text}")
 
-        print(f"[DISCORD] Posted response to message {message_id}")
+        if search_used:
+            try:
+                await msg.add_reaction("📰")
+                print(f"[DISCORD] Added newspaper emoji to response")
+            except Exception as emoji_error:
+                print(f"[ERROR] Failed to add newspaper emoji: {emoji_error}")
+
+        print(f"[DISCORD] Posted response to message {message_id} (search_used={search_used})")
     except Exception as e:
         print(f"[ERROR] Failed to post response: {e}")
 

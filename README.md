@@ -45,9 +45,8 @@ Lucent integrates with Discord for monitoring and async responses. A background 
 
 - **Components:**
   - `discord_bot.py` — Bot client (webhook responses)
-  - `discord_monitor.py` — Message monitor & Claude response handler
+  - `discord_monitor.py` — Message monitor & Mistral response handler
   - `discord_logger.py` — Logging forwarder
-  - `discord_poller.py` — Polling engine
 - **Setup:** Configure `.env` with `DISCORD_WEBHOOK_URL` and `DISCORD_CHANNEL_ID`
 - **Run:** `python discord_monitor.py`
 
@@ -88,9 +87,8 @@ lucent/
 ├── ui/                    Voice Box web UI & Discord integration
 │   ├── server.py          FastAPI server (voice feedback, Discord webhooks)
 │   ├── discord_bot.py     Discord bot client
-│   ├── discord_monitor.py Discord message monitor & Lucent response handler
+│   ├── discord_monitor.py Discord message monitor & Mistral response handler
 │   ├── discord_logger.py  Logging forwarder to Discord channel
-│   ├── discord_poller.py  Polling engine for channel messages
 │   ├── speak.sh           Voice feedback endpoint (send to Voice Box)
 │   ├── start.sh           Startup script
 │   └── static/            Web UI assets

@@ -11,6 +11,14 @@ from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 
+# Web search support for internet access
+try:
+    from ddgs import DDGS
+    SEARCH_ENABLED = True
+except ImportError:
+    SEARCH_ENABLED = False
+    logger_placeholder = None
+
 # Import startup ritual verification
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 from verify_startup import ensure_startup_ritual, augment_system_prompt
@@ -54,40 +62,125 @@ class DiscordInstructionMonitor:
             logger.warning(f"Could not load model preference: {e}")
         return "mistral"
 
+    def needs_web_search(self, text: str) -> bool:
+        """Two-stage search detection: keywords first (fast), then AI fallback (intelligent)."""
+        # STAGE 1: Fast keyword check - catches obvious cases with zero overhead
+        search_triggers = [
+            # Time-sensitive: current/recent
+            r'\b(today|latest|current|recent|now|right now)\b',
+            # Time-sensitive: future dates (Nick's weather/store hours)
+            r'\b(tomorrow|next week|next month|next day|coming up|upcoming|weekend)\b',
+            r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b(?=.*?(weather|open|close|hour|event))',
+            # News and events
+            r'\b(news|breaking|happened|just|announced|event|happening|what.*s (on|happening))\b',
+            # Years
+            r'\b(2025|2026)\b',
+            # Specific searches needing current data
+            r'\b(weather|forecast|temperature|rain|snow)\b',
+            r'\b(stock|price|cost|rate|exchange)\b',
+            r'\b(open|hours|close|opening time|closing time|restaurant|store|shop|venue|activity|activities)\b',
+            r'\b(how to|tutorial|guide)\s+(make|build|create)',
+            r'\b(what.*new|new.*what)\b',
+            r'\b(trending|viral|popular)\b',
+            # Current events
+            r'\b(covid|election|war|protest|strike|scandal)\b',
+            # Location-based queries for activities
+            r'\b(what.*in|where.*in|things to do|do in|visit|attractions)\b',
+        ]
+
+        text_lower = text.lower()
+        for pattern in search_triggers:
+            if re.search(pattern, text_lower):
+                logger.info(f"[SEARCH] Stage 1 (keywords): MATCH - will search")
+                return True
+
+        # STAGE 2: AI fallback for edge cases not caught by keywords
+        # Ask Mistral to interpret context and decide
+        logger.info(f"[SEARCH] Stage 1 (keywords): No match - checking with AI")
+        try:
+            meta_prompt = f"""Does this user question require real-time information from the internet to answer accurately?
+Examples that need search: "What's the weather tomorrow?", "What are store hours?", "Latest news about X?"
+Examples that don't need search: "How does photosynthesis work?", "Who was George Washington?", "Explain quantum physics"
+
+User question: "{text}"
+
+Answer with ONLY: "yes" or "no" (lowercase, no explanation)"""
+
+            resp = requests.post(
+                f"{self.ollama_url}/api/generate",
+                json={
+                    "model": self.model,
+                    "prompt": meta_prompt,
+                    "stream": False,
+                    "temperature": 0.1
+                },
+                timeout=10
+            )
+
+            if resp.status_code == 200:
+                data = resp.json()
+                response = data.get("response", "").strip().lower()
+                needs_search = "yes" in response[:10]  # Check first 10 chars
+                logger.info(f"[SEARCH] Stage 2 (AI): {'MATCH' if needs_search else 'NO MATCH'} - AI says '{response[:20]}'")
+                return needs_search
+            else:
+                logger.warning(f"[SEARCH] Stage 2 (AI): Failed with status {resp.status_code}, assuming no search needed")
+                return False
+        except Exception as e:
+            logger.error(f"[SEARCH] Stage 2 (AI): Exception - {e}, assuming no search needed")
+            return False
+
+    def search_duckduckgo(self, query: str, max_results: int = 3) -> str:
+        """Search DuckDuckGo and return formatted results."""
+        if not SEARCH_ENABLED:
+            logger.warning("[SEARCH] duckduckgo_search not installed")
+            return ""
+
+        try:
+            logger.info(f"[SEARCH] Searching DuckDuckGo for: {query}")
+            ddgs = DDGS()
+            results = ddgs.text(query, max_results=max_results)
+
+            if not results:
+                logger.info("[SEARCH] No results found")
+                return ""
+
+            formatted = "## Web Search Results:\n"
+            for i, result in enumerate(results, 1):
+                title = result.get("title", "")
+                body = result.get("body", "")
+                formatted += f"\n{i}. **{title}**\n   {body}\n"
+
+            logger.info(f"[SEARCH] Found {len(results)} results")
+            return formatted
+        except Exception as e:
+            logger.error(f"[SEARCH] Exception during search: {e}")
+            return ""
+
     def load_context(self) -> str:
-        """Load Lucent's full context (identity, memory, daily note)."""
+        """Load minimal context for Discord (LTMemory + daily note only, no instruction files)."""
         context_parts = []
 
-        # Load core identity files
-        for filename in ["lucentIdent.md", "userIdent.md"]:
-            fpath = self.lucent_root / filename
-            if fpath.exists():
-                try:
-                    content = fpath.read_text()
-                    context_parts.append(f"=== {filename} ===\n{content}")
-                except Exception as e:
-                    logger.warning(f"Failed to read {filename}: {e}")
-
-        # Load LTMemory
-        ltmem_path = self.lucent_root / "LTMemory.md"
+        # Load LTMemory (state/priorities, not instructions)
+        ltmem_path = self.lucent_root / "memory" / "LTMemory.md"
         if ltmem_path.exists():
             try:
                 content = ltmem_path.read_text()
-                context_parts.append(f"=== LTMemory ===\n{content}")
+                context_parts.append(f"=== Current Priorities & State ===\n{content}")
             except Exception as e:
                 logger.warning(f"Failed to read LTMemory: {e}")
 
-        # Load today's daily note
+        # Load today's daily note (ongoing state)
         today = datetime.now().strftime("%Y-%m-%d")
         daily_note = self.memory_dir / f"{today}.md"
         if daily_note.exists():
             try:
                 content = daily_note.read_text()
-                context_parts.append(f"=== Today's Note ===\n{content}")
+                context_parts.append(f"=== Today's Work ===\n{content}")
             except Exception as e:
                 logger.warning(f"Failed to read daily note: {e}")
 
-        return "\n\n".join(context_parts)
+        return "\n\n".join(context_parts) if context_parts else "[No context available]"
 
     def clean_response(self, response_text: str) -> str:
         """Remove tool_use blocks and XML tags from response."""
@@ -100,28 +193,48 @@ class DiscordInstructionMonitor:
         response_text = response_text.strip()
         return response_text if response_text else "Processing complete."
 
-    def process_instruction(self, message: dict) -> str:
-        """Process Discord instruction through Ollama and return response."""
+    def process_instruction(self, message: dict) -> tuple:
+        """Process Discord instruction through Ollama and return (response_text, search_used)."""
         try:
+            logger.info(f"[PROCESS] Starting instruction processing")
             # Verify/enforce startup ritual
             ritual_context, executed, compression_needed = ensure_startup_ritual(self.lucent_root, self.model)
 
-            context = self.load_context()
             instruction_text = message.get("text", "")
 
-            system_prompt = f"""You are Lucent, Nick's personal AI assistant. This is an instruction from Nick via Discord.
+            # Hybrid Smart Detection: Check if web search is needed
+            search_results = ""
+            search_used = False
+            if self.needs_web_search(instruction_text):
+                logger.info(f"[SEARCH] Web search triggered for query")
+                search_results = self.search_duckduckgo(instruction_text)
+                if search_results:
+                    search_used = True
+                    logger.info(f"[SEARCH] Augmenting context with search results ({len(search_results)} chars)")
 
-{context}
+            context = self.load_context()
+            logger.info(f"[PROCESS] Loaded context ({len(context)} chars), instruction: '{instruction_text[:60]}'")
 
-Respond naturally and concisely to this instruction. Keep responses under 2-3 sentences unless more detail is needed.
+            # Option 1: Reframe prompt - user instruction first (primary), context second (background)
+            # Include web search results if available (Hybrid Smart Detection)
+            search_section = f"\n--- WEB SEARCH RESULTS ---\n{search_results}\n" if search_results else ""
 
-IMPORTANT: Do NOT use tool_use syntax or attempt to call tools. Generate only plain text responses. Do not output XML tags or tool calls."""
+            system_prompt = f"""You are Lucent, Nick's personal AI assistant.
+
+USER QUESTION/INSTRUCTION:
+{instruction_text}
+
+--- BACKGROUND CONTEXT ---
+{context}{search_section}
+--- TASK ---
+Respond naturally and concisely to Nick's question above. Keep responses under 2-3 sentences unless more detail is needed. Do NOT use tool_use syntax, XML tags, or tool calls. Generate only plain text responses."""
 
             # Prepend startup ritual context if it just executed
             if executed:
                 system_prompt = augment_system_prompt(ritual_context, system_prompt)
 
             # Call Ollama
+            logger.info(f"[OLLAMA] Calling Ollama with model={self.model}")
             resp = requests.post(
                 f"{self.ollama_url}/api/generate",
                 json={
@@ -134,26 +247,27 @@ IMPORTANT: Do NOT use tool_use syntax or attempt to call tools. Generate only pl
                 timeout=900
             )
 
+            logger.info(f"[OLLAMA] Response status: {resp.status_code}")
             if resp.status_code == 200:
                 data = resp.json()
                 response_text = data.get("response", "").strip()
                 if response_text:
                     response_text = self.clean_response(response_text)
-                    logger.info(f"Generated response: {response_text[:100]}")
-                    return response_text
+                    logger.info(f"[OLLAMA] Generated response ({len(response_text)} chars): {response_text[:100]}")
+                    return response_text, search_used
                 else:
-                    logger.error("Empty response from Ollama")
-                    return "[Error: empty response from model]"
+                    logger.error("[OLLAMA] Empty response from Ollama")
+                    return "[Error: empty response from model]", search_used
             else:
-                logger.error(f"Ollama error: {resp.status_code}")
-                return f"[Error processing instruction: {resp.status_code}]"
+                logger.error(f"[OLLAMA] Ollama error: {resp.status_code} - {resp.text[:200]}")
+                return f"[Error processing instruction: {resp.status_code}]", search_used
 
         except requests.exceptions.Timeout:
             logger.error("Ollama timeout")
-            return "[Error: response generation timed out]"
+            return "[Error: response generation timed out]", False
         except Exception as e:
             logger.error(f"Exception processing instruction: {e}")
-            return f"[Error processing instruction: {str(e)}]"
+            return f"[Error processing instruction: {str(e)}]", False
 
     def send_voice_feedback(self, response_text: str) -> bool:
         """Send voice feedback to Voice Box."""
@@ -169,11 +283,13 @@ IMPORTANT: Do NOT use tool_use syntax or attempt to call tools. Generate only pl
             logger.error(f"Exception sending voice feedback: {e}")
             return False
 
-    def post_response(self, message: dict, response_text: str) -> bool:
+    def post_response(self, message: dict, response_text: str, search_used: bool = False) -> bool:
         """Post response back to Discord and send voice feedback."""
         try:
+            logger.info(f"[RESPONSE] Posting response back to Discord (search_used={search_used})")
             # Send voice feedback to Voice Box
             self.send_voice_feedback(response_text)
+            logger.info(f"[RESPONSE] Voice feedback sent")
 
             # Post response to Discord
             payload = {
@@ -183,20 +299,23 @@ IMPORTANT: Do NOT use tool_use syntax or attempt to call tools. Generate only pl
                 "thread_id": message.get("thread_id"),
                 "user_id": message.get("user_id"),
                 "response": response_text,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "search_used": search_used  # Flag to add newspaper emoji reaction
             }
 
+            logger.info(f"[RESPONSE] Posting to {self.backend_url}/response with payload")
             resp = requests.post(
                 f"{self.backend_url}/response",
                 json=payload,
                 timeout=10
             )
 
+            logger.info(f"[RESPONSE] Backend response status: {resp.status_code}")
             if resp.status_code == 200:
-                logger.info(f"Response posted to Discord: {response_text[:80]}")
+                logger.info(f"[RESPONSE] Successfully posted: {response_text[:80]}")
                 return True
             else:
-                logger.error(f"Failed to post response: {resp.status_code}")
+                logger.error(f"[RESPONSE] Failed to post response: {resp.status_code} - {resp.text[:200]}")
                 return False
         except Exception as e:
             logger.error(f"Exception posting response: {e}")
@@ -206,28 +325,30 @@ IMPORTANT: Do NOT use tool_use syntax or attempt to call tools. Generate only pl
         """Peek at pending Discord messages without clearing."""
         try:
             resp = requests.get(
-                f"{self.backend_url}/discord/pending",
+                f"{self.backend_url}/message/pending",
                 timeout=10
             )
 
             if resp.status_code == 200:
                 data = resp.json()
-                messages = data.get("messages", [])
+                # /message/pending returns singular "message", not plural "messages"
+                message = data.get("message")
+                messages = [message] if message else []
                 if messages:
-                    logger.info(f"Fetched {len(messages)} pending Discord messages")
+                    logger.info(f"[FETCH] Fetched {len(messages)} pending Discord message(s)")
                 return messages
             else:
-                logger.warning(f"Failed to fetch pending messages: {resp.status_code}")
+                logger.warning(f"[FETCH] Failed to fetch pending messages: {resp.status_code}")
                 return []
         except Exception as e:
-            logger.error(f"Exception fetching pending messages: {e}")
+            logger.error(f"[FETCH] Exception fetching pending messages: {e}")
             return []
 
     def clear_processed_messages(self) -> bool:
         """Clear the pending messages queue after processing."""
         try:
             resp = requests.delete(
-                f"{self.backend_url}/discord/pending",
+                f"{self.backend_url}/message/pending",
                 timeout=10
             )
             return resp.status_code == 200
@@ -374,21 +495,22 @@ IMPORTANT: Do NOT use tool_use syntax or attempt to call tools. Generate only pl
             try:
                 # Fetch pending Discord instructions
                 messages = self.fetch_pending_messages()
+                logger.info(f"Poll cycle: fetched {len(messages) if messages else 0} messages")
 
                 if messages:
                     for message in messages:
-                        logger.info(f"Processing Discord instruction from {message.get('user_id')}")
+                        logger.info(f"[PROCESSING] Discord instruction from {message.get('user_id')}: '{message.get('text', '')[:60]}'")
 
                         # Check if it's a command
                         is_command, response = self.handle_command(message)
 
                         if is_command:
                             # Send command response
-                            self.post_response(message, response)
+                            self.post_response(message, response, search_used=False)
                         else:
-                            # Process as normal instruction
-                            response = self.process_instruction(message)
-                            self.post_response(message, response)
+                            # Process as normal instruction (returns tuple: response, search_used)
+                            response, search_used = self.process_instruction(message)
+                            self.post_response(message, response, search_used=search_used)
 
                     # Clear processed messages
                     self.clear_processed_messages()

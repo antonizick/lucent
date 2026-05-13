@@ -139,6 +139,7 @@ class ResponseRequest(BaseModel):
     thread_id: Optional[str] = None
     user_id: Optional[str] = None
     response: str
+    search_used: bool = False  # Flag for emoji reaction (newspaper emoji if True)
     timestamp: Optional[str] = Field(default_factory=lambda: datetime.now().isoformat())
 
 class AgentSwitchRequest(BaseModel):
@@ -249,7 +250,8 @@ async def handle_response(request: ResponseRequest):
             payload = {
                 "message_id": request.message_id,
                 "thread_id": request.thread_id,
-                "response": request.response
+                "response": request.response,
+                "search_used": request.search_used
             }
             resp = requests.post(
                 "http://127.0.0.1:8003/webhook/response",
@@ -495,11 +497,6 @@ async def services_health():
     except:
         discord_bot_status = "offline"
     services.append({"name": "Discord bot", "status": discord_bot_status})
-
-    # Discord Poller (check if process running)
-    result = subprocess.run(["pgrep", "-f", "discord_poller.py"], capture_output=True)
-    poller_status = "online" if result.returncode == 0 else "offline"
-    services.append({"name": "Discord poller", "status": poller_status})
 
     # Discord Monitor (check if process running)
     result = subprocess.run(["pgrep", "-f", "discord_monitor.py"], capture_output=True)
