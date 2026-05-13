@@ -180,8 +180,8 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 15px;
-    padding: 20px;
+    gap: 12px;
+    padding: 15px;
     margin: 0;
     background-color: var(--bg-secondary);
     border: 1px solid var(--neon-cyan);
@@ -190,7 +190,7 @@ body {
     overflow: visible;
     width: auto;
     align-self: start;
-    min-height: 230px;
+    min-height: auto;
 }
 
 .panel-label {
@@ -210,23 +210,24 @@ body {
 /* Knight Rider Scanner */
 .scanner-container {
     position: relative;
-    width: 300px;
-    height: 50px;
+    width: 200px;
+    height: 40px;
     display: flex;
     align-items: center;
+    margin: 0 auto;
 }
 
 .scanner-bar {
     display: flex;
-    gap: 8px;
+    gap: 5px;
     width: 100%;
     justify-content: center;
     align-items: center;
 }
 
 .scanner-dot {
-    width: 12px;
-    height: 12px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background-color: rgba(255, 0, 0, 0.3);
     border: 1px solid rgba(255, 0, 0, 0.5);
@@ -235,8 +236,8 @@ body {
 
 .scanner-light {
     position: absolute;
-    width: 20px;
-    height: 20px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
     background-color: #ff0000;
     box-shadow: 0 0 15px #ff0000, 0 0 25px rgba(255, 0, 0, 0.6), inset 0 0 10px rgba(255, 255, 255, 0.3);
@@ -253,7 +254,7 @@ body {
         box-shadow: 0 0 15px #ff0000, 0 0 25px rgba(255, 0, 0, 0.6), inset 0 0 10px rgba(255, 255, 255, 0.3);
     }
     50% {
-        left: calc(100% - 20px);
+        left: calc(100% - 12px);
         box-shadow: 0 0 15px #ff0000, 0 0 25px rgba(255, 0, 0, 0.6), inset 0 0 10px rgba(255, 255, 255, 0.3);
     }
 }
@@ -261,11 +262,11 @@ body {
 /* Speaking Animation */
 .speaking-animation {
     display: flex;
-    gap: 3px;
+    gap: 2px;
     align-items: flex-end;
     justify-content: center;
-    height: 120px;
-    width: 75%;
+    height: 60px;
+    width: 80%;
     margin: 0 auto;
     overflow: visible;
 }
@@ -275,10 +276,10 @@ body {
 }
 
 .speaking-bar {
-    width: 4px;
+    width: 3px;
     flex: 1;
     background: linear-gradient(to top, #ff0000, #ff6666);
-    border-radius: 4px;
+    border-radius: 3px;
     box-shadow: 0 0 10px #ff0000, 0 0 20px rgba(255, 0, 0, 0.5);
     animation: speak 0.3s ease-in-out infinite;
 }
@@ -505,9 +506,9 @@ body {
 }
 
 /* Panels Grid */
-.panels-grid {
+.main-grid {
     display: grid;
-    grid-template-columns: 300px 1fr minmax(280px, 30%);
+    grid-template-columns: 1fr minmax(300px, 35%);
     gap: 20px;
     padding: 20px;
     margin: 0;
@@ -515,9 +516,15 @@ body {
     align-items: start;
 }
 
+.right-column {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
 /* Services Panel */
 .services-panel {
-    display: flex;
+    display: none;
     flex-direction: column;
     gap: 12px;
     padding: 20px;
@@ -527,7 +534,12 @@ body {
     border-radius: 8px;
     height: fit-content;
     align-self: start;
-    min-height: 230px;
+    min-height: auto;
+    transition: all 0.2s ease;
+}
+
+.services-panel.visible {
+    display: flex;
 }
 
 .services-list {

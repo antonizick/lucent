@@ -753,3 +753,19 @@ document.addEventListener('click', enableSpeech);
 
 status.textContent = 'Click anywhere to enable speech';
 status.classList.add('not-ready');
+
+// Portal: Services panel mouseover/mouseout handlers
+const voicePanel = document.getElementById('voicePanel');
+const servicesPanel = document.getElementById('servicesPanel');
+
+if (voicePanel && servicesPanel) {
+    // Show services on mouseover voice panel
+    voicePanel.addEventListener('mouseenter', function() {
+        servicesPanel.classList.add('visible');
+    });
+
+    // Hide services on mouseout voice panel
+    voicePanel.addEventListener('mouseleave', function() {
+        servicesPanel.classList.remove('visible');
+    });
+}

@@ -23,76 +23,10 @@
             </div>
         </div>
 
-        <!-- Main panels grid -->
-        <div class="panels-grid">
-            <!-- Services Panel -->
-            <div class="services-panel">
-                <div class="panel-label">Services</div>
-                <div class="services-list" id="servicesList"></div>
-            </div>
-
-            <!-- Voice Panel -->
-            <div class="voice-panel">
-                <div class="panel-label" id="voicePanelLabel">AI VOICE BOX — IDLE</div>
-
-                <!-- Knight Rider Scanner -->
-                <div id="scanner" class="scanner-container">
-                    <div class="scanner-light"></div>
-                    <div class="scanner-bar">
-                        <div class="scanner-dot"></div>
-                        <div class="scanner-dot"></div>
-                        <div class="scanner-dot"></div>
-                        <div class="scanner-dot"></div>
-                        <div class="scanner-dot"></div>
-                        <div class="scanner-dot"></div>
-                        <div class="scanner-dot"></div>
-                        <div class="scanner-dot"></div>
-                        <div class="scanner-dot"></div>
-                        <div class="scanner-dot"></div>
-                    </div>
-                </div>
-
-                <!-- Knight Rider Speaking Animation -->
-                <div id="speakingAnimation" class="speaking-animation hidden">
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                    <div class="speaking-bar"></div>
-                </div>
-
-                <div id="currentText" class="current-text">
-                    <span id="currentTextContent">Waiting for input...</span>
-                    <span id="currentTextTimestamp" class="text-timestamp"></span>
-                </div>
-            </div>
-
-            <!-- Character Panel -->
-            <div class="character-panel" id="characterPanel">
-                <div class="character-viewport">
-                    <img id="characterFrame" src="/static/frames/idle_neutral.png" alt="Character">
-                    <div class="scanline-overlay"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Log Panel -->
-        <div class="log-panel">
+        <!-- Main grid layout -->
+        <div class="main-grid">
+            <!-- Log Panel (Left column) -->
+            <div class="log-panel">
             <div class="log-header">
                 <div class="log-header-left">
                     <div class="log-label-group">
@@ -113,6 +47,75 @@
                 </div>
             </div>
             <pre id="logContent" class="log-content"></pre>
+            </div>
+
+            <!-- Right column (stacked: avatar, services, voice) -->
+            <div class="right-column">
+                <!-- Character Panel (Avatar) -->
+                <div class="character-panel" id="characterPanel">
+                    <div class="character-viewport">
+                        <img id="characterFrame" src="/static/frames/idle_neutral.png" alt="Character">
+                        <div class="scanline-overlay"></div>
+                    </div>
+                </div>
+
+                <!-- Services Panel (Hidden by default) -->
+                <div class="services-panel" id="servicesPanel">
+                    <div class="panel-label">Services</div>
+                    <div class="services-list" id="servicesList"></div>
+                </div>
+
+                <!-- Voice Panel -->
+                <div class="voice-panel" id="voicePanel">
+                    <div class="panel-label" id="voicePanelLabel">AI VOICE BOX — IDLE</div>
+
+                    <!-- Knight Rider Scanner -->
+                    <div id="scanner" class="scanner-container">
+                        <div class="scanner-light"></div>
+                        <div class="scanner-bar">
+                            <div class="scanner-dot"></div>
+                            <div class="scanner-dot"></div>
+                            <div class="scanner-dot"></div>
+                            <div class="scanner-dot"></div>
+                            <div class="scanner-dot"></div>
+                            <div class="scanner-dot"></div>
+                            <div class="scanner-dot"></div>
+                            <div class="scanner-dot"></div>
+                            <div class="scanner-dot"></div>
+                            <div class="scanner-dot"></div>
+                        </div>
+                    </div>
+
+                    <!-- Knight Rider Speaking Animation -->
+                    <div id="speakingAnimation" class="speaking-animation hidden">
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                        <div class="speaking-bar"></div>
+                    </div>
+
+                    <div id="currentText" class="current-text">
+                        <span id="currentTextContent">Waiting for input...</span>
+                        <span id="currentTextTimestamp" class="text-timestamp"></span>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Agents Directory Panel -->
