@@ -370,7 +370,7 @@ body {
 
 /* Log Panel */
 .log-panel {
-    flex: 1 1 60%;
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -381,6 +381,7 @@ body {
     box-shadow: var(--neon-glow-cyan);
     border-radius: 8px;
     overflow: hidden;
+    max-height: calc(80vh - 200px);
 }
 
 .log-header {

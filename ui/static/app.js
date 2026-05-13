@@ -813,3 +813,37 @@ if (voicePanel && servicesPanel) {
         }
     });
 }
+
+// Portal: Log panel height calculation based on right column
+function updateLogPanelHeight() {
+    const characterPanel = document.querySelector('.character-panel');
+    const voicePanel = document.querySelector('.voice-panel');
+    const logPanel = document.querySelector('.log-panel');
+
+    if (characterPanel && voicePanel && logPanel) {
+        // Get combined height of right column elements
+        const characterHeight = characterPanel.offsetHeight;
+        const voiceHeight = voicePanel.offsetHeight;
+        const combinedHeight = characterHeight + voiceHeight;
+
+        // Calculate 80% of combined height
+        const targetHeight = combinedHeight * 0.8;
+
+        // Apply to log panel max-height
+        logPanel.style.maxHeight = targetHeight + 'px';
+    }
+}
+
+// Call on initial load
+setTimeout(updateLogPanelHeight, 100);
+
+// Update on window resize
+window.addEventListener('resize', updateLogPanelHeight);
+
+// Update when avatar changes (since avatar height might change)
+const avatarSelect = document.getElementById('avatarSelect');
+if (avatarSelect) {
+    avatarSelect.addEventListener('change', function() {
+        setTimeout(updateLogPanelHeight, 100);
+    });
+}
