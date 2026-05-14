@@ -25,6 +25,7 @@ class SecurityAuditor:
         self.project_name = self.project_path.name
         self.findings = defaultdict(list)  # severity -> list of findings
         self.external_findings = defaultdict(list)  # severity -> list of external library findings
+        self.dependency_findings = defaultdict(list)  # severity -> list of detailed dependency findings with CVE info
         self.patchable_vulnerabilities = defaultdict(int)  # severity -> count of patchable external vulns
         self.unpatchable_vulnerabilities = defaultdict(int)  # severity -> count of unpatchable external vulns
         self.secrets = {"exposed": [], "protected": []}
@@ -112,10 +113,46 @@ class SecurityAuditor:
                             # Check if there's a fix available
                             # fixAvailable can be a boolean or an object with upgrade info
                             fix_available = vuln_info.get("fixAvailable", False)
+
+                            # Extract CVE and description info
+                            via = vuln_info.get("via", [])
+                            cve_id = None
+                            cve_description = None
+
+                            if isinstance(via, list) and len(via) > 0:
+                                first_via = via[0]
+                                if isinstance(first_via, dict):
+                                    cve_id = first_via.get("url", "").split("/")[-1] if first_via.get("url") else None
+                                    cve_description = first_via.get("title", package_name)
+                                else:
+                                    cve_description = first_via
+
+                            # Store detailed vulnerability info
                             if fix_available:
                                 self.patchable_vulnerabilities[severity] += 1
+                                fix_info = fix_available if isinstance(fix_available, dict) else {"name": package_name}
+                                upgrade_version = fix_info.get("version", "latest")
+
+                                self.dependency_findings[severity].append({
+                                    "package": package_name,
+                                    "cve": cve_id,
+                                    "title": cve_description or package_name,
+                                    "current_version": vuln_info.get("range", "unknown"),
+                                    "upgrade_to": upgrade_version,
+                                    "is_major_upgrade": fix_info.get("isSemVerMajor", False),
+                                    "location": str(package_dir.relative_to(self.project_path))
+                                })
                             else:
                                 self.unpatchable_vulnerabilities[severity] += 1
+                                self.dependency_findings[severity].append({
+                                    "package": package_name,
+                                    "cve": cve_id,
+                                    "title": cve_description or package_name,
+                                    "current_version": vuln_info.get("range", "unknown"),
+                                    "upgrade_to": None,
+                                    "is_major_upgrade": False,
+                                    "location": str(package_dir.relative_to(self.project_path))
+                                })
                     except json.JSONDecodeError:
                         pass
             except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -457,6 +494,7 @@ class SecurityAuditor:
             "scan_time": self.scan_time.isoformat(),
             "findings": dict(self.findings),
             "external_findings": dict(self.external_findings),
+            "dependency_findings": dict(self.dependency_findings),
             "secrets": self.secrets,
             "summary": {
                 "critical": len(self.findings.get("critical", [])),
@@ -541,35 +579,73 @@ class SecurityAuditor:
 
 """
 
-        # Critical findings
-        if results["findings"].get("critical"):
-            md += "## 🔴 Critical Findings\n\n"
-            for finding in results["findings"]["critical"]:
-                md += f"### {finding['name']}\n"
-                md += f"**File:** `{finding['file']}`\n\n"
-                md += f"**Issue:** {finding['message']}\n\n"
-                md += f"**Fix:** {finding['fix']}\n\n"
+        # ============================================================================
+        # CATEGORY 1: CUSTOM CODE — Issues you authored and can fix directly
+        # ============================================================================
+        custom_findings = results["findings"]
+        if any(custom_findings.get(sev, []) for sev in ["critical", "high", "medium", "low"]):
+            md += "## Custom Code — Issues you authored and can fix directly\n\n"
 
-        # High findings
-        if results["findings"].get("high"):
-            md += "## 🟠 High Severity Findings\n\n"
-            for finding in results["findings"]["high"]:
-                md += f"### {finding['name']}\n"
-                md += f"**File:** `{finding['file']}`\n\n"
-                md += f"**Issue:** {finding['message']}\n\n"
-                md += f"**Fix:** {finding['fix']}\n\n"
+            for severity, emoji in [("critical", "🔴"), ("high", "🟠"), ("medium", "🟡"), ("low", "🔵")]:
+                findings = custom_findings.get(severity, [])
+                if findings:
+                    md += f"### {emoji} {severity.upper()}\n\n"
+                    for finding in findings:
+                        md += f"**{finding['name']}**\n"
+                        md += f"- **File:** `{finding['file']}`\n"
+                        md += f"- **Issue:** {finding['message']}\n"
+                        md += f"- **How to Fix:** {finding['fix']}\n\n"
 
-        # Medium findings
-        if results["findings"].get("medium"):
-            md += "## 🟡 Medium Severity Findings\n\n"
-            for finding in results["findings"]["medium"]:
-                md += f"- **{finding['name']}** (`{finding['file']}`): {finding['message']}\n"
+        # ============================================================================
+        # CATEGORY 2: EXTERNAL CODE — Patterns in external/minified code
+        # ============================================================================
+        external_findings = results["external_findings"]
+        if any(external_findings.get(sev, []) for sev in ["critical", "high", "medium", "low"]):
+            md += "## External Code — Patterns in external, third-party, or minified code (cannot be modified)\n\n"
 
-        # Low findings
-        if results["findings"].get("low"):
-            md += "## 🔵 Low Severity Findings\n\n"
-            for finding in results["findings"]["low"]:
-                md += f"- **{finding['name']}** (`{finding['file']}`): {finding['message']}\n"
+            for severity, emoji in [("critical", "🔴"), ("high", "🟠"), ("medium", "🟡"), ("low", "🔵")]:
+                findings = external_findings.get(severity, [])
+                if findings:
+                    md += f"### {emoji} {severity.upper()}\n\n"
+                    for finding in findings:
+                        md += f"**{finding['name']}**\n"
+                        md += f"- **File:** `{finding['file']}`\n"
+                        md += f"- **Issue:** {finding['message']}\n"
+                        md += f"- **Why No Fix:** This issue is in external code/libraries that you don't control. Consider if upgrading the library to a newer version resolves this.\n\n"
+
+        # ============================================================================
+        # CATEGORY 3: DEPENDENCIES — Vulnerabilities in npm/pip packages
+        # ============================================================================
+        dep_findings = results.get("dependency_findings", {})
+        if any(dep_findings.get(sev, []) for sev in ["critical", "high", "medium", "low"]):
+            md += "## Dependencies — Vulnerabilities in npm, pip, or other package dependencies (fixed by version upgrades)\n\n"
+
+            for severity, emoji in [("critical", "🔴"), ("high", "🟠"), ("medium", "🟡"), ("low", "🔵")]:
+                findings = dep_findings.get(severity, [])
+                if findings:
+                    md += f"### {emoji} {severity.upper()}\n\n"
+                    for finding in findings:
+                        package = finding.get("package", "Unknown")
+                        cve = finding.get("cve", "")
+                        title = finding.get("title", package)
+                        location = finding.get("location", "")
+                        upgrade_to = finding.get("upgrade_to")
+                        is_major = finding.get("is_major_upgrade", False)
+
+                        # Build CVE reference
+                        cve_ref = f" ({cve})" if cve else ""
+
+                        md += f"**{package}** {title}{cve_ref}\n"
+                        md += f"- **Location:** `{location}/package.json`\n"
+
+                        if upgrade_to:
+                            major_note = " ⚠️ Major version upgrade" if is_major else ""
+                            md += f"- **Current:** {finding.get('current_version', 'unknown')}\n"
+                            md += f"- **Upgrade to:** `{upgrade_to}`{major_note}\n"
+                            md += f"- **How to Fix:** Run `npm upgrade {package}@{upgrade_to}` in the `{location}` directory, then `npm audit` to verify.\n\n"
+                        else:
+                            md += f"- **Current:** {finding.get('current_version', 'unknown')}\n"
+                            md += f"- **Status:** No patch available. Monitor for future updates.\n\n"
 
         # Secrets analysis
         md += "\n## 🔑 Secrets Analysis\n\n"
