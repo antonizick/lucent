@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from piper import PiperVoice
+from piper.config import SynthesisConfig
 
 
 @dataclass
@@ -34,6 +35,7 @@ class PiperManager:
         self._model_lock = threading.Lock()
         self._voice: PiperVoice | None = None
         self._current_name: str | None = None
+        self._speed: float = 1.0  # length_scale: < 1 faster, > 1 slower
         self._stats: dict = {
             "synthesis_count": 0,
             "total_audio_seconds": 0.0,
@@ -70,9 +72,10 @@ class PiperManager:
                 raise RuntimeError("No voice loaded")
 
             start = time.monotonic()
+            syn_config = SynthesisConfig(length_scale=self._speed) if self._speed != 1.0 else None
             wav_io = io.BytesIO()
             with wave.open(wav_io, "wb") as wav_file:
-                self._voice.synthesize_wav(text, wav_file)
+                self._voice.synthesize_wav(text, wav_file, syn_config=syn_config)
             elapsed_ms = (time.monotonic() - start) * 1000
             wav_bytes = wav_io.getvalue()
 
@@ -151,11 +154,20 @@ class PiperManager:
     def current_name(self) -> str | None:
         return self._current_name
 
+    @property
+    def speed(self) -> float:
+        return self._speed
+
+    @speed.setter
+    def speed(self, value: float) -> None:
+        self._speed = max(0.25, min(4.0, float(value)))
+
     def get_stats(self) -> dict:
         return {
             "voice": self._current_name,
             "sample_rate": self.sample_rate,
             "loaded": self.is_loaded,
+            "speed": self._speed,
             "synthesis_count": self._stats["synthesis_count"],
             "total_audio_seconds": round(self._stats["total_audio_seconds"], 1),
             "mean_synthesis_ms": round(self._stats["mean_synthesis_ms"], 0),

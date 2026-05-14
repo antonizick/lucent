@@ -11,6 +11,8 @@ const voicePanelLabel = document.getElementById('voicePanelLabel');
 const logContent = document.getElementById('logContent');
 const servicesList = document.getElementById('servicesList');
 const refreshTimer = document.getElementById('refreshTimer');
+const speedSlider = document.getElementById('speedSlider');
+const speedValue = document.getElementById('speedValue');
 
 // State
 let currentVoice = null;
@@ -82,6 +84,39 @@ async function loadVoices() {
 }
 
 loadVoices();
+
+// Speed control — init from server, persist on change
+async function initSpeed() {
+    try {
+        const resp = await fetch('/vox/status');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (typeof data.speed === 'number') {
+            speedSlider.value = data.speed;
+            speedValue.textContent = data.speed.toFixed(2) + '×';
+        }
+    } catch (e) { /* server not ready yet */ }
+}
+
+let speedDebounce = null;
+speedSlider.addEventListener('input', (e) => {
+    const val = parseFloat(e.target.value);
+    speedValue.textContent = val.toFixed(2) + '×';
+    clearTimeout(speedDebounce);
+    speedDebounce = setTimeout(async () => {
+        try {
+            await fetch('/vox/speed', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ speed: val }),
+            });
+        } catch (err) {
+            console.warn('Speed update failed:', err);
+        }
+    }, 300);
+});
+
+initSpeed();
 
 // Voice selection change — switch server voice if it's a Piper voice
 voiceSelect.addEventListener('change', async (e) => {

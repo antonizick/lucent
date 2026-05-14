@@ -52,7 +52,7 @@ def load_voice_config() -> dict:
             return json.loads(VOICE_CONFIG_PATH.read_text())
         except Exception:
             pass
-    return {"avatar_voices": {}, "default_voice": DEFAULT_VOICE}
+    return {"avatar_voices": {}, "default_voice": DEFAULT_VOICE, "speed": 1.0}
 
 
 def save_voice_config(config: dict) -> None:
@@ -144,8 +144,12 @@ async def lifespan(app: FastAPI):
     if result.get("status") == "success":
         logger.info(f"Monthly compression completed: {result}")
     if PIPER_AVAILABLE:
-        loaded = piper.load_voice(DEFAULT_VOICE)
-        logger.info(f"Piper TTS: {'loaded ' + DEFAULT_VOICE if loaded else 'voice load FAILED'}")
+        cfg = load_voice_config()
+        startup_voice = cfg.get("default_voice", DEFAULT_VOICE)
+        loaded = piper.load_voice(startup_voice)
+        logger.info(f"Piper TTS: {'loaded ' + startup_voice if loaded else 'voice load FAILED'}")
+        piper.speed = cfg.get("speed", 1.0)
+        logger.info(f"Piper TTS: speed set to {piper.speed}")
     yield
     if PIPER_AVAILABLE and piper:
         piper.unload()
@@ -1273,6 +1277,10 @@ class VoiceSwitchRequest(BaseModel):
     voice: str
 
 
+class VoiceSpeedRequest(BaseModel):
+    speed: float
+
+
 class VoiceConfigUpdateRequest(BaseModel):
     avatar: str
     voice: str
@@ -1355,6 +1363,20 @@ async def vox_status():
     if not PIPER_AVAILABLE:
         return {"loaded": False, "error": "Piper TTS unavailable"}
     return piper.get_stats()
+
+
+@app.post("/vox/speed")
+async def vox_set_speed(request: VoiceSpeedRequest):
+    """Set the synthesis speed (length_scale). Persisted to voice_config.json."""
+    if not PIPER_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Piper TTS unavailable")
+    if not (0.25 <= request.speed <= 4.0):
+        raise HTTPException(status_code=400, detail="Speed must be between 0.25 and 4.0")
+    piper.speed = request.speed
+    config = load_voice_config()
+    config["speed"] = piper.speed
+    save_voice_config(config)
+    return {"status": "ok", "speed": piper.speed}
 
 
 @app.post("/vox/speak")
