@@ -508,6 +508,97 @@ async def services_health():
 
     return {"services": services}
 
+@app.get("/security/status")
+async def security_status():
+    """Get latest security audit status with color coding."""
+    lucent_root = Path(__file__).parent.parent
+    audits_dir = lucent_root / "memory" / "security-audits"
+
+    # Find the most recent audit report
+    if not audits_dir.exists():
+        return {
+            "status": "unknown",
+            "color": "gray",
+            "summary": "No audits found",
+            "critical": 0,
+            "high": 0,
+            "medium": 0
+        }
+
+    latest_report = None
+    latest_time = None
+
+    for date_dir in audits_dir.iterdir():
+        if date_dir.is_dir():
+            for report_file in date_dir.glob("*.md"):
+                mtime = report_file.stat().st_mtime
+                if latest_time is None or mtime > latest_time:
+                    latest_time = mtime
+                    latest_report = report_file
+
+    if not latest_report:
+        return {
+            "status": "unknown",
+            "color": "gray",
+            "summary": "No audits found",
+            "critical": 0,
+            "high": 0,
+            "medium": 0
+        }
+
+    try:
+        content = latest_report.read_text()
+
+        # Parse counts from report
+        critical = len(re.findall(r'^### .+$', content, re.MULTILINE & re.DOTALL)) if "## 🔴 Critical" in content else 0
+        high = len(re.findall(r'(?<=## 🟠 High).*?(?=## 🟡|## 🔵|## 🔑|$)', content, re.DOTALL))
+        medium = len(re.findall(r'(?<=## 🟡 Medium).*?(?=## 🔵|## 🔑|$)', content, re.DOTALL))
+
+        # Better parsing: extract counts from summary section
+        summary_match = re.search(r'- 🔴 \*\*Critical:\*\* (\d+).*?- 🟠 \*\*High:\*\* (\d+).*?- 🟡 \*\*Medium:\*\* (\d+)', content, re.DOTALL)
+        if summary_match:
+            critical = int(summary_match.group(1))
+            high = int(summary_match.group(2))
+            medium = int(summary_match.group(3))
+
+        # Determine status and color
+        if critical > 0:
+            status = "Critical"
+            color = "red"
+            summary_text = f"🔴 {critical} critical issue{'s' if critical != 1 else ''}"
+        elif high > 0:
+            status = "High Risk"
+            color = "red"
+            summary_text = f"🔴 {high} high severity issue{'s' if high != 1 else ''}"
+        elif medium > 0:
+            status = "Medium Risk"
+            color = "yellow"
+            summary_text = f"🟡 {medium} medium severity issue{'s' if medium != 1 else ''}"
+        else:
+            status = "Secure"
+            color = "green"
+            summary_text = "🟢 All clear"
+
+        return {
+            "status": status,
+            "color": color,
+            "summary": summary_text,
+            "critical": critical,
+            "high": high,
+            "medium": medium,
+            "report_path": str(latest_report.relative_to(lucent_root))
+        }
+    except Exception as e:
+        logger.error(f"Error parsing security report: {e}")
+        return {
+            "status": "error",
+            "color": "gray",
+            "summary": "Error reading audit",
+            "critical": 0,
+            "high": 0,
+            "medium": 0
+        }
+
 def get_last_commit_time(repo_path: Path) -> Optional[dict]:
     """Get last commit time and info for a git repository."""
     try:

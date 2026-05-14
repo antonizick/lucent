@@ -472,6 +472,40 @@ const serviceDescriptions = {
 // Render services list
 function renderServices(services) {
     servicesList.innerHTML = '';
+
+    // Add security status first (with dedicated ID for updates)
+    const securityItem = document.createElement('div');
+    securityItem.id = 'securityStatusItem';
+    securityItem.className = 'service-item security-gray';
+
+    const securityDot = document.createElement('span');
+    securityDot.className = 'service-dot security-gray';
+
+    const securityName = document.createElement('span');
+    securityName.className = 'service-name';
+    securityName.textContent = 'Security: Loading...';
+
+    securityItem.appendChild(securityDot);
+    securityItem.appendChild(securityName);
+    servicesList.appendChild(securityItem);
+
+    securityItem.addEventListener('mouseenter', () => {
+        setTimeout(() => {
+            const rect = securityItem.getBoundingClientRect();
+            const tooltipWidth = 500;
+            const padding = 10;
+
+            if (rect.left < tooltipWidth + padding) {
+                securityItem.classList.add('tooltip-right');
+                securityItem.classList.remove('tooltip-left');
+            } else {
+                securityItem.classList.add('tooltip-left');
+                securityItem.classList.remove('tooltip-right');
+            }
+        }, 0);
+    });
+
+    // Add service items
     services.forEach(service => {
         const item = document.createElement('div');
         item.className = `service-item ${service.status}`;
@@ -508,10 +542,39 @@ function renderServices(services) {
     });
 }
 
+// Poll for security status
+async function pollSecurityStatus() {
+    try {
+        const response = await fetch('/security/status');
+        const data = await response.json();
+        updateSecurityStatus(data);
+    } catch (error) {
+        console.error('Error polling security status:', error);
+    }
+}
+
+// Update security status display
+function updateSecurityStatus(data) {
+    const securityItem = document.getElementById('securityStatusItem');
+    if (!securityItem) return;
+
+    // Update existing item or create new one
+    const dot = securityItem.querySelector('.service-dot');
+    const name = securityItem.querySelector('.service-name');
+
+    if (dot && name) {
+        dot.className = `service-dot security-${data.color}`;
+        name.textContent = data.summary;
+        securityItem.setAttribute('data-description', `Security: ${data.status} - Critical: ${data.critical}, High: ${data.high}, Medium: ${data.medium}`);
+    }
+}
+
 // Set up polling for service health
 function setupServiceListener() {
     pollServiceHealth();
+    pollSecurityStatus();
     setInterval(pollServiceHealth, 10000);
+    setInterval(pollSecurityStatus, 30000);
 }
 
 // Backup status polling

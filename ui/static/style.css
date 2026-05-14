@@ -622,6 +622,27 @@ body {
     box-shadow: 0 0 8px rgba(255, 0, 0, 0.6), inset 0 0 4px rgba(255, 255, 255, 0.1);
 }
 
+/* Security status dot states */
+.service-dot.security-green {
+    background-color: #00ff00;
+    box-shadow: 0 0 8px rgba(0, 255, 0, 0.6), inset 0 0 4px rgba(255, 255, 255, 0.3);
+}
+
+.service-dot.security-yellow {
+    background-color: #ffff00;
+    box-shadow: 0 0 8px rgba(255, 255, 0, 0.6), inset 0 0 4px rgba(255, 255, 255, 0.3);
+}
+
+.service-dot.security-red {
+    background-color: #ff0000;
+    box-shadow: 0 0 8px rgba(255, 0, 0, 0.6), inset 0 0 4px rgba(255, 255, 255, 0.1);
+}
+
+.service-dot.security-gray {
+    background-color: #808080;
+    box-shadow: 0 0 8px rgba(128, 128, 128, 0.6), inset 0 0 4px rgba(255, 255, 255, 0.1);
+}
+
 .service-item.online {
     color: var(--neon-cyan);
 }
