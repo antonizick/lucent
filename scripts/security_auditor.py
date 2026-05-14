@@ -485,36 +485,38 @@ class SecurityAuditor:
         results = self.get_results()
         summary = results["summary"]
 
-        # Build summary with external library notation and patch status
-        def build_external_note(severity):
-            external_count = summary[f'{severity}_external']
-            patchable = summary[f'{severity}_patchable']
-            unpatchable = summary[f'{severity}_unpatchable']
+        # Build summary with clear three-category breakdown
+        def build_vulnerability_summary(severity):
+            custom = summary[f'{severity}']
+            external_code = summary[f'{severity}_external']
+            patchable_deps = summary[f'{severity}_patchable']
+            unpatchable_deps = summary[f'{severity}_unpatchable']
 
-            if external_count == 0 and patchable == 0 and unpatchable == 0:
+            if custom == 0 and external_code == 0 and patchable_deps == 0 and unpatchable_deps == 0:
                 return ""
 
             parts = []
 
-            # Add code pattern vulnerabilities in external libraries
-            if external_count > 0:
-                parts.append(f"{external_count} in external code/libraries")
+            # Custom code (your responsibility)
+            if custom > 0:
+                parts.append(f"{custom} custom code")
 
-            # Add npm/pip audit vulnerabilities
-            if patchable > 0 or unpatchable > 0:
-                patch_parts = []
-                if patchable > 0:
-                    patch_parts.append(f"{patchable} upgradeable")
-                if unpatchable > 0:
-                    patch_parts.append(f"{unpatchable} no patch")
-                parts.append(f"dependencies: {', '.join(patch_parts)}")
+            # External code (cannot fix)
+            if external_code > 0:
+                parts.append(f"{external_code} external code (unfixable)")
+
+            # Dependencies (can fix by upgrading)
+            if patchable_deps > 0:
+                parts.append(f"{patchable_deps} deps (upgradeable)")
+            if unpatchable_deps > 0:
+                parts.append(f"{unpatchable_deps} deps (no patch)")
 
             return f" ({'; '.join(parts)})"
 
-        critical_note = build_external_note('critical')
-        high_note = build_external_note('high')
-        medium_note = build_external_note('medium')
-        low_note = build_external_note('low')
+        critical_note = build_vulnerability_summary('critical')
+        high_note = build_vulnerability_summary('high')
+        medium_note = build_vulnerability_summary('medium')
+        low_note = build_vulnerability_summary('low')
 
         md = f"""# Security Audit: {self.project_name}
 
@@ -530,6 +532,12 @@ class SecurityAuditor:
 - 🔵 **Low:** {summary['low']}{low_note}
 - 🔑 **Secret References Found:** {summary['exposed_secrets']} (code references & patterns, not actual secrets)
 - 🔒 **Protected Secrets:** {summary['protected_secrets']} (properly .gitignored)
+
+## Vulnerability Categories
+
+**Custom Code** — Issues you authored and can fix directly
+**External Code** — Patterns in external/minified code (cannot modify)
+**Dependencies** — Vulnerabilities in npm/pip packages (fix by upgrading versions)
 
 """
 
