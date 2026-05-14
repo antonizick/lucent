@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import logging
 import requests
@@ -548,18 +549,21 @@ async def security_status():
 
     try:
         content = latest_report.read_text()
+        logger.info(f"Reading security report: {latest_report.name}")
 
-        # Parse counts from report
-        critical = len(re.findall(r'^### .+$', content, re.MULTILINE & re.DOTALL)) if "## 🔴 Critical" in content else 0
-        high = len(re.findall(r'(?<=## 🟠 High).*?(?=## 🟡|## 🔵|## 🔑|$)', content, re.DOTALL))
-        medium = len(re.findall(r'(?<=## 🟡 Medium).*?(?=## 🔵|## 🔑|$)', content, re.DOTALL))
+        # Extract counts from summary section - look for the pattern in the report
+        critical = 0
+        high = 0
+        medium = 0
 
-        # Better parsing: extract counts from summary section
-        summary_match = re.search(r'- 🔴 \*\*Critical:\*\* (\d+).*?- 🟠 \*\*High:\*\* (\d+).*?- 🟡 \*\*Medium:\*\* (\d+)', content, re.DOTALL)
+        summary_match = re.search(r'- 🔴 \*\*Critical:\*\* (\d+)\s*\n- 🟠 \*\*High:\*\* (\d+)\s*\n- 🟡 \*\*Medium:\*\* (\d+)', content)
         if summary_match:
             critical = int(summary_match.group(1))
             high = int(summary_match.group(2))
             medium = int(summary_match.group(3))
+            logger.info(f"Security status: C={critical} H={high} M={medium}")
+        else:
+            logger.warning("Regex pattern not matched in security report")
 
         # Determine status and color
         if critical > 0:
@@ -589,11 +593,13 @@ async def security_status():
             "report_path": str(latest_report.relative_to(lucent_root))
         }
     except Exception as e:
+        import traceback
         logger.error(f"Error parsing security report: {e}")
+        logger.error(traceback.format_exc())
         return {
             "status": "error",
             "color": "gray",
-            "summary": "Error reading audit",
+            "summary": f"Error: {str(e)[:50]}",
             "critical": 0,
             "high": 0,
             "medium": 0
