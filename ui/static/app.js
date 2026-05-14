@@ -551,6 +551,20 @@ function updateBackupStatus(data) {
 
     lucentDot.className = `service-dot ${lucent.statusClass}`;
     memoryDot.className = `service-dot ${memory.statusClass}`;
+
+    // Set item color based on status (matching service-item styling)
+    const lucentItem = lucentDot.closest('.service-item');
+    const memoryItem = memoryDot.closest('.service-item');
+
+    if (lucentItem) {
+        lucentItem.classList.toggle('online', lucent.statusClass === 'online');
+        lucentItem.classList.toggle('offline', lucent.statusClass === 'offline');
+    }
+
+    if (memoryItem) {
+        memoryItem.classList.toggle('online', memory.statusClass === 'online');
+        memoryItem.classList.toggle('offline', memory.statusClass === 'offline');
+    }
 }
 
 function setupBackupListener() {
