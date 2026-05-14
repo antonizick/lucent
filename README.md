@@ -387,16 +387,22 @@ python discord_test_client.py
 
 #### **Discord Message Logger**
 
-**Purpose:** Human-readable + machine-readable full message exchange logging for debugging and auditing.
+**Purpose:** Full bidirectional Discord message exchange logging for debugging, auditing, and compliance.
 
 **Usage:**
 ```bash
 python discord_message_logger.py
 ```
 
-**Log Locations:**
-- Human-readable: `/tmp/discord_messages/message_exchange.log`
-- Machine-readable (JSON): `/tmp/discord_messages/messages.jsonl`
+**Log Locations** (moved to memory folder for automatic hourly backup):
+- Human-readable: `memory/logs/discord/message_exchange.log`
+- Machine-readable (JSON): `memory/logs/discord/messages.jsonl`
+
+**What's Logged:**
+- All incoming user messages (author, content, timestamp)
+- All outgoing Lucent responses (content, reactions, search_used flag)
+- System events (logger startup/ready)
+- Discord metadata (message IDs, channel, reactions)
 
 **Message Exchange Log Format:**
 ```
@@ -412,7 +418,7 @@ Content: What's the weather tomorrow?
 Message ID: 1234567890
 Author: Lucent
 Channel: lucent-commands
-Response: The weather tomorrow will be partly cloudy...
+Content: The weather tomorrow will be partly cloudy...
 Reactions: 📰
 Search Used: true
 ```
@@ -420,19 +426,27 @@ Search Used: true
 **JSON Log Format (line-delimited):**
 ```json
 {"timestamp": "2026-05-13T14:25:30.123456", "direction": "RECEIVED", "message_id": "1234567890", "author": "nick", "content": "What's the weather tomorrow?"}
-{"timestamp": "2026-05-13T14:25:45.654321", "direction": "SENT", "message_id": "1234567890", "response": "The weather tomorrow...", "search_used": true, "reactions": ["📰"]}
+{"timestamp": "2026-05-13T14:25:45.654321", "direction": "SENT", "message_id": "1234567890", "content": "The weather tomorrow...", "search_used": true, "reactions": ["📰"]}
 ```
+
+**Backup & Archival:**
+- **Daily backup:** Included in hourly memory folder backup (every hour at :00)
+- **Monthly rotation:** Logs older than 30 days gzipped to `memory/archive/discord/YYYY-MM/`
+- **Retention:** Recent logs stay searchable in `memory/logs/discord/`, full history preserved in archive
 
 **Querying JSON Logs:**
 ```bash
 # Find all messages that used web search
-grep '"search_used": true' /tmp/discord_messages/messages.jsonl
+grep '"search_used": true' memory/logs/discord/messages.jsonl
 
 # Extract all responses
-jq 'select(.direction == "SENT") | .response' /tmp/discord_messages/messages.jsonl
+jq 'select(.direction == "SENT") | .content' memory/logs/discord/messages.jsonl
 
 # Find messages by author
-jq 'select(.author == "nick")' /tmp/discord_messages/messages.jsonl
+jq 'select(.author == "nick")' memory/logs/discord/messages.jsonl
+
+# Find messages older than 30 days (archived)
+zcat memory/archive/discord/2026-04/*.gz | grep -i "specific search term"
 ```
 
 #### **Server.py Activity Logging**
@@ -508,11 +522,14 @@ Lucent maintains a three-layer backup strategy ensuring zero data loss:
 - `scripts/backup_memory.py` — Main backup executor (3-attempt retry with exponential backoff)
 - `scripts/verify_backup_health.py` — Health check (GitHub connectivity, recent push verification)
 - `scripts/verify_startup.py` — Startup ritual and backup enforcement
+- `scripts/rotate_voice_logs.py` — Weekly voice activity log rotation and archival
+- `scripts/rotate_discord_logs.py` — Weekly Discord message log rotation and archival
 
-**Voice Log Backups:**
-- Voice activity logs moved from `ui/logs/` to `memory/logs/`
-- Included in hourly memory folder backups
-- Gzipped and archived monthly to `memory/archive/voice-box/YYYY-MM/`
+**Activity Log Backups:**
+- Voice activity logs in `memory/logs/` — Included in hourly backup, rotated monthly
+- Discord message logs in `memory/logs/discord/` — Included in hourly backup, rotated monthly
+- Both gzipped and archived to `memory/archive/` by month for long-term preservation
+- Both stay searchable in memory/logs/ for the recent 30 days
 
 **Failure Handling:**
 - Retry logic: 3 attempts with exponential backoff (1s, 2s, 4s)

@@ -16,9 +16,10 @@ DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 DISCORD_SERVER_ID = int(os.getenv("DISCORD_SERVER_ID", 0))
 DISCORD_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID", 0))
 
-# Logs directory
-LOG_DIR = Path("/tmp/discord_messages")
-LOG_DIR.mkdir(exist_ok=True)
+# Logs directory (moved to memory folder for automatic hourly backup)
+LUCENT_ROOT = Path(__file__).parent.parent
+LOG_DIR = LUCENT_ROOT / "memory" / "logs" / "discord"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
 MESSAGE_LOG = LOG_DIR / "message_exchange.log"
 MESSAGE_JSON = LOG_DIR / "messages.jsonl"
 
