@@ -536,10 +536,11 @@ function updateBackupStatus(data) {
     }
 
     function formatTime(backup) {
-        if (!backup) return { time: 'Unknown', status: 'red' };
-        const status = backup.status;
+        if (!backup) return { time: 'Unknown', statusClass: 'offline' };
         const timeStr = `${backup.time} ${backup.date_display} (${backup.hours_ago}h ago)`;
-        return { time: timeStr, status };
+        // Map backup status to service-dot classes
+        const statusClass = (backup.status === 'green') ? 'online' : 'offline';
+        return { time: timeStr, statusClass };
     }
 
     const lucent = formatTime(data.lucent);
@@ -548,8 +549,8 @@ function updateBackupStatus(data) {
     lucentTime.textContent = lucent.time;
     memoryTime.textContent = memory.time;
 
-    lucentDot.className = `backup-indicator ${lucent.status}`;
-    memoryDot.className = `backup-indicator ${memory.status}`;
+    lucentDot.className = `service-dot ${lucent.statusClass}`;
+    memoryDot.className = `service-dot ${memory.statusClass}`;
 }
 
 function setupBackupListener() {
