@@ -15,10 +15,11 @@
 5. [Making a Voice Available in the UI](#5-making-a-voice-available-in-the-ui)
 6. [Assigning a Voice to an Avatar](#6-assigning-a-voice-to-an-avatar)
 7. [Switching Voices at Runtime](#7-switching-voices-at-runtime)
-8. [Currently Installed Voices](#8-currently-installed-voices)
-9. [Removing a Voice](#9-removing-a-voice)
-10. [Troubleshooting](#10-troubleshooting)
-11. [Reference: URL Pattern for Downloads](#11-reference-url-pattern-for-downloads)
+8. [Adjusting Speech Speed](#8-adjusting-speech-speed)
+9. [Currently Installed Voices](#9-currently-installed-voices)
+10. [Removing a Voice](#10-removing-a-voice)
+11. [Troubleshooting](#11-troubleshooting)
+12. [Reference: URL Pattern for Downloads](#12-reference-url-pattern-for-downloads)
 
 ---
 
@@ -284,7 +285,57 @@ curl -s http://localhost:8001/vox/voices | python3 -m json.tool
 
 ---
 
-## 8. Currently Installed Voices
+## 8. Adjusting Speech Speed
+
+Speech speed is controlled by Piper's `length_scale` parameter. Lower values produce faster speech; higher values produce slower speech.
+
+### Via the browser UI
+
+Use the **SPD slider** in the Voice Box header (between the voice dropdown and the theme toggle). Drag left for faster, right for slower.
+
+- **Range:** 0.50 (roughly 2× faster) to 1.50 (noticeably slower)
+- **Default:** 1.00 (model's natural speed)
+- **Step:** 0.05
+
+When you move the mouse off the slider after adjusting, the setting is saved immediately and the avatar speaks a confirmation. The speed persists across page reloads and server restarts — it is written to `ui/voice_config.json`.
+
+### Via API
+
+**Set the speed:**
+```bash
+curl -X POST http://localhost:8001/vox/speed \
+  -H "Content-Type: application/json" \
+  -d '{"speed": 0.85}'
+```
+
+Response:
+```json
+{ "status": "ok", "speed": 0.85 }
+```
+
+**Check current speed:**
+```bash
+curl -s http://localhost:8001/vox/status | python3 -m json.tool
+```
+
+The `speed` field in the response shows the active `length_scale`.
+
+### Speed reference
+
+| `length_scale` | Effective speed | Character |
+|---|---|---|
+| `0.50` | ~2× faster | Very fast — may reduce clarity |
+| `0.75` | ~1.3× faster | Noticeably quick |
+| `0.85` | ~1.2× faster | Slightly brisk (good default for dense text) |
+| `1.00` | Normal | Model's natural pace |
+| `1.25` | ~0.8× | Slightly measured |
+| `1.50` | ~0.67× | Clearly slower — useful for complex content |
+
+Speed is global — it applies to all voices and avatars. Switching avatar or voice does not reset the speed.
+
+---
+
+## 9. Currently Installed Voices
 
 As of 2026-05-14, the following voices are installed in `ui/voices/`:
 
@@ -299,7 +350,7 @@ All are British English (`en_GB`).
 
 ---
 
-## 9. Removing a Voice
+## 10. Removing a Voice
 
 1. Delete the two files from `ui/voices/`:
    ```bash
@@ -319,7 +370,7 @@ All are British English (`en_GB`).
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 ### Voice appears in the dropdown but produces no sound
 
@@ -366,7 +417,7 @@ print('\n'.join(matches))
 
 ---
 
-## 11. Reference: URL Pattern for Downloads
+## 12. Reference: URL Pattern for Downloads
 
 The HuggingFace download URL follows this pattern:
 
