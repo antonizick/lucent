@@ -99,9 +99,12 @@ async function initSpeed() {
 }
 
 let speedDebounce = null;
+let speedDirty = false;
+
 speedSlider.addEventListener('input', (e) => {
     const val = parseFloat(e.target.value);
     speedValue.textContent = val.toFixed(2) + '×';
+    speedDirty = true;
     clearTimeout(speedDebounce);
     speedDebounce = setTimeout(async () => {
         try {
@@ -114,6 +117,27 @@ speedSlider.addEventListener('input', (e) => {
             console.warn('Speed update failed:', err);
         }
     }, 300);
+});
+
+speedSlider.addEventListener('mouseleave', async () => {
+    if (!speedDirty) return;
+    speedDirty = false;
+    clearTimeout(speedDebounce);
+    const val = parseFloat(speedSlider.value);
+    try {
+        await fetch('/vox/speed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ speed: val }),
+        });
+        await fetch('/speak', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: 'The new speech speed default parameter specifications have been received.' }),
+        });
+    } catch (err) {
+        console.warn('Speed confirmation failed:', err);
+    }
 });
 
 initSpeed();
