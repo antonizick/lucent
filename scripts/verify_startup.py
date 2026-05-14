@@ -18,6 +18,20 @@ import os
 from pathlib import Path
 from datetime import datetime, date, timedelta
 from typing import Optional, Tuple
+from datetime import datetime
+
+def log_to_daily_note(lucent_root: Path, message: str) -> None:
+    """Append a timestamped message to today's daily note for activity logging."""
+    lucent_root = Path(lucent_root)
+    today = date.today().strftime("%Y-%m-%d")
+    note_path = lucent_root / "memory" / f"{today}.md"
+    timestamp = datetime.now().strftime("%H:%M:%S")
+
+    try:
+        with open(note_path, "a") as f:
+            f.write(f"\n[{timestamp}] {message}")
+    except Exception:
+        pass  # Fail silently if logging fails
 
 def compute_context_hash(lucent_root: Path) -> str:
     """Compute hash of all context files to detect changes."""
@@ -193,7 +207,115 @@ def ensure_startup_ritual(
     compressed = not bool(yesterday_date)  # Mark as done if no compression needed
     write_checkpoint(lucent_root, current_hash, model_name, compressed_yesterday=compressed)
 
+    # Trigger memory backup at startup (fire-and-forget)
+    try:
+        import subprocess
+        subprocess.run(
+            ["python3", str(lucent_root / "scripts" / "backup_memory.py")],
+            capture_output=True,
+            timeout=10
+        )
+    except Exception:
+        pass  # Backup failure should not block startup
+
     return context, True, yesterday_date
+
+def archive_daily_note(lucent_root: Path, note_date: str) -> Tuple[bool, str]:
+    """
+    Archive a daily note to memory/archive/ BEFORE compression.
+    Logs archival action to daily note for activity trail.
+
+    Args:
+        lucent_root: Root of Lucent project
+        note_date: Date string (YYYY-MM-DD) of the note to archive
+
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    lucent_root = Path(lucent_root)
+    source = lucent_root / "memory" / f"{note_date}.md"
+    archive_dir = lucent_root / "memory" / "archive"
+    dest = archive_dir / f"{note_date}.md"
+
+    # Ensure source exists
+    if not source.exists():
+        return False, f"Source note not found: {source}"
+
+    # Create archive directory
+    try:
+        archive_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        return False, f"Failed to create archive directory: {e}"
+
+    # Copy file (fail if archive already exists to prevent overwrite)
+    try:
+        if dest.exists():
+            return False, f"Archive already exists for {note_date} — skipping to prevent data loss"
+        source_size = len(source.read_text().splitlines())
+        dest.write_text(source.read_text())
+        message = f"✓ Archived {note_date}.md → memory/archive/ ({source_size} lines)"
+        log_to_daily_note(lucent_root, f"Archive: {note_date}.md ({source_size} lines) → memory/archive/")
+        return True, message
+    except Exception as e:
+        error_msg = f"Failed to archive note: {e}"
+        log_to_daily_note(lucent_root, f"Archive ERROR: {error_msg}")
+        return False, error_msg
+
+def cleanup_old_daily_notes(lucent_root: Path, keep_days: int = 7) -> Tuple[bool, str]:
+    """
+    Delete compressed daily notes older than keep_days from memory/ root.
+    Full versions are preserved in memory/archive/ — this only cleans the root folder.
+    Logs all deletions to daily note for audit trail.
+
+    Args:
+        lucent_root: Root of Lucent project
+        keep_days: Number of recent days to keep in root (default 7 for startup context)
+
+    Returns:
+        Tuple of (success: bool, message: str describing what was deleted)
+    """
+    lucent_root = Path(lucent_root)
+    memory_dir = lucent_root / "memory"
+
+    if not memory_dir.exists():
+        return False, "Memory directory not found"
+
+    # Calculate cutoff date
+    cutoff = date.today() - timedelta(days=keep_days)
+
+    deleted_count = 0
+    deleted_list = []
+
+    try:
+        # Find all YYYY-MM-DD.md files in memory root
+        for note_file in memory_dir.glob("????-??-??.md"):
+            try:
+                # Extract date from filename
+                file_date_str = note_file.stem
+                file_date = datetime.strptime(file_date_str, "%Y-%m-%d").date()
+
+                # Delete if older than cutoff
+                if file_date < cutoff:
+                    note_file.unlink()
+                    deleted_count += 1
+                    deleted_list.append(file_date_str)
+            except (ValueError, OSError):
+                # Skip files that don't match pattern or can't be deleted
+                continue
+
+        if deleted_count == 0:
+            message = f"✓ No cleanup needed (all notes within {keep_days} days)"
+            return True, message
+
+        message = f"✓ Deleted {deleted_count} old note(s) from memory/: {', '.join(sorted(deleted_list))} (full versions preserved in archive/)"
+        # Log cleanup to daily note
+        log_to_daily_note(lucent_root, f"Cleanup: {message}")
+        return True, message
+
+    except Exception as e:
+        error_msg = f"Cleanup failed: {e}"
+        log_to_daily_note(lucent_root, f"Cleanup ERROR: {error_msg}")
+        return False, error_msg
 
 def mark_compression_complete(lucent_root: Path) -> None:
     """
