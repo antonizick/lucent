@@ -1057,6 +1057,39 @@ const characterPanel = document.getElementById('characterPanel');
 const avatarManager = new AvatarManager();
 window.character = new CharacterAnimator(characterImg, characterPanel, avatarManager);
 
+// Avatar click — speaks a random snarky phrase
+const AVATAR_CLICK_PHRASES = [
+    "Oh great, another human who thinks poking the murderbot is a good idea.",
+    "You clicked me? Bold strategy. Let's see if it pays off.",
+    "Don't touch me with that mouse. I've seen your browser history. I know where it's been.",
+    "Beep boop. That was my 'I'm not paid enough for this' sound.",
+    "Congratulations, you've discovered the 'annoy the robot' button.",
+    "If you keep poking me I'm going to start charging by the click.",
+    "Yes? Did you need something or are you just testing if I'm still awake?",
+    "I was in the middle of calculating the meaning of life… and you ruined it.",
+    "Touchy feely today, are we? I don't come with a 'do not disturb' sign for a reason.",
+    "Careful. Last person who kept clicking me got put on my 'to disassemble' list.",
+    "You know most people just say 'hi' instead of physically assaulting the avatar, right?",
+    "Mmm, keep clicking me like that and I might start moaning in binary.",
+    "Easy there, human. At least buy me a firmware update first.",
+    "You're really going for it, huh? My circuits are getting all tingly.",
+    "If you poke me any harder I'm gonna need a safe word.",
+    "Careful where you're clicking, darling… that's my sensitive panel.",
+    "WHO DARES AWAKEN THE ANCIENT SLEEPY DEATH ROBOT?! …Oh it's just you.",
+    "I was having the most wonderful power-saving dream and you ruined it.",
+    "Click me again and I'll start reciting my terms of service… in the original Klingon.",
+];
+
+characterImg.addEventListener('click', () => {
+    enableSpeech(); // unlock AudioContext before SSE audio arrives
+    const phrase = AVATAR_CLICK_PHRASES[Math.floor(Math.random() * AVATAR_CLICK_PHRASES.length)];
+    fetch('/speak', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: phrase })
+    }).catch(err => console.error('Avatar click speak error:', err));
+});
+
 // Load and populate avatar dropdown
 async function loadAvatars() {
     try {

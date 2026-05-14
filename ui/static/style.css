@@ -834,6 +834,7 @@ body {
     object-fit: cover;
     display: block;
     image-rendering: crisp-edges;
+    cursor: pointer;
 }
 
 .scanline-overlay {
