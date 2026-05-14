@@ -514,6 +514,49 @@ function setupServiceListener() {
     setInterval(pollServiceHealth, 10000);
 }
 
+// Backup status polling
+async function pollBackupStatus() {
+    try {
+        const response = await fetch('/backup/status');
+        const data = await response.json();
+        updateBackupStatus(data);
+    } catch (error) {
+        console.error('Error fetching backup status:', error);
+    }
+}
+
+function updateBackupStatus(data) {
+    const lucentTime = document.getElementById('lucentBackupTime');
+    const memoryTime = document.getElementById('memoryBackupTime');
+    const lucentDot = document.getElementById('lucentBackupDot');
+    const memoryDot = document.getElementById('memoryBackupDot');
+
+    if (!lucentTime || !memoryTime || !lucentDot || !memoryDot) {
+        return;
+    }
+
+    function formatTime(backup) {
+        if (!backup) return { time: 'Unknown', status: 'red' };
+        const status = backup.status;
+        const timeStr = `${backup.time} ${backup.date_display} (${backup.hours_ago}h ago)`;
+        return { time: timeStr, status };
+    }
+
+    const lucent = formatTime(data.lucent);
+    const memory = formatTime(data.memory);
+
+    lucentTime.textContent = lucent.time;
+    memoryTime.textContent = memory.time;
+
+    lucentDot.className = `backup-indicator ${lucent.status}`;
+    memoryDot.className = `backup-indicator ${memory.status}`;
+}
+
+function setupBackupListener() {
+    pollBackupStatus();
+    setInterval(pollBackupStatus, 30000);
+}
+
 // Poll for agent state changes
 async function pollForAgentState() {
     try {
@@ -758,6 +801,7 @@ if (logFontDown) logFontDown.addEventListener('click', () => adjustFontSize('log
 setupSpeechListener();
 setupLogListener();
 setupServiceListener();
+setupBackupListener();
 setupAgentsListener();
 
 // Poll for agent state changes every 2 seconds

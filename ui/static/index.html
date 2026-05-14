@@ -77,6 +77,18 @@
 
                 <!-- Services Panel (Hidden by default) -->
                 <div class="services-panel" id="servicesPanel">
+                    <div class="backup-status">
+                        <div class="backup-status-label">Backup Status:</div>
+                        <div class="backup-row">
+                            <span class="backup-indicator" id="lucentBackupDot"></span>
+                            <span id="lucentBackupTime">Loading...</span>
+                        </div>
+                        <div class="backup-row">
+                            <span class="backup-indicator" id="memoryBackupDot"></span>
+                            <span id="memoryBackupTime">Loading...</span>
+                        </div>
+                    </div>
+                    <hr class="backup-divider">
                     <div class="panel-label">Services</div>
                     <div class="services-list" id="servicesList"></div>
                 </div>

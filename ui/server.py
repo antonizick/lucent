@@ -508,6 +508,104 @@ async def services_health():
 
     return {"services": services}
 
+def get_last_commit_time(repo_path: Path) -> Optional[dict]:
+    """Get last commit time and info for a git repository."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--git-dir"],
+            cwd=str(repo_path),
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode != 0:
+            return None
+
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%aI"],
+            cwd=str(repo_path),
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+
+        commit_timestamp_str = result.stdout.strip()
+
+        from datetime import datetime as dt
+        commit_dt = dt.fromisoformat(commit_timestamp_str)
+        now = dt.now(commit_dt.tzinfo)
+        hours_ago = (now - commit_dt).total_seconds() / 3600
+
+        if hours_ago < 2:
+            status = "green"
+        elif hours_ago < 4:
+            status = "yellow"
+        else:
+            status = "red"
+
+        today = date.today()
+        commit_date = commit_dt.date()
+
+        if commit_date == today:
+            date_display = "today"
+        elif commit_date == date.fromordinal(today.toordinal() - 1):
+            date_display = "yesterday"
+        else:
+            date_display = commit_date.strftime("%Y-%m-%d")
+
+        time_display = commit_dt.strftime("%H:%M")
+
+        return {
+            "time": time_display,
+            "date_display": date_display,
+            "hours_ago": round(hours_ago, 1),
+            "status": status,
+            "timestamp": commit_timestamp_str
+        }
+    except Exception as e:
+        logger.warning(f"Failed to get last commit time for {repo_path}: {e}")
+        return None
+
+@app.get("/backup/status")
+async def backup_status():
+    """Get backup status for both Lucent root and memory repositories."""
+    lucent_root = Path(__file__).parent.parent
+    memory_dir = lucent_root / "memory"
+
+    lucent_status = get_last_commit_time(lucent_root)
+    memory_status = get_last_commit_time(memory_dir)
+
+    return {
+        "lucent": lucent_status,
+        "memory": memory_status
+    }
+
+@app.post("/run-backup")
+async def run_backup():
+    """Trigger an immediate backup of the memory folder."""
+    try:
+        lucent_root = Path(__file__).parent.parent
+        backup_script = lucent_root / "scripts" / "backup_memory.py"
+
+        if not backup_script.exists():
+            logger.warning(f"Backup script not found: {backup_script}")
+            return {"status": "error", "message": "Backup script not found"}
+
+        subprocess.Popen(
+            ["python3", str(backup_script)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            cwd=str(lucent_root)
+        )
+
+        log_activity("Backup triggered via UI (automated warning response)")
+        return {"status": "success", "message": "Backup initiated"}
+    except Exception as e:
+        logger.error(f"Failed to trigger backup: {e}")
+        return {"status": "error", "message": str(e)}
+
 # Model management for Discord
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 DISCORD_MODEL_FILE = Path(__file__).parent / ".discord_model"

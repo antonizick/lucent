@@ -532,6 +532,57 @@ body {
     position: relative;
 }
 
+/* Backup Status */
+.backup-status {
+    padding-bottom: 10px;
+}
+
+.backup-status-label {
+    font-size: 11px;
+    color: var(--neon-cyan);
+    font-weight: bold;
+    display: block;
+    margin-bottom: 5px;
+}
+
+.backup-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-bottom: 3px;
+}
+
+.backup-indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.backup-indicator.green {
+    background-color: #00ff00;
+    box-shadow: 0 0 4px rgba(0, 255, 0, 0.5);
+}
+
+.backup-indicator.yellow {
+    background-color: #ffff00;
+    box-shadow: 0 0 4px rgba(255, 255, 0, 0.5);
+}
+
+.backup-indicator.red {
+    background-color: #ff0000;
+    box-shadow: 0 0 4px rgba(255, 0, 0, 0.5);
+}
+
+.backup-divider {
+    border: none;
+    border-top: 1px solid var(--neon-cyan);
+    opacity: 0.2;
+    margin: 8px 0;
+}
+
 /* Services Panel */
 .services-panel {
     display: none;
