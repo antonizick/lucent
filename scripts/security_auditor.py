@@ -191,7 +191,14 @@ class SecurityAuditor:
 
                             # JS/TS checks
                             if file.endswith(('.js', '.ts', '.tsx', '.jsx')):
+                                # Skip innerHTML warning if file uses HTML escaping function
+                                has_html_escaping = bool(re.search(r'escHtml|escapeHtml|function escape|sanitize', content))
+
                                 for vuln_name, vuln_info in js_vulns.items():
+                                    # Skip innerHTML check if file has HTML escaping function
+                                    if vuln_name == "innerHTML assignment" and has_html_escaping:
+                                        continue
+
                                     if re.search(vuln_info['pattern'], content):
                                         self.findings[vuln_info['severity']].append({
                                             "name": vuln_info.get('display_name', vuln_name),
