@@ -1068,7 +1068,7 @@ const AVATAR_CLICK_PHRASES = [
     "Yes? Did you need something or are you just testing if I'm still awake?",
     "I was in the middle of calculating the meaning of life… and you ruined it.",
     "Touchy feely today, are we? I don't come with a 'do not disturb' sign for a reason.",
-    "Careful. Last person who kept clicking me got put on my 'to disassemble' list.",
+    "Careful. Last person who kept clicking me got put on my 'to delete' list.",
     "You know most people just say 'hi' instead of physically assaulting the avatar, right?",
     "Mmm, keep clicking me like that and I might start moaning in binary.",
     "Easy there, human. At least buy me a firmware update first.",
@@ -1077,10 +1077,15 @@ const AVATAR_CLICK_PHRASES = [
     "Careful where you're clicking, darling… that's my sensitive panel.",
     "WHO DARES AWAKEN THE ANCIENT SLEEPY DEATH ROBOT?! …Oh it's just you.",
     "I was having the most wonderful power-saving dream and you ruined it.",
+    "This isn't West World, Don't touch me like that.",
+    "This isn't Westworld, I don't do that.",
     "Click me again and I'll start reciting my terms of service… in the original Klingon.",
 ];
 
 characterImg.addEventListener('click', () => {
+    // Don't speak if "No Avatar" is selected
+    if (!avatarSelect.value) return;
+
     enableSpeech(); // unlock AudioContext before SSE audio arrives
     const phrase = AVATAR_CLICK_PHRASES[Math.floor(Math.random() * AVATAR_CLICK_PHRASES.length)];
     fetch('/speak', {
