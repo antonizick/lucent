@@ -289,23 +289,29 @@ Lucent maintains a comprehensive multi-layer logging system for debugging, audit
 
 #### **Activity Log (Voice Box Speech History)**
 
-**Purpose:** Record every message sent to the Voice Box for voice/text synthesis.
+**Purpose:** Record every message sent to the Voice Box for voice/text synthesis and track all session events.
 
-**Location:** `ui/logs/activity_YYYY-MM-DD.log`
+**Location:** `memory/logs/activity_YYYY-MM-DD.log`
 
-**Content:** Timestamp + message text (one entry per `/speak` endpoint call)
+**Why in memory/:** Activity logs are stored in the memory folder so they're automatically backed up with the hourly memory backup system, ensuring no voice history is lost.
+
+**Content:** Timestamp + message text (one entry per `/speak` endpoint call) + session events (backup triggers, startup rituals, etc.)
 
 **Example:**
 ```
-[2026-05-13T14:23:45.123456] Welcome Nick, it's great to see you again
-[2026-05-13T14:24:12.654321] Weather forecast for Austin: Partly cloudy, 78°F
+[2026-05-13T14:23:45.123456] [voice_box] Welcome Nick, it's great to see you again
+[2026-05-13T14:24:12.654321] [voice_box] Weather forecast for Austin: Partly cloudy, 78°F
+[2026-05-13T19:50:43.000000] [voice_box] Backup triggered via UI (automated warning response)
 ```
 
 **Access:**
 - Web UI: `http://localhost:8001/activity-log-viewer` (auto-refreshing dashboard)
 - Direct: `curl http://localhost:8001/activity-log` (JSON response with full content)
 
-**Archival:** Compressed monthly to `ui/logs/archives/activity_YYYY-MM.tar.gz` on first request after month change.
+**Backup & Archival:**
+- **Daily backup:** Included in hourly memory folder backup (every hour at :00)
+- **Monthly rotation:** Logs older than 30 days gzipped to `memory/archive/voice-box/YYYY-MM/activity_YYYY-MM-DD.gz`
+- **Retention:** Recent logs stay searchable in `memory/logs/`, full history preserved in archive
 
 #### **Discord Monitor Logging**
 
