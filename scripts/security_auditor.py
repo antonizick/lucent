@@ -24,9 +24,23 @@ class SecurityAuditor:
         self.project_path = Path(project_path).resolve()
         self.project_name = self.project_path.name
         self.findings = defaultdict(list)  # severity -> list of findings
+        self.external_findings = defaultdict(list)  # severity -> list of external library findings
         self.secrets = {"exposed": [], "protected": []}
         self.gitignore_rules = set()
         self.scan_time = datetime.now()
+
+    def _is_external_library(self, file_path: str) -> bool:
+        """Check if a file is from an external library that shouldn't be modified."""
+        external_patterns = {
+            'node_modules/',
+            'vendor/',
+            '/min.js',  # Minified files
+            '/jquery-',
+            '/DataTables',
+            'idea/nxtm/DataTables/',
+            '.min.js',
+        }
+        return any(pattern in file_path for pattern in external_patterns)
 
     def run(self) -> Dict:
         """Execute full security audit"""
@@ -174,6 +188,9 @@ class SecurityAuditor:
                             content = f.read()
                             rel_path = str(filepath.relative_to(self.project_path))
 
+                            # Determine if this is an external library
+                            is_external = self._is_external_library(rel_path)
+
                             # Python checks
                             if file.endswith('.py'):
                                 for vuln_name, vuln_info in python_vulns.items():
@@ -182,12 +199,16 @@ class SecurityAuditor:
                                         continue
 
                                     if re.search(vuln_info['pattern'], content):
-                                        self.findings[vuln_info['severity']].append({
+                                        finding = {
                                             "name": vuln_info.get('display_name', vuln_name),
                                             "file": rel_path,
                                             "message": vuln_info['message'],
                                             "fix": vuln_info['fix']
-                                        })
+                                        }
+                                        if is_external:
+                                            self.external_findings[vuln_info['severity']].append(finding)
+                                        else:
+                                            self.findings[vuln_info['severity']].append(finding)
 
                             # JS/TS checks
                             if file.endswith(('.js', '.ts', '.tsx', '.jsx')):
@@ -200,12 +221,16 @@ class SecurityAuditor:
                                         continue
 
                                     if re.search(vuln_info['pattern'], content):
-                                        self.findings[vuln_info['severity']].append({
+                                        finding = {
                                             "name": vuln_info.get('display_name', vuln_name),
                                             "file": rel_path,
                                             "message": vuln_info['message'],
                                             "fix": vuln_info['fix']
-                                        })
+                                        }
+                                        if is_external:
+                                            self.external_findings[vuln_info['severity']].append(finding)
+                                        else:
+                                            self.findings[vuln_info['severity']].append(finding)
                     except Exception:
                         pass
 
@@ -320,12 +345,17 @@ class SecurityAuditor:
             "project_path": str(self.project_path),
             "scan_time": self.scan_time.isoformat(),
             "findings": dict(self.findings),
+            "external_findings": dict(self.external_findings),
             "secrets": self.secrets,
             "summary": {
                 "critical": len(self.findings.get("critical", [])),
+                "critical_external": len(self.external_findings.get("critical", [])),
                 "high": len(self.findings.get("high", [])),
+                "high_external": len(self.external_findings.get("high", [])),
                 "medium": len(self.findings.get("medium", [])),
+                "medium_external": len(self.external_findings.get("medium", [])),
                 "low": len(self.findings.get("low", [])),
+                "low_external": len(self.external_findings.get("low", [])),
                 "exposed_secrets": len(self.secrets["exposed"]),
                 "protected_secrets": len(self.secrets["protected"])
             }
@@ -336,6 +366,12 @@ class SecurityAuditor:
         results = self.get_results()
         summary = results["summary"]
 
+        # Build summary with external library notation
+        critical_note = f" ({summary['critical_external']} in external libraries)" if summary['critical_external'] > 0 else ""
+        high_note = f" ({summary['high_external']} in external libraries)" if summary['high_external'] > 0 else ""
+        medium_note = f" ({summary['medium_external']} in external libraries)" if summary['medium_external'] > 0 else ""
+        low_note = f" ({summary['low_external']} in external libraries)" if summary['low_external'] > 0 else ""
+
         md = f"""# Security Audit: {self.project_name}
 
 **Date:** {self.scan_time.strftime('%Y-%m-%d %H:%M:%S')}
@@ -344,10 +380,10 @@ class SecurityAuditor:
 
 ## Summary
 
-- 🔴 **Critical:** {summary['critical']}
-- 🟠 **High:** {summary['high']}
-- 🟡 **Medium:** {summary['medium']}
-- 🔵 **Low:** {summary['low']}
+- 🔴 **Critical:** {summary['critical']}{critical_note}
+- 🟠 **High:** {summary['high']}{high_note}
+- 🟡 **Medium:** {summary['medium']}{medium_note}
+- 🔵 **Low:** {summary['low']}{low_note}
 - 🔑 **Secret References Found:** {summary['exposed_secrets']} (code references & patterns, not actual secrets)
 - 🔒 **Protected Secrets:** {summary['protected_secrets']} (properly .gitignored)
 
