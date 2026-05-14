@@ -77,6 +77,26 @@
 
                 <!-- Services Panel (Hidden by default) -->
                 <div class="services-panel" id="servicesPanel">
+                    <!-- Backup Status Section -->
+                    <div class="backup-status-section">
+                        <div class="backup-status-title">Backup Status</div>
+                        <div class="backup-item">
+                            <span class="backup-label">Lucent Root:</span>
+                            <div class="backup-info">
+                                <span class="backup-indicator" id="lucentBackupDot"></span>
+                                <span class="backup-time" id="lucentBackupTime">Loading...</span>
+                            </div>
+                        </div>
+                        <div class="backup-item">
+                            <span class="backup-label">Memory Repo:</span>
+                            <div class="backup-info">
+                                <span class="backup-indicator" id="memoryBackupDot"></span>
+                                <span class="backup-time" id="memoryBackupTime">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="backup-divider"></div>
+
                     <div class="panel-label">Services</div>
                     <div class="services-list" id="servicesList"></div>
                 </div>

@@ -19,7 +19,7 @@
     --neon-glow-cyan: 0 0 15px rgba(0, 229, 255, 0.4), inset 0 0 30px rgba(0, 229, 255, 0.05);
     --neon-glow-red: 0 0 15px rgba(255, 0, 0, 0.4), inset 0 0 30px rgba(255, 0, 0, 0.05);
     --border: #00e5ff;
-    --max-animation-height: 120%;
+    --max-animation-height: 100%;
 }
 
 body.light-mode {
@@ -266,7 +266,7 @@ body {
     gap: 2px;
     align-items: flex-end;
     justify-content: center;
-    height: 60px;
+    height: 40px;
     width: 80%;
     margin: 0 auto;
     overflow: visible;
@@ -530,6 +530,81 @@ body {
     flex-direction: column;
     gap: 20px;
     position: relative;
+}
+
+/* Backup Status Section */
+.backup-status-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.backup-status-title {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    font-weight: bold;
+    color: var(--neon-cyan);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.backup-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+    gap: 10px;
+}
+
+.backup-label {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+
+.backup-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    justify-content: flex-end;
+}
+
+.backup-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.backup-indicator.green {
+    background-color: #00ff00;
+    box-shadow: 0 0 6px rgba(0, 255, 0, 0.6);
+}
+
+.backup-indicator.yellow {
+    background-color: #ffff00;
+    box-shadow: 0 0 6px rgba(255, 255, 0, 0.6);
+}
+
+.backup-indicator.red {
+    background-color: #ff0000;
+    box-shadow: 0 0 6px rgba(255, 0, 0, 0.6);
+}
+
+.backup-time {
+    color: var(--neon-cyan);
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+.backup-divider {
+    height: 1px;
+    background-color: var(--neon-cyan);
+    opacity: 0.3;
+    margin: 5px 0;
 }
 
 /* Services Panel */

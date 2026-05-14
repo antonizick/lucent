@@ -514,6 +514,99 @@ function setupServiceListener() {
     setInterval(pollServiceHealth, 10000);
 }
 
+// Track backup warning state for automated backup triggering
+let lastBackupWarningState = null;
+
+// Poll backup status from server
+async function pollBackupStatus() {
+    try {
+        const response = await fetch('/backup/status');
+        const data = await response.json();
+        renderBackupStatus(data);
+        checkBackupWarningState(data);
+    } catch (error) {
+        console.error('Error polling backup status:', error);
+    }
+}
+
+// Render backup status in the popup
+function renderBackupStatus(data) {
+    const lucentElement = document.getElementById('lucentBackupTime');
+    const memoryElement = document.getElementById('memoryBackupTime');
+    const lucentDot = document.getElementById('lucentBackupDot');
+    const memoryDot = document.getElementById('memoryBackupDot');
+
+    if (!lucentElement || !memoryElement || !lucentDot || !memoryDot) {
+        return;
+    }
+
+    // Helper to format backup time
+    function formatBackupTime(backup) {
+        if (!backup) {
+            return { text: 'Unknown', status: 'red' };
+        }
+        const timeStr = `${backup.time} ${backup.date_display} (${backup.hours_ago}h ago)`;
+        return { text: timeStr, status: backup.status };
+    }
+
+    const lucentStatus = formatBackupTime(data.lucent);
+    const memoryStatus = formatBackupTime(data.memory);
+
+    lucentElement.textContent = lucentStatus.text;
+    memoryElement.textContent = memoryStatus.text;
+
+    // Update dot colors
+    lucentDot.className = `backup-indicator ${lucentStatus.status}`;
+    memoryDot.className = `backup-indicator ${memoryStatus.status}`;
+}
+
+// Check if backup is in warning state and trigger automated backup if needed
+async function checkBackupWarningState(data) {
+    const isWarning = (data.memory && data.memory.status !== 'green') ||
+                      (data.lucent && data.lucent.status !== 'green');
+
+    if (isWarning && lastBackupWarningState !== true) {
+        // Transition from non-warning to warning state
+        lastBackupWarningState = true;
+
+        // Send warning notification via voice box
+        try {
+            const message = 'Warning: Backups are stale. Triggering automated backup now.';
+            await fetch('/speak', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: message })
+            });
+        } catch (e) {
+            console.error('Failed to send voice warning:', e);
+        }
+
+        // Trigger backup immediately
+        try {
+            const backupScript = '/home/nick/dev/lucent/scripts/backup_memory.py';
+            const response = await fetch('/run-backup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ script: backupScript })
+            });
+            console.log('Automated backup triggered:', response.status);
+        } catch (e) {
+            console.error('Failed to trigger automated backup:', e);
+        }
+    } else if (!isWarning && lastBackupWarningState === true) {
+        // Transition from warning to non-warning state
+        lastBackupWarningState = false;
+    } else if (!isWarning) {
+        lastBackupWarningState = false;
+    }
+}
+
+// Set up polling for backup status
+function setupBackupListener() {
+    pollBackupStatus();
+    setInterval(pollBackupStatus, 30000);  // Poll every 30 seconds
+}
+
 // Poll for agent state changes
 async function pollForAgentState() {
     try {
@@ -758,6 +851,7 @@ if (logFontDown) logFontDown.addEventListener('click', () => adjustFontSize('log
 setupSpeechListener();
 setupLogListener();
 setupServiceListener();
+setupBackupListener();
 setupAgentsListener();
 
 // Poll for agent state changes every 2 seconds
