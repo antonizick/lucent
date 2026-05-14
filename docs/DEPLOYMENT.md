@@ -21,9 +21,10 @@
 11. [OpenCode — Alternative Platform](#11-opencode--alternative-platform)
 12. [Docker & Open WebUI](#12-docker--open-webui)
 13. [Discord Integration](#13-discord-integration)
-14. [Port Reference](#14-port-reference)
-15. [Verification Checklist](#15-verification-checklist)
-16. [Troubleshooting](#16-troubleshooting)
+14. [Gibson Security Auditing](#14-gibson-security-auditing)
+15. [Port Reference](#15-port-reference)
+16. [Verification Checklist](#16-verification-checklist)
+17. [Troubleshooting](#17-troubleshooting)
 
 ---
 
@@ -962,7 +963,135 @@ Discord Channel
 
 ---
 
-## 14. Port Reference
+## 14. Gibson Security Auditing
+
+Gibson is a specialized security auditor agent for scanning code vulnerabilities. It categorizes findings by type (custom code, external libraries, dependencies) and provides actionable remediation guidance with exact upgrade commands.
+
+### 14.1 Security Scanning
+
+**Manual Audit:**
+```bash
+python3 scripts/run-security-audit.py /home/nick/dev/lucent
+```
+
+**Output:**
+- Markdown report: `memory/security-audits/YYYY-MM-DD/{project}-HH-MM-SS.md`
+- Voice summary with findings categorized by severity and type
+- JSON output for programmatic integration
+
+### 14.2 Vulnerability Categories
+
+Gibson detects and categorizes:
+
+1. **Custom Code** — Your responsibility to fix
+   - XSS vulnerabilities (innerHTML with untrusted data)
+   - Command injection (eval, exec)
+   - SQL injection patterns
+   - Missing CORS headers
+   - Hardcoded secrets
+
+2. **External Code** — Cannot be modified directly
+   - Vulnerabilities in minified/vendored libraries
+   - Recommends library upgrades as remediation
+
+3. **Dependencies** — Fixed by version upgrades
+   - CVE numbers and official titles
+   - Current version → upgrade version
+   - Exact npm/pip upgrade commands
+   - Major version upgrade warnings
+
+4. **Secrets** — Code reference visibility
+   - Flags environment variable references
+   - Validates .gitignore protection
+   - Clarifies: references ≠ exposed secrets
+
+### 14.3 Report Format
+
+Reports include three major sections with detailed findings:
+
+```
+# Security Audit: {project}
+
+--------------------------------------------------
+## Custom Code — Issues you authored and can fix directly
+
+### 🟠 HIGH / 🟡 MEDIUM
+- Finding name
+- Affected file(s)
+- Issue description
+- How to Fix: Specific remediation steps
+
+--------------------------------------------------
+## External Code — Patterns in third-party code
+
+### 🟠 HIGH
+- Finding name
+- Affected file(s)
+- Why No Fix: Explanation + upgrade guidance
+
+--------------------------------------------------
+## Dependencies — npm/pip vulnerabilities
+
+### 🔴 CRITICAL / 🟠 HIGH / 🟡 MEDIUM
+- Package name + CVE ID + official title
+- Location: package.json file
+- Current version → Upgrade to version (⚠️ Major warning if applicable)
+- How to Fix: `npm upgrade package@version` (exact command)
+
+--------------------------------------------------
+## 🔑 Secrets Analysis
+- Code references found (not actual secrets)
+- Protected secrets (.gitignore status)
+```
+
+### 14.4 Git Pre-Commit Integration
+
+Gibson integrates with git to block vulnerable commits:
+
+```bash
+# Automatically runs on commit attempt
+git commit -m "Code changes"
+
+# Behavior:
+- Critical vulns: BLOCK (override with --no-verify, not recommended)
+- High vulns: BLOCK (override with --no-verify)
+- Medium/Low: WARN + auto-proceed after 60 seconds
+```
+
+### 14.5 Voice Summary Format
+
+Gibson provides voice feedback with all findings:
+
+```
+"Gibson audit of lucent: 1 critical (1 fixable deps), 6 high (1 in code, 5 fixable deps), 
+4 medium (1 in code, 3 fixable deps) findings. Code issues: [list]. 
+3 secret reference patterns found (not actual secrets). Full report saved to security-audits folder."
+```
+
+### 14.6 Scheduling Regular Audits
+
+**Manual scheduling:**
+```bash
+# Weekly audit (add to crontab)
+0 2 * * 0 python3 /home/nick/dev/lucent/scripts/run-security-audit.py /home/nick/dev/lucent
+```
+
+**Output location:**
+All reports archived in: `memory/security-audits/YYYY-MM-DD/{project}-HH-MM-SS.md`
+
+### 14.7 Invoking Gibson Programmatically
+
+```bash
+# Via agent framework
+python3 scripts/lucent.py agent gibson "Audit /home/nick/dev/lucent"
+
+# Direct Python
+python3 scripts/run-security-audit.py /path/to/project
+```
+
+---
+
+## 15. Port Reference
 
 | Port | Service | Component |
 |------|---------|-----------|
@@ -973,7 +1102,7 @@ Discord Channel
 
 ---
 
-## 15. Verification Checklist
+## 16. Verification Checklist
 
 Run through this checklist after deployment to confirm everything is working.
 
@@ -1054,7 +1183,7 @@ Open a browser and navigate to:
 
 ---
 
-## 16. Troubleshooting
+## 17. Troubleshooting
 
 ### Voice Box Not Responding
 

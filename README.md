@@ -699,6 +699,157 @@ curl http://localhost:8001/services/health | jq .
 
 ---
 
+### Security Auditing (Gibson Agent)
+
+Gibson is a specialized security auditor agent that scans code for vulnerabilities, secrets exposure, and infrastructure security issues. It categorizes findings by type (custom code, external libraries, dependencies) and provides actionable remediation guidance.
+
+**Components:**
+- `agents/gibson-agent.md` — Agent personality and capabilities
+- `scripts/security_auditor.py` — Core scanning logic (400+ lines)
+- `scripts/run-security-audit.py` — Entry point for running audits
+- `scripts/pre-commit-security-hook.py` — Git pre-commit integration
+
+**Vulnerability Categories Detected:**
+1. **Custom Code** — Security issues you authored and can fix directly
+   - XSS vulnerabilities (innerHTML with untrusted data)
+   - Command injection (eval, exec in Python)
+   - SQL injection patterns
+   - Missing CORS headers on endpoints
+   - Hardcoded credentials or API keys
+
+2. **External Code** — Patterns in external/minified libraries (cannot be modified)
+   - Identifies vulnerabilities in dependency code
+   - Explains why no fix is possible (upgrade library instead)
+   - Guides toward dependency updates
+
+3. **Dependencies** — npm/pip package vulnerabilities with available patches
+   - CVE numbers and official titles
+   - Current vs. upgrade versions
+   - Major version upgrade warnings
+   - Exact npm/pip upgrade commands
+
+4. **Secrets** — Visibility into secret handling
+   - References to secrets in code (config files, env variables)
+   - Protected secrets (.gitignore validation)
+   - Clarifies: code references ≠ exposed secrets
+
+**Running an Audit:**
+```bash
+# Manual scan of a project
+python3 scripts/run-security-audit.py /path/to/project
+
+# Output:
+# 1. Markdown report: memory/security-audits/YYYY-MM-DD/{project}-HH-MM-SS.md
+# 2. JSON summary (to stdout)
+# 3. Voice summary with critical/high items listed first
+```
+
+**Report Structure:**
+```
+# Security Audit: {project}
+
+## Summary
+- Vulnerability counts by severity and category
+- Secret reference patterns found (code references)
+- Protected secrets (.gitignore status)
+
+## Vulnerability Categories
+
+--------------------------------------------------
+
+## Custom Code — Issues you authored and can fix directly
+
+### 🟠 HIGH
+- Finding title
+- File affected
+- Detailed issue description
+- How to Fix: Specific remediation steps
+
+### 🟡 MEDIUM
+[Similar format]
+
+--------------------------------------------------
+
+## External Code — Patterns in external, third-party, or minified code
+
+### 🟠 HIGH
+[External code findings with explanation of why no direct fix]
+
+--------------------------------------------------
+
+## Dependencies — npm, pip, or other package vulnerabilities
+
+### 🔴 CRITICAL
+- Package name + CVE/Advisory ID + official title
+- Location: package.json file
+- Current version → Upgrade to version (⚠️ Major version warning if applicable)
+- How to Fix: `npm upgrade package@version` (exact command)
+
+### 🟠 HIGH
+[Similar format]
+
+--------------------------------------------------
+
+## 🔑 Secrets Analysis
+- Code references found (not actual secrets)
+- Protected secrets (.gitignore validated)
+```
+
+**Voice Summary:**
+Gibson provides voice feedback with all findings categorized by severity and type:
+```
+"Gibson audit of lucent: 1 critical (1 fixable deps), 6 high (1 in code, 5 fixable deps), 
+4 medium (1 in code, 3 fixable deps) findings. Code issues: innerHTML assignment. 
+3 secret reference patterns found (not actual secrets). Full report saved to security-audits folder."
+```
+
+**Git Pre-Commit Integration:**
+```bash
+# Installed to .git/hooks/pre-commit (automatic on commit attempt)
+
+# Behavior:
+- Critical vulnerabilities: BLOCK push (requires explicit override: --no-verify)
+- High vulnerabilities: WARN + block (requires explicit override)
+- Medium/Low: WARN + auto-proceed after 60 seconds
+```
+
+**Example Workflow:**
+```bash
+# 1. Make changes to code
+git add changes.js
+
+# 2. Attempt commit (hook runs automatically)
+git commit -m "Fix feature X"
+
+# 3. If vulnerabilities found:
+[Gibson] Found 1 critical vulnerability in custom code (innerHTML)
+[Gibson] Critical issues must be fixed or overridden explicitly.
+[Gibson] Use: git commit --no-verify to override (not recommended)
+
+# 4. Fix the vulnerability or override
+# Fix: Replace innerHTML with safe createElement()
+# Then commit again
+
+git commit -m "Fix feature X + security: Replace innerHTML with createElement"
+```
+
+**Scheduling Audits:**
+```bash
+# One-off audit
+python3 scripts/run-security-audit.py /home/nick/dev/lucent
+
+# Result appears in memory/security-audits/ folder
+# Reports are archived and can be reviewed over time
+```
+
+**Integration with Claude Code / OpenCode:**
+```bash
+# Invoke Gibson directly via agent framework
+python3 scripts/lucent.py agent gibson "Audit /home/nick/dev/lucent"
+```
+
+---
+
 ### Multi-AI Platform Launcher
 
 The `ai-launcher.py` Python launcher provides a polished, interactive interface for launching Claude or OpenCode with your choice of AI model — Anthropic models (Opus, Sonnet, Haiku), local Ollama models, or OpenCode's free online models.
