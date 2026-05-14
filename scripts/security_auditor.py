@@ -584,7 +584,7 @@ class SecurityAuditor:
         # ============================================================================
         custom_findings = results["findings"]
         if any(custom_findings.get(sev, []) for sev in ["critical", "high", "medium", "low"]):
-            md += "## Custom Code — Issues you authored and can fix directly\n\n"
+            md += "---\n\n## Custom Code — Issues you authored and can fix directly\n\n"
 
             for severity, emoji in [("critical", "🔴"), ("high", "🟠"), ("medium", "🟡"), ("low", "🔵")]:
                 findings = custom_findings.get(severity, [])
@@ -601,7 +601,7 @@ class SecurityAuditor:
         # ============================================================================
         external_findings = results["external_findings"]
         if any(external_findings.get(sev, []) for sev in ["critical", "high", "medium", "low"]):
-            md += "## External Code — Patterns in external, third-party, or minified code (cannot be modified)\n\n"
+            md += "---\n\n## External Code — Patterns in external, third-party, or minified code (cannot be modified)\n\n"
 
             for severity, emoji in [("critical", "🔴"), ("high", "🟠"), ("medium", "🟡"), ("low", "🔵")]:
                 findings = external_findings.get(severity, [])
@@ -618,7 +618,7 @@ class SecurityAuditor:
         # ============================================================================
         dep_findings = results.get("dependency_findings", {})
         if any(dep_findings.get(sev, []) for sev in ["critical", "high", "medium", "low"]):
-            md += "## Dependencies — Vulnerabilities in npm, pip, or other package dependencies (fixed by version upgrades)\n\n"
+            md += "---\n\n## Dependencies — Vulnerabilities in npm, pip, or other package dependencies (fixed by version upgrades)\n\n"
 
             for severity, emoji in [("critical", "🔴"), ("high", "🟠"), ("medium", "🟡"), ("low", "🔵")]:
                 findings = dep_findings.get(severity, [])
@@ -648,7 +648,7 @@ class SecurityAuditor:
                             md += f"- **Status:** No patch available. Monitor for future updates.\n\n"
 
         # Secrets analysis
-        md += "\n## 🔑 Secrets Analysis\n\n"
+        md += "\n---\n\n## 🔑 Secrets Analysis\n\n"
 
         if results["secrets"]["exposed"]:
             md += "### ℹ️ Secret References Found (Code References & Patterns)\n"
