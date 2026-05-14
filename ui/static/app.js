@@ -536,11 +536,18 @@ function updateBackupStatus(data) {
     }
 
     function formatTime(backup) {
-        if (!backup) return { time: 'Unknown', statusClass: 'offline' };
+        if (!backup) return { time: 'Unknown', dotClass: 'backup-red', textClass: 'offline' };
         const timeStr = `${backup.time} ${backup.date_display} (${backup.hours_ago}h ago)`;
-        // Map backup status to service-dot classes
-        const statusClass = (backup.status === 'green') ? 'online' : 'offline';
-        return { time: timeStr, statusClass };
+        // Determine dot color based on status
+        let dotClass = 'backup-green';
+        if (backup.status === 'yellow') {
+            dotClass = 'backup-yellow';
+        } else if (backup.status === 'red') {
+            dotClass = 'backup-red';
+        }
+        // Text color: cyan for green/yellow (warning acceptable), grey for red (critical)
+        const textClass = (backup.status === 'red') ? 'offline' : 'online';
+        return { time: timeStr, dotClass, textClass };
     }
 
     const lucent = formatTime(data.lucent);
@@ -549,21 +556,22 @@ function updateBackupStatus(data) {
     lucentTime.textContent = lucent.time;
     memoryTime.textContent = memory.time;
 
-    lucentDot.className = `service-dot ${lucent.statusClass}`;
-    memoryDot.className = `service-dot ${memory.statusClass}`;
+    // Set dot color classes
+    lucentDot.className = `service-dot ${lucent.dotClass}`;
+    memoryDot.className = `service-dot ${memory.dotClass}`;
 
-    // Set item color based on status (matching service-item styling)
+    // Set text color based on status
     const lucentItem = lucentDot.closest('.service-item');
     const memoryItem = memoryDot.closest('.service-item');
 
     if (lucentItem) {
-        lucentItem.classList.toggle('online', lucent.statusClass === 'online');
-        lucentItem.classList.toggle('offline', lucent.statusClass === 'offline');
+        lucentItem.classList.toggle('online', lucent.textClass === 'online');
+        lucentItem.classList.toggle('offline', lucent.textClass === 'offline');
     }
 
     if (memoryItem) {
-        memoryItem.classList.toggle('online', memory.statusClass === 'online');
-        memoryItem.classList.toggle('offline', memory.statusClass === 'offline');
+        memoryItem.classList.toggle('online', memory.textClass === 'online');
+        memoryItem.classList.toggle('offline', memory.textClass === 'offline');
     }
 }
 
