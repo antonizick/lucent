@@ -12,19 +12,20 @@
 2. [Prerequisites](#2-prerequisites)
 3. [Repository Setup](#3-repository-setup)
 4. [Python Environment](#4-python-environment)
-5. [Environment Variables](#5-environment-variables)
-6. [Systemd Services](#6-systemd-services)
-7. [Cron Jobs](#7-cron-jobs)
-8. [Shell Configuration — .bashrc](#8-shell-configuration--bashrc)
-9. [Claude Code — Primary Platform](#9-claude-code--primary-platform)
-10. [Ollama — Local AI Backend](#10-ollama--local-ai-backend)
-11. [OpenCode — Alternative Platform](#11-opencode--alternative-platform)
-12. [Docker & Open WebUI](#12-docker--open-webui)
-13. [Discord Integration](#13-discord-integration)
-14. [Gibson Security Auditing](#14-gibson-security-auditing)
-15. [Port Reference](#15-port-reference)
-16. [Verification Checklist](#16-verification-checklist)
-17. [Troubleshooting](#17-troubleshooting)
+5. [NX Vox — Piper TTS Voice Engine](#5-nx-vox--piper-tts-voice-engine)
+6. [Environment Variables](#6-environment-variables)
+7. [Systemd Services](#7-systemd-services)
+8. [Cron Jobs](#8-cron-jobs)
+9. [Shell Configuration — .bashrc](#9-shell-configuration--bashrc)
+10. [Claude Code — Primary Platform](#10-claude-code--primary-platform)
+11. [Ollama — Local AI Backend](#11-ollama--local-ai-backend)
+12. [OpenCode — Alternative Platform](#12-opencode--alternative-platform)
+13. [Docker & Open WebUI](#13-docker--open-webui)
+14. [Discord Integration](#14-discord-integration)
+15. [Gibson Security Auditing](#15-gibson-security-auditing)
+16. [Port Reference](#16-port-reference)
+17. [Verification Checklist](#17-verification-checklist)
+18. [Troubleshooting](#18-troubleshooting)
 
 ---
 
@@ -197,6 +198,8 @@ After cloning, your structure should look like:
 │   └── check_reminders.py
 ├── ui/                       # Voice Box FastAPI server
 │   ├── server.py
+│   ├── piper_manager.py      # Thread-safe Piper TTS wrapper
+│   ├── voice_config.json     # Avatar→voice assignments
 │   ├── discord_bot.py
 │   ├── discord_monitor.py
 │   ├── discord_poller.py
@@ -204,6 +207,7 @@ After cloning, your structure should look like:
 │   ├── requirements.txt
 │   ├── start.sh
 │   ├── .env
+│   ├── voices/               # Piper TTS model files (git-ignored, ~300 MB)
 │   └── static/               # Web UI (HTML/CSS/JS)
 ├── *.service                 # systemd service unit files
 ├── CLAUDE.md                 # Claude Code instructions
@@ -243,7 +247,30 @@ The Discord bot (`ui/discord_bot.py`) requires packages not in `requirements.txt
 pip3 install "discord.py>=2.3.0" aiohttp flask
 ```
 
-### 4.3 Full Pip Install Command (All at Once)
+### 4.3 Install Piper TTS (Neural Voice Engine)
+
+Piper TTS is installed separately from `requirements.txt`. **The recommended method is `setup.sh`** (see Section 5), which handles Piper installation, voice model downloads, and synthesis verification in one step.
+
+If you need to install Piper manually:
+
+```bash
+# Option A — from the local wheel bundled in the repo root (fastest, no internet for pip)
+pip3 install /home/nick/dev/lucent/piper_tts-*.whl
+
+# Option B — from PyPI
+pip3 install piper-tts
+```
+
+Piper has a native ONNX Runtime dependency. If install fails with a missing `onnxruntime` error:
+
+```bash
+pip3 install onnxruntime
+pip3 install piper-tts
+```
+
+> **Voice models are not installed by pip.** They are large `.onnx` files (~60-200 MB each) that live in `ui/voices/` and are downloaded by `setup.sh`. See Section 5 for the complete voice engine setup.
+
+### 4.4 Full Pip Install Command (All at Once)
 
 ```bash
 pip3 install \
@@ -255,10 +282,11 @@ pip3 install \
     "requests>=2.31.0" \
     "discord.py>=2.3.0" \
     "aiohttp>=3.13.0" \
-    "flask>=3.0.0"
+    "flask>=3.0.0" \
+    "piper-tts"
 ```
 
-### 4.4 Verify Python Path
+### 4.5 Verify Python Path
 
 The Claude Code hook and scripts rely on `python3` being available. Confirm:
 
@@ -269,9 +297,171 @@ python3 --version     # Python 3.10.x or higher
 
 ---
 
-## 5. Environment Variables
+## 5. NX Vox — Piper TTS Voice Engine
 
-### 5.1 Create the .env File
+Lucent uses **Piper TTS** for all speech synthesis. Piper is a local, neural text-to-speech engine — it runs entirely on your machine with no cloud API, no internet connection required after setup, and no API key. Voice models are ONNX files stored in `ui/voices/`.
+
+**Why this matters for deployment:** Voice model files are git-ignored (too large to commit). On a fresh machine they must be downloaded and placed in `ui/voices/` before the Voice Box will produce audio. The server starts without them but will log a warning and fall back to silence until at least one voice model is present.
+
+### 5.1 Quickstart — Run `setup.sh`
+
+The repo includes an idempotent setup script that handles everything in one command:
+
+```bash
+cd ~/dev/lucent
+bash setup.sh
+```
+
+This script:
+1. Detects and installs Piper TTS (from the local `.whl` wheel in the repo root, or from PyPI as fallback)
+2. Creates `ui/voices/` if it doesn't exist
+3. Downloads all four voice models from HuggingFace (skips any already present)
+4. Runs a quick synthesis test to confirm Piper is working
+
+**Expected output (first run, ~5-10 minutes on a fast connection):**
+
+```
+[1/4] Installing Piper TTS...
+✓ piper-tts installed
+
+[2/4] Creating voices directory...
+✓ ui/voices/ ready
+
+[3/4] Downloading voice models...
+  en_GB-cori-high        [✓] 109 MB
+  en_GB-jenny_dioco-medium [✓] 61 MB
+  en_GB-alan-medium      [✓] 61 MB
+  en_GB-northern_english_male-medium [✓] 61 MB
+
+[4/4] Verifying synthesis...
+✓ Piper synthesis OK — 12,340 bytes generated
+
+Setup complete.
+```
+
+If a voice is already present, the download is skipped. Safe to run again after partial failures.
+
+### 5.2 What Gets Installed
+
+| File / Directory | Size | Purpose |
+|---|---|---|
+| `piper-tts` Python package | ~5 MB | TTS library + ONNX Runtime |
+| `ui/voices/en_GB-cori-high.onnx` | ~109 MB | Female, high quality — default voice |
+| `ui/voices/en_GB-jenny_dioco-medium.onnx` | ~61 MB | Female, medium quality |
+| `ui/voices/en_GB-alan-medium.onnx` | ~61 MB | Male, medium quality |
+| `ui/voices/en_GB-northern_english_male-medium.onnx` | ~61 MB | Male, medium quality |
+| `ui/voices/*.onnx.json` (4 files) | ~2 KB each | Config sidecar for each model |
+
+Total voice storage: ~295 MB
+
+All voice files are British English (`en_GB`). The server discovers them automatically by scanning `ui/voices/` — no code changes needed to add or remove voices.
+
+### 5.3 Per-Avatar Voice Assignment
+
+Each avatar has a default voice configured in `ui/voice_config.json`:
+
+```json
+{
+  "avatar_voices": {
+    "Lucent": "en_GB-cori-high",
+    "Emma":   "en_GB-jenny_dioco-medium",
+    "Alex":   "en_GB-alan-medium",
+    "Karen":  "en_GB-cori-high"
+  },
+  "default_voice": "en_GB-cori-high"
+}
+```
+
+This file is committed to git and requires no changes on a new deployment — the mapping is already correct as long as the voice model files are present in `ui/voices/`.
+
+### 5.4 Manual Voice Download (if setup.sh fails)
+
+If the setup script fails at the download step, you can download voices manually using `curl`. Run from the project root:
+
+```bash
+VOICES_DIR="ui/voices"
+BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main/en"
+
+# en_GB-cori-high (~109 MB)
+curl -L --progress-bar \
+  -o "${VOICES_DIR}/en_GB-cori-high.onnx" \
+  "${BASE}/en_GB/cori/high/en_GB-cori-high.onnx?download=true"
+curl -L --progress-bar \
+  -o "${VOICES_DIR}/en_GB-cori-high.onnx.json" \
+  "${BASE}/en_GB/cori/high/en_GB-cori-high.onnx.json?download=true"
+
+# en_GB-jenny_dioco-medium (~61 MB)
+curl -L --progress-bar \
+  -o "${VOICES_DIR}/en_GB-jenny_dioco-medium.onnx" \
+  "${BASE}/en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium.onnx?download=true"
+curl -L --progress-bar \
+  -o "${VOICES_DIR}/en_GB-jenny_dioco-medium.onnx.json" \
+  "${BASE}/en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium.onnx.json?download=true"
+
+# en_GB-alan-medium (~61 MB)
+curl -L --progress-bar \
+  -o "${VOICES_DIR}/en_GB-alan-medium.onnx" \
+  "${BASE}/en_GB/alan/medium/en_GB-alan-medium.onnx?download=true"
+curl -L --progress-bar \
+  -o "${VOICES_DIR}/en_GB-alan-medium.onnx.json" \
+  "${BASE}/en_GB/alan/medium/en_GB-alan-medium.onnx.json?download=true"
+
+# en_GB-northern_english_male-medium (~61 MB)
+curl -L --progress-bar \
+  -o "${VOICES_DIR}/en_GB-northern_english_male-medium.onnx" \
+  "${BASE}/en_GB/northern_english_male/medium/en_GB-northern_english_male-medium.onnx?download=true"
+curl -L --progress-bar \
+  -o "${VOICES_DIR}/en_GB-northern_english_male-medium.onnx.json" \
+  "${BASE}/en_GB/northern_english_male/medium/en_GB-northern_english_male-medium.onnx.json?download=true"
+```
+
+> **Warning:** If a downloaded `.onnx` file is only a few bytes (< 1 KB), the URL was wrong. The file will contain an error message, not a model. Check the file size with `ls -lh ui/voices/` and re-download with the correct path.
+
+### 5.5 Verify Piper Is Working
+
+After downloading voices, verify the setup before starting the full service:
+
+```bash
+# Quick synthesis test from the command line
+cd ~/dev/lucent/ui
+python3 -c "
+from piper import PiperVoice
+import wave, io
+
+voice = PiperVoice.load('voices/en_GB-cori-high.onnx')
+out = io.BytesIO()
+with wave.open(out, 'wb') as f:
+    voice.synthesize_wav('Voice system ready.', f)
+print(f'OK — {len(out.getvalue()):,} bytes synthesized')
+"
+```
+
+Expected output: `OK — 12340 bytes synthesized` (size varies by text length).
+
+### 5.6 Server Startup Behaviour
+
+When `lucent-voice-box.service` starts, the `piper_manager` loads the default voice (`en_GB-cori-high`) during the FastAPI lifespan startup. This takes 2–4 seconds. During loading:
+
+- `GET /services/health` returns `"piper": "loading"`
+- `POST /speak` requests will queue and wait
+- Once loaded, `GET /services/health` returns `"piper": "ready"`
+
+High-quality models (`-high`) load slightly slower than medium. This is normal — the service is still healthy.
+
+### 5.7 Adding New Voices
+
+See **`docs/VOICES.md`** for the complete guide to browsing, downloading, testing, installing, and assigning additional Piper voices. The short version:
+
+1. Find a voice at `https://rhasspy.github.io/piper-samples/` (click to hear samples)
+2. Download the `.onnx` and `.onnx.json` pair into `ui/voices/`
+3. Reload the browser — the voice appears in the dropdown automatically
+4. Optionally assign it to an avatar via `POST /vox/config` or edit `ui/voice_config.json`
+
+---
+
+## 6. Environment Variables
+
+### 6.1 Create the .env File
 
 The Voice Box server and Discord bot both read from `ui/.env`.
 
@@ -301,7 +491,7 @@ LUCENT_ROOT=/home/nick/dev/lucent
 
 > **Note:** `BACKEND_URL` is set to `http://localhost:8002` by default in the example but the Voice Box runs on `8001`. The Discord bot's webhook receiver runs on `8003`. Review and adjust per your active service configuration.
 
-### 5.2 Secure the .env File
+### 6.2 Secure the .env File
 
 ```bash
 chmod 600 ~/dev/lucent/ui/.env
@@ -309,9 +499,9 @@ chmod 600 ~/dev/lucent/ui/.env
 
 ---
 
-## 6. Systemd Services
+## 7. Systemd Services
 
-### 6.1 Service Architecture
+### 7.1 Service Architecture
 
 Five Lucent-specific services must be installed and enabled. The service unit files live in the repo root and must be **copied** (not symlinked) to `/etc/systemd/system/`.
 
@@ -325,7 +515,7 @@ Five Lucent-specific services must be installed and enabled. The service unit fi
 
 Service dependency order: `lucent-voice-box` → `lucent-server` → `lucent-monitor` and `lucent-poller`
 
-### 6.2 Install All Service Files
+### 7.2 Install All Service Files
 
 ```bash
 cd ~/dev/lucent
@@ -339,7 +529,7 @@ sudo cp discord-bot.service      /etc/systemd/system/
 sudo systemctl daemon-reload
 ```
 
-### 6.3 Enable and Start Services
+### 7.3 Enable and Start Services
 
 Enable all services to start on boot, then start them now:
 
@@ -351,7 +541,7 @@ sudo systemctl enable --now lucent-poller.service
 sudo systemctl enable --now discord-bot.service
 ```
 
-### 6.4 Verify Services Are Running
+### 7.4 Verify Services Are Running
 
 ```bash
 sudo systemctl status lucent-voice-box lucent-server lucent-monitor lucent-poller discord-bot --no-pager
@@ -363,7 +553,7 @@ Or use the included restart script which also shows status:
 bash ~/dev/lucent/restart-services.sh
 ```
 
-### 6.5 Service File Reference
+### 7.5 Service File Reference
 
 **lucent-voice-box.service** — The core hub. Must be running before any other service.
 ```ini
@@ -461,7 +651,7 @@ Environment="PYTHONUNBUFFERED=1"
 WantedBy=multi-user.target
 ```
 
-### 6.6 Service Management Reference
+### 7.6 Service Management Reference
 
 ```bash
 # Restart all Lucent services at once
@@ -479,11 +669,11 @@ sudo systemctl status discord-bot.service
 
 ---
 
-## 7. Cron Jobs
+## 8. Cron Jobs
 
 Two cron jobs keep memory backed up and logs rotated.
 
-### 7.1 Install Cron Jobs
+### 8.1 Install Cron Jobs
 
 ```bash
 crontab -e
@@ -501,7 +691,7 @@ Add these two lines:
 
 Save and exit.
 
-### 7.2 What Each Job Does
+### 8.2 What Each Job Does
 
 **Memory Backup (hourly)**
 - Runs `git add -A && git commit && git push` inside `memory/`
@@ -514,7 +704,7 @@ Save and exit.
 - Mirrors the same behavior triggered at Voice Box startup for monthly compression
 - Logs results to `/tmp/voice-log-rotation.log`
 
-### 7.3 Verify Cron Jobs Are Installed
+### 8.3 Verify Cron Jobs Are Installed
 
 ```bash
 crontab -l
@@ -522,11 +712,11 @@ crontab -l
 
 ---
 
-## 8. Shell Configuration — .bashrc
+## 9. Shell Configuration — .bashrc
 
 These blocks must be present in `~/.bashrc` for Lucent to function correctly on every shell session.
 
-### 8.1 PATH Additions
+### 9.1 PATH Additions
 
 Add these exports near the bottom of `~/.bashrc`:
 
@@ -538,7 +728,7 @@ export PATH=$PATH:~/.local/bin
 export PATH=/home/nick/.opencode/bin:$PATH
 ```
 
-### 8.2 Auto-Start Services on WSL Launch
+### 9.2 Auto-Start Services on WSL Launch
 
 These blocks start Ollama, Docker, and Open WebUI automatically when a WSL shell opens:
 
@@ -569,7 +759,7 @@ fi
 
 > **Note:** The `sudo service docker start` command requires passwordless sudo for the `service` command, or you must configure `/etc/sudoers` appropriately. On WSL2, this is standard.
 
-### 8.3 Apply .bashrc Changes
+### 9.3 Apply .bashrc Changes
 
 ```bash
 source ~/.bashrc
@@ -577,9 +767,9 @@ source ~/.bashrc
 
 ---
 
-## 9. Claude Code — Primary Platform
+## 10. Claude Code — Primary Platform
 
-### 9.1 Install Claude Code CLI
+### 10.1 Install Claude Code CLI
 
 ```bash
 npm install -g @anthropic-ai/claude-code
@@ -592,9 +782,9 @@ claude --version
 which claude   # should be ~/.local/bin/claude or /usr/local/bin/claude
 ```
 
-> If `claude` is not found after install, ensure `~/.local/bin` is in your PATH (see Section 8.1).
+> If `claude` is not found after install, ensure `~/.local/bin` is in your PATH (see Section 9.1).
 
-### 9.2 Authenticate with Anthropic
+### 10.2 Authenticate with Anthropic
 
 ```bash
 claude login
@@ -608,7 +798,7 @@ Alternatively, set the API key directly in `ui/.env` (used by the Voice Box serv
 echo "ANTHROPIC_API_KEY=sk-ant-..." >> ~/dev/lucent/ui/.env
 ```
 
-### 9.3 Project-Level Claude Code Hooks
+### 10.3 Project-Level Claude Code Hooks
 
 The Claude Code hooks are already committed to the repo at `.claude/settings.json`. They run automatically when Claude Code is launched from the `~/dev/lucent` directory. No additional setup is required — just clone the repo and the hooks are there.
 
@@ -630,7 +820,7 @@ The Claude Code hooks are already committed to the repo at `.claude/settings.jso
 
 This runs on **every** prompt submission, giving Claude Code full context on every turn without requiring manual startup steps.
 
-### 9.4 Launch Claude Code as Lucent
+### 10.4 Launch Claude Code as Lucent
 
 Always launch from the lucent project root:
 
@@ -639,9 +829,9 @@ cd ~/dev/lucent
 claude
 ```
 
-Or use the AI launcher (see Section 9.5).
+Or use the AI launcher (see Section 10.5).
 
-### 9.5 AI Launcher
+### 10.5 AI Launcher
 
 The `scripts/ai-launcher.sh` provides an interactive menu for choosing platform and model:
 
@@ -657,7 +847,7 @@ bash ~/dev/lucent/scripts/ai-launcher.sh claude opus
 bash ~/dev/lucent/scripts/ai-launcher.sh claude haiku
 ```
 
-### 9.6 Verify Claude Code Is Working
+### 10.6 Verify Claude Code Is Working
 
 1. Launch Claude Code from `~/dev/lucent`
 2. Type any message
@@ -666,11 +856,11 @@ bash ~/dev/lucent/scripts/ai-launcher.sh claude haiku
 
 ---
 
-## 10. Ollama — Local AI Backend
+## 11. Ollama — Local AI Backend
 
 Ollama provides local LLM inference used by the sub-agent system and the Discord bot's local model feature.
 
-### 10.1 Install Ollama
+### 11.1 Install Ollama
 
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
@@ -678,14 +868,14 @@ curl -fsSL https://ollama.com/install.sh | sh
 
 This installs the `ollama` binary to `/usr/local/bin/ollama` and creates the `ollama.service` systemd unit automatically.
 
-### 10.2 Enable Ollama on Boot
+### 11.2 Enable Ollama on Boot
 
 ```bash
 sudo systemctl enable --now ollama.service
 sudo systemctl status ollama.service
 ```
 
-### 10.3 Pull Required Models
+### 11.3 Pull Required Models
 
 The agent invocation system defaults to `mistral:latest`. Pull at minimum:
 
@@ -705,7 +895,7 @@ To see what models are currently available:
 ollama list
 ```
 
-### 10.4 Verify Ollama Is Running
+### 11.4 Verify Ollama Is Running
 
 ```bash
 curl http://localhost:11434/api/tags
@@ -713,7 +903,7 @@ curl http://localhost:11434/api/tags
 
 Should return a JSON list of available models. The Voice Box `/services/health` endpoint also checks Ollama status.
 
-### 10.5 Using Ollama with the Agent System
+### 11.5 Using Ollama with the Agent System
 
 The sub-agent system (`scripts/invoke_agent.py`) calls Ollama directly:
 
@@ -733,17 +923,17 @@ Available agents (defined in `agents/`):
 | `reviewer` | `reviewer-agent.md` | Code review, quality assessment |
 | `planner` | `planner-agent.md` | Task breakdown, architecture design |
 
-### 10.6 Auto-Start on WSL Login
+### 11.6 Auto-Start on WSL Login
 
 Ollama is also started from `.bashrc` (see Section 8.2) as a fallback in case the systemd service is not running.
 
 ---
 
-## 11. OpenCode — Alternative Platform
+## 12. OpenCode — Alternative Platform
 
 OpenCode is a secondary AI coding platform. Lucent has a TypeScript plugin that enforces the startup ritual when OpenCode is used instead of Claude Code.
 
-### 11.1 Install OpenCode
+### 12.1 Install OpenCode
 
 ```bash
 curl -fsSL https://opencode.ai/install | bash
@@ -758,7 +948,7 @@ opencode --version
 which opencode  # should be ~/.opencode/bin/opencode
 ```
 
-### 11.2 Install the OpenCode Plugin Dependencies
+### 12.2 Install the OpenCode Plugin Dependencies
 
 The Lucent plugin is a TypeScript file compiled at runtime. It requires its npm dependencies:
 
@@ -769,7 +959,7 @@ npm install
 
 This installs `@opencode-ai/plugin@1.14.48` into `.opencode/node_modules/`.
 
-### 11.3 OpenCode Configuration Files
+### 12.3 OpenCode Configuration Files
 
 **`opencode.json`** (repo root) — Points OpenCode to Lucent's memory files and plugin:
 
@@ -808,7 +998,7 @@ This installs `@opencode-ai/plugin@1.14.48` into `.opencode/node_modules/`.
 }
 ```
 
-### 11.4 How the OpenCode Plugin Works
+### 12.4 How the OpenCode Plugin Works
 
 The plugin (`.opencode/lucent-plugin.ts`) registers a tool called `lucent_startup` that the model is instructed to call before its first response. When called, it:
 
@@ -818,7 +1008,7 @@ The plugin (`.opencode/lucent-plugin.ts`) registers a tool called `lucent_startu
 
 This mirrors what `lucent-init.sh` does for Claude Code, adapted for OpenCode's plugin architecture.
 
-### 11.5 Launch OpenCode as Lucent
+### 12.5 Launch OpenCode as Lucent
 
 Always launch from the Lucent project root:
 
@@ -834,7 +1024,7 @@ bash ~/dev/lucent/scripts/ai-launcher.sh opencode big-pickle
 bash ~/dev/lucent/scripts/ai-launcher.sh opencode deepseek-v4-flash-free
 ```
 
-### 11.6 Available Free OpenCode Models
+### 12.6 Available Free OpenCode Models
 
 The launcher includes these pre-configured free models:
 - `big-pickle`
@@ -847,11 +1037,11 @@ Any locally-running Ollama model can also be selected from the launcher menu.
 
 ---
 
-## 12. Docker & Open WebUI
+## 13. Docker & Open WebUI
 
 Open WebUI is a browser-based interface for interacting with Ollama models. It runs in Docker on port 8088.
 
-### 12.1 Install Docker
+### 13.1 Install Docker
 
 ```bash
 # Install Docker
@@ -864,9 +1054,9 @@ sudo usermod -aG docker $USER
 sudo systemctl enable --now docker
 ```
 
-### 12.2 Start Open WebUI
+### 13.2 Start Open WebUI
 
-The `.bashrc` auto-start block (Section 8.2) handles this on each login. To start it manually:
+The `.bashrc` auto-start block (Section 9.2) handles this on each login. To start it manually:
 
 ```bash
 sudo docker run -d \
@@ -880,7 +1070,7 @@ sudo docker run -d \
 
 Access at: `http://localhost:8088`
 
-### 12.3 Manage Open WebUI
+### 13.3 Manage Open WebUI
 
 ```bash
 # Check status
@@ -898,11 +1088,11 @@ sudo docker logs open-webui
 
 ---
 
-## 13. Discord Integration
+## 14. Discord Integration
 
 The Discord integration allows sending messages to Lucent through a Discord server, which are then routed through the voice box and processed.
 
-### 13.1 Create a Discord Bot
+### 14.1 Create a Discord Bot
 
 1. Go to https://discord.com/developers/applications
 2. Create a new Application
@@ -914,7 +1104,7 @@ The Discord integration allows sending messages to Lucent through a Discord serv
    - Permissions: `Send Messages`, `Read Messages/View Channels`, `Add Reactions`
 7. Use the generated URL to invite the bot to your server
 
-### 13.2 Configure Discord IDs
+### 14.2 Configure Discord IDs
 
 In `ui/.env`:
 
@@ -926,13 +1116,13 @@ DISCORD_LOG_CHANNEL_ID=<right-click the logs channel → Copy ID>
 
 To enable Copy ID: Discord Settings → Advanced → Developer Mode → ON.
 
-### 13.3 Create a Webhook for Logging
+### 14.3 Create a Webhook for Logging
 
 1. In the Discord log channel → Edit Channel → Integrations → Webhooks
 2. Create webhook → Copy URL
 3. Set as `DISCORD_LOG_WEBHOOK_URL` in `ui/.env`
 
-### 13.4 Restart Discord Services
+### 14.4 Restart Discord Services
 
 After configuring `.env`:
 
@@ -940,7 +1130,7 @@ After configuring `.env`:
 sudo systemctl restart discord-bot.service lucent-server.service lucent-poller.service lucent-monitor.service
 ```
 
-### 13.5 Discord Architecture
+### 14.5 Discord Architecture
 
 ```
 Discord User
@@ -963,11 +1153,11 @@ Discord Channel
 
 ---
 
-## 14. Gibson Security Auditing
+## 15. Gibson Security Auditing
 
 Gibson is a specialized security auditor agent for scanning code vulnerabilities. It categorizes findings by type (custom code, external libraries, dependencies) and provides actionable remediation guidance with exact upgrade commands.
 
-### 14.1 Security Scanning
+### 15.1 Security Scanning
 
 **Manual Audit:**
 ```bash
@@ -979,7 +1169,7 @@ python3 scripts/run-security-audit.py /home/nick/dev/lucent
 - Voice summary with findings categorized by severity and type
 - JSON output for programmatic integration
 
-### 14.2 Vulnerability Categories
+### 15.2 Vulnerability Categories
 
 Gibson detects and categorizes:
 
@@ -1005,7 +1195,7 @@ Gibson detects and categorizes:
    - Validates .gitignore protection
    - Clarifies: references ≠ exposed secrets
 
-### 14.3 Report Format
+### 15.3 Report Format
 
 Reports include three major sections with detailed findings:
 
@@ -1044,7 +1234,7 @@ Reports include three major sections with detailed findings:
 - Protected secrets (.gitignore status)
 ```
 
-### 14.4 Git Pre-Commit Integration
+### 15.4 Git Pre-Commit Integration
 
 Gibson integrates with git to block vulnerable commits:
 
@@ -1058,7 +1248,7 @@ git commit -m "Code changes"
 - Medium/Low: WARN + auto-proceed after 60 seconds
 ```
 
-### 14.5 Voice Summary Format
+### 15.5 Voice Summary Format
 
 Gibson provides voice feedback with all findings:
 
@@ -1068,7 +1258,7 @@ Gibson provides voice feedback with all findings:
 3 secret reference patterns found (not actual secrets). Full report saved to security-audits folder."
 ```
 
-### 14.6 Scheduling Regular Audits
+### 15.6 Scheduling Regular Audits
 
 **Manual scheduling:**
 ```bash
@@ -1079,7 +1269,7 @@ Gibson provides voice feedback with all findings:
 **Output location:**
 All reports archived in: `memory/security-audits/YYYY-MM-DD/{project}-HH-MM-SS.md`
 
-### 14.7 Invoking Gibson Programmatically
+### 15.7 Invoking Gibson Programmatically
 
 ```bash
 # Via agent framework
@@ -1091,7 +1281,7 @@ python3 scripts/run-security-audit.py /path/to/project
 
 ---
 
-## 15. Port Reference
+## 16. Port Reference
 
 | Port | Service | Component |
 |------|---------|-----------|
@@ -1102,11 +1292,11 @@ python3 scripts/run-security-audit.py /path/to/project
 
 ---
 
-## 16. Verification Checklist
+## 17. Verification Checklist
 
 Run through this checklist after deployment to confirm everything is working.
 
-### 15.1 Services
+### 17.1 Services
 
 ```bash
 # All five Lucent services should show "active (running)"
@@ -1116,10 +1306,10 @@ sudo systemctl status lucent-voice-box lucent-server lucent-monitor lucent-polle
 sudo systemctl status ollama docker --no-pager | grep -E "●|Active:"
 ```
 
-### 15.2 Voice Box API
+### 17.2 Voice Box API
 
 ```bash
-# Health check
+# Health check — "piper" field should show "ready" once model is loaded
 curl -s http://localhost:8001/services/health | python3 -m json.tool
 
 # Send a test voice message
@@ -1131,28 +1321,46 @@ curl -X POST http://localhost:8001/speak \
 curl -s http://localhost:8001/backup/status | python3 -m json.tool
 ```
 
-### 15.3 Ollama
+### 17.3 Piper TTS Voice Engine
+
+```bash
+# List all installed voices (should show 4 voices)
+curl -s http://localhost:8001/vox/voices | python3 -m json.tool
+
+# Check current active voice and synthesis stats
+curl -s http://localhost:8001/vox/status | python3 -m json.tool
+
+# Verify voice model files are present and correctly sized
+ls -lh ~/dev/lucent/ui/voices/*.onnx
+# Each file should be > 10 MB. Files < 1 KB are corrupt downloads.
+
+# Confirm avatar-to-voice mapping is loaded
+curl -s http://localhost:8001/vox/config | python3 -m json.tool
+# Should show Lucent=cori-high, Emma=jenny_dioco-medium, Alex=alan-medium, Karen=cori-high
+```
+
+### 17.4 Ollama
 
 ```bash
 curl -s http://localhost:11434/api/tags | python3 -m json.tool
 ollama list
 ```
 
-### 15.4 Cron Jobs
+### 17.5 Cron Jobs
 
 ```bash
 crontab -l | grep lucent
 # Should show two entries (backup_memory + rotate_voice_logs)
 ```
 
-### 15.5 Git Remotes
+### 17.6 Git Remotes
 
 ```bash
 git -C ~/dev/lucent remote -v
 git -C ~/dev/lucent/memory remote -v
 ```
 
-### 15.6 Claude Code
+### 17.7 Claude Code
 
 ```bash
 cd ~/dev/lucent
@@ -1160,14 +1368,14 @@ claude --version
 # Launch Claude Code and confirm hook runs (you should see [Lucent] prefix in context)
 ```
 
-### 15.7 Memory Backup Test
+### 17.8 Memory Backup Test
 
 ```bash
 python3 ~/dev/lucent/scripts/backup_memory.py
 # Should print: ✓ No changes to commit  OR  ✓ Committed and pushed
 ```
 
-### 15.8 Session Logger Test
+### 17.9 Session Logger Test
 
 ```bash
 python3 ~/dev/lucent/scripts/session_logger.py init
@@ -1175,7 +1383,7 @@ python3 ~/dev/lucent/scripts/session_logger.py check
 # Should print: ✓ Checkpoint valid
 ```
 
-### 15.9 Web UI
+### 17.10 Web UI
 
 Open a browser and navigate to:
 - `http://localhost:8001` — Lucent Voice Box UI
@@ -1183,7 +1391,7 @@ Open a browser and navigate to:
 
 ---
 
-## 17. Troubleshooting
+## 18. Troubleshooting
 
 ### Voice Box Not Responding
 
@@ -1201,6 +1409,91 @@ sudo systemctl restart lucent-voice-box.service
 cd ~/dev/lucent/ui
 python3 -m uvicorn server:app --host 127.0.0.1 --port 8001
 ```
+
+### Piper TTS — No Audio (Voice Box Starts but Silent)
+
+The Voice Box starts without voice models and silently skips synthesis. Check:
+
+```bash
+# Are model files present and correctly sized?
+ls -lh ~/dev/lucent/ui/voices/*.onnx
+```
+
+If files are missing or tiny (< 1 KB), they weren't downloaded. Re-run setup:
+
+```bash
+bash ~/dev/lucent/setup.sh
+```
+
+Or download the default voice manually:
+
+```bash
+curl -L --progress-bar \
+  -o ~/dev/lucent/ui/voices/en_GB-cori-high.onnx \
+  "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/cori/high/en_GB-cori-high.onnx?download=true"
+curl -L --progress-bar \
+  -o ~/dev/lucent/ui/voices/en_GB-cori-high.onnx.json \
+  "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/cori/high/en_GB-cori-high.onnx.json?download=true"
+```
+
+Then restart the voice box service:
+
+```bash
+sudo systemctl restart lucent-voice-box.service
+```
+
+### Piper TTS — `ModuleNotFoundError: No module named 'piper'`
+
+Piper TTS was not installed. Install it:
+
+```bash
+# From local wheel (preferred — no internet for pip)
+pip3 install ~/dev/lucent/piper_tts-*.whl
+
+# From PyPI
+pip3 install piper-tts
+```
+
+If the wheel file isn't present in the repo, install from PyPI or download from the [Piper releases page](https://github.com/OHF-Voice/piper1-gpl/releases).
+
+### Piper TTS — Voice Box Slow to Start (30+ seconds)
+
+High-quality models take 4–8 seconds to load into RAM. This is expected. The service logs:
+
+```
+INFO:     Loading Piper voice: en_GB-cori-high
+INFO:     Piper voice loaded in 4.2s
+```
+
+If the server takes over 60 seconds, check available RAM — a high-quality model needs ~300–500 MB free.
+
+### Piper TTS — Downloaded Voice File Is 15 Bytes
+
+The HuggingFace URL path was wrong. The file contains `Entry not found` rather than model weights. Check:
+
+- The voice name spelling (`jenny_dioco` not `jenny-dioco`)
+- The quality tier exists for that voice (some voices only have `low`)
+- The language code is correct (`en_GB` vs `en_US`)
+
+Query HuggingFace to find the actual paths:
+
+```bash
+curl -s "https://huggingface.co/api/models/rhasspy/piper-voices?full=false" | \
+  python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+# Replace 'cori' with the voice name you want to verify
+matches = [s['rfilename'] for s in data.get('siblings', [])
+           if 'cori' in s['rfilename'] and '.onnx' in s['rfilename']]
+print('\n'.join(matches))
+"
+```
+
+### Piper TTS — Browser Plays No Audio After Server Restart
+
+The browser's `AudioContext` requires a user gesture (click) before playback is allowed. The Voice Box UI shows `"Click anywhere to enable speech"` at the bottom until the first click. Click anywhere on the page, then trigger speech again.
+
+If audio still doesn't play after clicking, open the browser console and look for `AudioContext` errors. A page reload usually resolves stale audio state.
 
 ### Claude Code Hook Not Running
 
@@ -1298,4 +1591,4 @@ If python3 is at a different path, update the `ExecStart` lines in the service f
 
 ---
 
-*Generated: 2026-05-13 | Lucent Core: github.com/antonizick/lucent | Memory: github.com/antonizick/LucentMemory*
+*Updated: 2026-05-14 (added NX Vox / Piper TTS section) | Lucent Core: github.com/antonizick/lucent | Memory: github.com/antonizick/LucentMemory*
