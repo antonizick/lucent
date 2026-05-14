@@ -509,6 +509,48 @@ async def services_health():
 
     return {"services": services}
 
+@app.get("/security/report")
+async def security_report():
+    """Get the latest security audit report as text."""
+    lucent_root = Path(__file__).parent.parent
+    audits_dir = lucent_root / "memory" / "security-audits"
+
+    if not audits_dir.exists():
+        return {
+            "content": "No security audits found.",
+            "report_path": None
+        }
+
+    latest_report = None
+    latest_time = None
+
+    for date_dir in audits_dir.iterdir():
+        if date_dir.is_dir():
+            for report_file in date_dir.glob("*.md"):
+                mtime = report_file.stat().st_mtime
+                if latest_time is None or mtime > latest_time:
+                    latest_time = mtime
+                    latest_report = report_file
+
+    if not latest_report:
+        return {
+            "content": "No security audits found.",
+            "report_path": None
+        }
+
+    try:
+        content = latest_report.read_text()
+        return {
+            "content": content,
+            "report_path": str(latest_report.relative_to(lucent_root))
+        }
+    except Exception as e:
+        logger.error(f"Error reading security report: {e}")
+        return {
+            "content": f"Error reading security report: {str(e)}",
+            "report_path": None
+        }
+
 @app.get("/security/status")
 async def security_status():
     """Get latest security audit status with color coding."""

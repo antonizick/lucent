@@ -19,9 +19,10 @@ let lastLogContent = '';
 let fadeTimeout = null;
 let speechEnabled = false;
 let currentAgent = null;  // null = Lucent mode, string = named agent
-let currentLogTab = 'daily';  // 'daily', 'weekly', or 'memory'
+let currentLogTab = 'daily';  // 'daily', 'weekly', 'memory', or 'security'
 let lastWeeklyContent = '';
 let lastMemoryContent = '';
+let lastSecurityContent = '';
 let refreshCountdown = 30;
 let refreshTimerInterval = null;
 
@@ -371,6 +372,14 @@ async function pollForLog() {
                 lastMemoryContent = data.content;
                 logContent.scrollTop = logContent.scrollHeight;
             }
+        } else if (currentLogTab === 'security') {
+            const response = await fetch('/security/report');
+            const data = await response.json();
+            if (data.content && data.content !== lastSecurityContent) {
+                logContent.textContent = data.content;
+                lastSecurityContent = data.content;
+                logContent.scrollTop = logContent.scrollHeight;
+            }
         }
     } catch (error) {
         console.error('Error polling for log:', error);
@@ -388,6 +397,8 @@ function switchLogTab(tab) {
         lastWeeklyContent = '';
     } else if (tab === 'memory') {
         lastMemoryContent = '';
+    } else if (tab === 'security') {
+        lastSecurityContent = '';
     }
 
     // Update button states
@@ -400,6 +411,7 @@ function switchLogTab(tab) {
     document.getElementById('logLabelDaily').classList.toggle('hidden', tab !== 'daily');
     document.getElementById('logLabelWeekly').classList.toggle('hidden', tab !== 'weekly');
     document.getElementById('logLabelMemory').classList.toggle('hidden', tab !== 'memory');
+    document.getElementById('logLabelSecurity').classList.toggle('hidden', tab !== 'security');
 
     // Clear content and poll immediately
     logContent.textContent = 'Loading...';
@@ -473,38 +485,6 @@ const serviceDescriptions = {
 function renderServices(services) {
     servicesList.innerHTML = '';
 
-    // Add security status first (with dedicated ID for updates)
-    const securityItem = document.createElement('div');
-    securityItem.id = 'securityStatusItem';
-    securityItem.className = 'service-item security-gray';
-
-    const securityDot = document.createElement('span');
-    securityDot.className = 'service-dot security-gray';
-
-    const securityName = document.createElement('span');
-    securityName.className = 'service-name';
-    securityName.textContent = 'Security: Loading...';
-
-    securityItem.appendChild(securityDot);
-    securityItem.appendChild(securityName);
-    servicesList.appendChild(securityItem);
-
-    securityItem.addEventListener('mouseenter', () => {
-        setTimeout(() => {
-            const rect = securityItem.getBoundingClientRect();
-            const tooltipWidth = 500;
-            const padding = 10;
-
-            if (rect.left < tooltipWidth + padding) {
-                securityItem.classList.add('tooltip-right');
-                securityItem.classList.remove('tooltip-left');
-            } else {
-                securityItem.classList.add('tooltip-left');
-                securityItem.classList.remove('tooltip-right');
-            }
-        }, 0);
-    });
-
     // Add service items
     services.forEach(service => {
         const item = document.createElement('div');
@@ -542,39 +522,10 @@ function renderServices(services) {
     });
 }
 
-// Poll for security status
-async function pollSecurityStatus() {
-    try {
-        const response = await fetch('/security/status');
-        const data = await response.json();
-        updateSecurityStatus(data);
-    } catch (error) {
-        console.error('Error polling security status:', error);
-    }
-}
-
-// Update security status display
-function updateSecurityStatus(data) {
-    const securityItem = document.getElementById('securityStatusItem');
-    if (!securityItem) return;
-
-    // Update existing item or create new one
-    const dot = securityItem.querySelector('.service-dot');
-    const name = securityItem.querySelector('.service-name');
-
-    if (dot && name) {
-        dot.className = `service-dot security-${data.color}`;
-        name.textContent = data.summary;
-        securityItem.setAttribute('data-description', `Security: ${data.status} - Critical: ${data.critical}, High: ${data.high}, Medium: ${data.medium}`);
-    }
-}
-
 // Set up polling for service health
 function setupServiceListener() {
     pollServiceHealth();
-    pollSecurityStatus();
     setInterval(pollServiceHealth, 10000);
-    setInterval(pollSecurityStatus, 30000);
 }
 
 // Backup status polling
