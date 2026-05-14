@@ -543,7 +543,6 @@ body {
 .backup-label-text {
     font-family: 'Courier New', monospace;
     font-size: 13px;
-    color: var(--text-secondary);
 }
 
 /* Services Panel */
