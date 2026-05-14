@@ -25,6 +25,8 @@ class SecurityAuditor:
         self.project_name = self.project_path.name
         self.findings = defaultdict(list)  # severity -> list of findings
         self.external_findings = defaultdict(list)  # severity -> list of external library findings
+        self.patchable_vulnerabilities = defaultdict(int)  # severity -> count of patchable external vulns
+        self.unpatchable_vulnerabilities = defaultdict(int)  # severity -> count of unpatchable external vulns
         self.secrets = {"exposed": [], "protected": []}
         self.gitignore_rules = set()
         self.scan_time = datetime.now()
@@ -51,8 +53,117 @@ class SecurityAuditor:
         self._scan_vulnerabilities()
         self._scan_infrastructure()
         self._scan_dependencies()
+        self._check_dependency_vulnerabilities()
 
         return self.get_results()
+
+    def _check_dependency_vulnerabilities(self):
+        """Check npm and pip for known vulnerabilities with patch status."""
+        # Check npm vulnerabilities
+        self._check_npm_vulnerabilities()
+        # Check pip vulnerabilities
+        self._check_pip_vulnerabilities()
+
+    def _check_npm_vulnerabilities(self):
+        """Run npm audit in all directories and categorize vulnerabilities by patchability."""
+        # Find all package.json files in the project
+        package_jsons = list(self.project_path.rglob("package.json"))
+
+        for package_json in package_jsons:
+            # Skip node_modules
+            if "node_modules" in str(package_json):
+                continue
+
+            package_dir = package_json.parent
+            lock_file = package_dir / "package-lock.json"
+
+            # npm audit requires a lock file
+            if not lock_file.exists():
+                continue
+
+            try:
+                # Run npm audit to get JSON output
+                result = subprocess.run(
+                    ["npm", "audit", "--json"],
+                    cwd=str(package_dir),
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+
+                # Parse output even if return code is non-zero (audit found issues)
+                if result.stdout.strip():
+                    try:
+                        audit_data = json.loads(result.stdout)
+                        vulnerabilities = audit_data.get("vulnerabilities", {})
+
+                        for package_name, vuln_info in vulnerabilities.items():
+                            severity = vuln_info.get("severity", "medium")
+                            # Map npm severity to our levels
+                            if severity == "critical":
+                                severity = "critical"
+                            elif severity == "high":
+                                severity = "high"
+                            elif severity == "moderate":
+                                severity = "medium"
+                            else:
+                                severity = "low"
+
+                            # Check if there's a fix available
+                            # fixAvailable can be a boolean or an object with upgrade info
+                            fix_available = vuln_info.get("fixAvailable", False)
+                            if fix_available:
+                                self.patchable_vulnerabilities[severity] += 1
+                            else:
+                                self.unpatchable_vulnerabilities[severity] += 1
+                    except json.JSONDecodeError:
+                        pass
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                pass
+
+    def _check_pip_vulnerabilities(self):
+        """Run pip audit and categorize vulnerabilities by patchability."""
+        requirements_file = self.project_path / "requirements.txt"
+        if not requirements_file.exists():
+            return
+
+        try:
+            # Run pip audit to get JSON output
+            result = subprocess.run(
+                ["pip-audit", "--json"],
+                cwd=str(self.project_path),
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            if result.returncode == 0 or result.stdout.strip():
+                try:
+                    audit_data = json.loads(result.stdout)
+                    vulnerabilities = audit_data.get("vulnerabilities", [])
+
+                    for vuln in vulnerabilities:
+                        severity = vuln.get("vulnerability", {}).get("severity", "medium").lower()
+                        # Normalize severity names
+                        if severity == "critical":
+                            severity = "critical"
+                        elif severity == "high":
+                            severity = "high"
+                        elif severity in ("medium", "moderate"):
+                            severity = "medium"
+                        else:
+                            severity = "low"
+
+                        # pip-audit includes fix info; check if fixed_versions exists and is not empty
+                        fixed_versions = vuln.get("fixed_versions", [])
+                        if fixed_versions:
+                            self.patchable_vulnerabilities[severity] += 1
+                        else:
+                            self.unpatchable_vulnerabilities[severity] += 1
+                except json.JSONDecodeError:
+                    pass
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
 
     def _load_gitignore(self):
         """Parse .gitignore to understand secret storage strategy"""
@@ -350,12 +461,20 @@ class SecurityAuditor:
             "summary": {
                 "critical": len(self.findings.get("critical", [])),
                 "critical_external": len(self.external_findings.get("critical", [])),
+                "critical_patchable": self.patchable_vulnerabilities.get("critical", 0),
+                "critical_unpatchable": self.unpatchable_vulnerabilities.get("critical", 0),
                 "high": len(self.findings.get("high", [])),
                 "high_external": len(self.external_findings.get("high", [])),
+                "high_patchable": self.patchable_vulnerabilities.get("high", 0),
+                "high_unpatchable": self.unpatchable_vulnerabilities.get("high", 0),
                 "medium": len(self.findings.get("medium", [])),
                 "medium_external": len(self.external_findings.get("medium", [])),
+                "medium_patchable": self.patchable_vulnerabilities.get("medium", 0),
+                "medium_unpatchable": self.unpatchable_vulnerabilities.get("medium", 0),
                 "low": len(self.findings.get("low", [])),
                 "low_external": len(self.external_findings.get("low", [])),
+                "low_patchable": self.patchable_vulnerabilities.get("low", 0),
+                "low_unpatchable": self.unpatchable_vulnerabilities.get("low", 0),
                 "exposed_secrets": len(self.secrets["exposed"]),
                 "protected_secrets": len(self.secrets["protected"])
             }
@@ -366,11 +485,36 @@ class SecurityAuditor:
         results = self.get_results()
         summary = results["summary"]
 
-        # Build summary with external library notation
-        critical_note = f" ({summary['critical_external']} in external libraries)" if summary['critical_external'] > 0 else ""
-        high_note = f" ({summary['high_external']} in external libraries)" if summary['high_external'] > 0 else ""
-        medium_note = f" ({summary['medium_external']} in external libraries)" if summary['medium_external'] > 0 else ""
-        low_note = f" ({summary['low_external']} in external libraries)" if summary['low_external'] > 0 else ""
+        # Build summary with external library notation and patch status
+        def build_external_note(severity):
+            external_count = summary[f'{severity}_external']
+            patchable = summary[f'{severity}_patchable']
+            unpatchable = summary[f'{severity}_unpatchable']
+
+            if external_count == 0 and patchable == 0 and unpatchable == 0:
+                return ""
+
+            parts = []
+
+            # Add code pattern vulnerabilities in external libraries
+            if external_count > 0:
+                parts.append(f"{external_count} in external code/libraries")
+
+            # Add npm/pip audit vulnerabilities
+            if patchable > 0 or unpatchable > 0:
+                patch_parts = []
+                if patchable > 0:
+                    patch_parts.append(f"{patchable} upgradeable")
+                if unpatchable > 0:
+                    patch_parts.append(f"{unpatchable} no patch")
+                parts.append(f"dependencies: {', '.join(patch_parts)}")
+
+            return f" ({'; '.join(parts)})"
+
+        critical_note = build_external_note('critical')
+        high_note = build_external_note('high')
+        medium_note = build_external_note('medium')
+        low_note = build_external_note('low')
 
         md = f"""# Security Audit: {self.project_name}
 
