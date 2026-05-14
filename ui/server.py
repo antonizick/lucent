@@ -717,6 +717,58 @@ async def security_status():
             "medium": 0
         }
 
+def get_backup_health_status(backup_type: str, lucent_root: Path) -> Optional[dict]:
+    """Check backup health from health check file instead of git history."""
+    try:
+        health_file = lucent_root / ".backup_health"
+        if not health_file.exists():
+            return None
+
+        import json
+        with open(health_file, "r") as f:
+            health_data = json.load(f)
+
+        if backup_type not in health_data:
+            return None
+
+        from datetime import datetime as dt
+        check_timestamp_str = health_data[backup_type]
+        check_dt = dt.fromisoformat(check_timestamp_str)
+        now = dt.now(check_dt.tzinfo) if check_dt.tzinfo else dt.now()
+        hours_ago = (now - check_dt).total_seconds() / 3600
+
+        # Green if checked within last hour, yellow if 1-2 hours, else red
+        if hours_ago < 1:
+            status = "green"
+        elif hours_ago < 2:
+            status = "yellow"
+        else:
+            status = "red"
+
+        today = date.today()
+        check_date = check_dt.date()
+
+        if check_date == today:
+            date_display = "today"
+        elif check_date == date.fromordinal(today.toordinal() - 1):
+            date_display = "yesterday"
+        else:
+            date_display = check_date.strftime("%Y-%m-%d")
+
+        time_display = check_dt.strftime("%H:%M")
+
+        return {
+            "time": time_display,
+            "date_display": date_display,
+            "hours_ago": round(hours_ago, 1),
+            "status": status,
+            "timestamp": check_timestamp_str,
+            "type": "verified"
+        }
+    except Exception as e:
+        logger.warning(f"Failed to get backup health for {backup_type}: {e}")
+        return None
+
 def get_last_commit_time(repo_path: Path) -> Optional[dict]:
     """Get last commit time and info for a git repository."""
     try:
@@ -783,8 +835,9 @@ async def backup_status():
     lucent_root = Path(__file__).parent.parent
     memory_dir = lucent_root / "memory"
 
-    lucent_status = get_last_commit_time(lucent_root)
-    memory_status = get_last_commit_time(memory_dir)
+    # Prefer health check status (verified + no changes) over commit history
+    lucent_status = get_backup_health_status("lucent_core", lucent_root) or get_last_commit_time(lucent_root)
+    memory_status = get_backup_health_status("memory", lucent_root) or get_last_commit_time(memory_dir)
 
     return {
         "lucent": lucent_status,

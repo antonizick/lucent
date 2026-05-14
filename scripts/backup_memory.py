@@ -13,11 +13,28 @@ Usage:
 
 import subprocess
 import sys
+import json
 from pathlib import Path
 from datetime import datetime, date
 
 LUCENT_ROOT = Path(__file__).parent.parent
 MEMORY_DIR = LUCENT_ROOT / "memory"
+HEALTH_CHECK_FILE = LUCENT_ROOT / ".backup_health"
+
+def write_health_check(backup_type: str) -> None:
+    """Write health check timestamp for backup verification."""
+    try:
+        health_data = {}
+        if HEALTH_CHECK_FILE.exists():
+            with open(HEALTH_CHECK_FILE, "r") as f:
+                health_data = json.load(f)
+
+        health_data[backup_type] = datetime.now().isoformat()
+
+        with open(HEALTH_CHECK_FILE, "w") as f:
+            json.dump(health_data, f)
+    except Exception:
+        pass  # Fail silently
 
 def log_to_daily_note(message: str) -> None:
     """Append timestamped message to today's daily note."""
@@ -72,6 +89,8 @@ def backup_memory() -> int:
     code, status, _ = run_cmd("git status --porcelain", cwd=str(MEMORY_DIR))
     if not status.strip():
         print(f"✓ No changes to commit (memory already up-to-date)")
+        # Still write health check timestamp (verified, no changes needed)
+        write_health_check("memory")
         return 0
 
     # Commit
@@ -95,10 +114,22 @@ def backup_memory() -> int:
 
     print(f"✓ Pushed to origin (memory backed up)")
     log_to_daily_note(f"Backup: Committed and pushed (Automated backup by Lucent)")
+    write_health_check("memory")
     return 0
+
+def check_lucent_core() -> None:
+    """Check Lucent core repo status and write health check timestamp."""
+    print(f"→ Checking Lucent core repo...")
+    code, _, _ = run_cmd("git status", cwd=str(LUCENT_ROOT))
+    if code == 0:
+        print(f"✓ Lucent core repo verified")
+        write_health_check("lucent_core")
+    else:
+        print(f"✗ Lucent core repo check failed")
 
 def main():
     exit_code = backup_memory()
+    check_lucent_core()
     sys.exit(exit_code)
 
 if __name__ == "__main__":

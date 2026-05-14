@@ -17,6 +17,13 @@ DISCORD_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID", 0))
 DISCORD_LOG_CHANNEL_ID = int(os.getenv("DISCORD_LOG_CHANNEL_ID", 0))
 DISCORD_LOG_WEBHOOK_URL = os.getenv("DISCORD_LOG_WEBHOOK_URL", "")
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8002")
+DISCORD_CLAUDE_CHANNEL_ID = int(os.getenv("DISCORD_CLAUDE_CHANNEL_ID", 0))
+LUCENT_ROOT = os.getenv("LUCENT_ROOT", "/home/nick/dev/lucent")
+CLAUDE_BIN = "/home/nick/.local/bin/claude"
+RESET_FLAG_PATH = "/tmp/lucent_discord_reset.flag"
+CLAUDE_MODEL_PATH = "/tmp/lucent_discord_claude_model"
+CLAUDE_MODEL_ALIASES = {"opus": "opus", "sonnet": "sonnet", "haiku": "haiku"}
+CLAUDE_MODEL_DEFAULT = "sonnet"
 
 # Bot setup
 intents = discord.Intents.default()
@@ -66,20 +73,22 @@ async def on_ready():
 @bot.event
 async def on_message(message):
     """Listen for messages in the Lucent command channel."""
-    # Ignore messages from the bot itself
     if message.author == bot.user:
         return
 
-    # Only respond in the configured Lucent channel
+    # Dedicated Claude CLI channel
+    if DISCORD_CLAUDE_CHANNEL_ID and message.channel.id == DISCORD_CLAUDE_CHANNEL_ID:
+        await handle_claude_message(message)
+        return
+
+    # Original Lucent command channel
     if message.channel.id != DISCORD_CHANNEL_ID:
         return
 
-    # Skip commands
     if message.content.startswith("!"):
         await bot.process_commands(message)
         return
 
-    # Post message to backend queue
     await queue_message(message)
 
 async def queue_message(message: discord.Message):
@@ -141,6 +150,89 @@ async def post_response(message_id: str, thread_id: str, response_text: str, sea
         print(f"[DISCORD] Posted response to message {message_id} (search_used={search_used})")
     except Exception as e:
         print(f"[ERROR] Failed to post response: {e}")
+
+def get_claude_model():
+    try:
+        return open(CLAUDE_MODEL_PATH).read().strip() or CLAUDE_MODEL_DEFAULT
+    except FileNotFoundError:
+        return CLAUDE_MODEL_DEFAULT
+
+
+async def handle_claude_message(message: discord.Message):
+    """Handle messages in the dedicated Claude CLI channel."""
+    text = message.content.strip()
+
+    if text.lower() in ("/clear", "/new"):
+        with open(RESET_FLAG_PATH, "w") as f:
+            f.write("reset")
+        await message.add_reaction("🔄")
+        await message.reply("Session cleared. Next message starts fresh.", tts=True)
+        return
+
+    if text.lower().startswith("/model"):
+        parts = text.split(maxsplit=1)
+        if len(parts) == 1:
+            current = get_claude_model()
+            await message.reply(f"Current model: {current}. Options: opus, sonnet, haiku.", tts=True)
+            return
+        alias = parts[1].strip().lower()
+        if alias not in CLAUDE_MODEL_ALIASES:
+            await message.reply(f"Unknown model {alias}. Options: opus, sonnet, haiku.", tts=True)
+            return
+        with open(CLAUDE_MODEL_PATH, "w") as f:
+            f.write(CLAUDE_MODEL_ALIASES[alias])
+        await message.add_reaction("✅")
+        await message.reply(f"Model set to {alias}. Takes effect on next message.", tts=True)
+        return
+
+    use_continue = not os.path.exists(RESET_FLAG_PATH)
+    if os.path.exists(RESET_FLAG_PATH):
+        os.remove(RESET_FLAG_PATH)
+
+    model = get_claude_model()
+    await message.add_reaction("⏳")
+
+    base_cmd = [CLAUDE_BIN, "--model", model, "-p", text]
+    cmd = [CLAUDE_BIN, "--continue", "--model", model, "-p", text] if use_continue else base_cmd
+
+    # Strip ANTHROPIC_API_KEY so claude uses its own stored credentials
+    subprocess_env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            cwd=LUCENT_ROOT,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=subprocess_env,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=180)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await message.remove_reaction("⏳", bot.user)
+            await message.reply("⚠️ Timed out after 180 seconds.", tts=True)
+            return
+
+        output = stdout.decode().strip()
+        if not output:
+            output = stderr.decode().strip()[:500] or "*(no response)*"
+
+        await message.remove_reaction("⏳", bot.user)
+
+        chunks = [output[i:i+1900] for i in range(0, len(output), 1900)]
+        for i, chunk in enumerate(chunks):
+            label = "**Lucent:**" if i == 0 else "**Lucent (cont.):**"
+            if i == 0:
+                await message.reply(f"{label}\n{chunk}", tts=True)
+            else:
+                channel = bot.get_channel(DISCORD_CLAUDE_CHANNEL_ID)
+                await channel.send(f"{label}\n{chunk}")
+
+    except Exception as e:
+        await message.remove_reaction("⏳", bot.user)
+        await message.reply(f"⚠️ Error: {e}", tts=True)
+
 
 async def broadcast_log(text: str, level: str = "info"):
     """Broadcast console log to Discord log channel via webhook."""
