@@ -40,6 +40,29 @@ The Voice Box web UI (port 8001) provides voice acknowledgment for every interac
   - **Daily Tab:** Live view of today's session notes (`memory/YYYY-MM-DD.md`)
 - **Font Controls:** Adjust daily log text size with +/− buttons
 
+### Backup Status Monitoring
+The Voice Box popup includes real-time backup health monitoring. When you mouseover the voice panel, a popup displays the last push times for both your Lucent codebase and memory repository with visual status indicators.
+
+**Features:**
+- **Three-State Indicator Dots:** Color-coded status for each repository
+  - 🟢 **Green dot:** Fresh backup (< 2 hours old) — text displays in cyan
+  - 🟡 **Yellow dot:** Warning state (2-4 hours old) — text displays in cyan (still operational)
+  - 🔴 **Red dot:** Critical state (> 4 hours old) — text displays in grey (unhealthy)
+- **Formatted Time Display:** Shows last push time in format `HH:MM today/yesterday (Xh ago)`
+- **Repository Labels:**
+  - `Lucent Core` — Last push time for the main Lucent repository
+  - `Synaptic Clone` — Last push time for your memory repository (github.com/antonizick/LucentMemory)
+- **Automated Warning System:** When backups enter warning state (yellow), the system:
+  - Sends voice notification: "Warning: Backups are stale. Triggering automated backup now."
+  - Automatically runs `backup_memory.py` without waiting for user intervention
+  - Continues monitoring and automatically transitions back to healthy when backup completes
+- **30-Second Polling:** Backup status updates automatically every 30 seconds while the popup is visible
+- **Consistent Styling:** Backup status section uses identical fonts, sizing, and colors as the Services list below it for visual unity
+
+**Backend Endpoints:**
+- `GET /backup/status` — Returns last commit times for both repositories with health status
+- `POST /run-backup` — Triggers immediate memory folder backup
+
 ### Discord Integration
 Lucent integrates with Discord for monitoring and async responses. A background monitor watches for messages, forwards them to Ollama, and posts responses back to Discord with intelligent web search integration and emoji feedback.
 
@@ -88,16 +111,23 @@ lucent/
 │   ├── AGENTS.md          Top-level instructions
 │   ├── AGENT_ASSIGNMENTS.md Agent task ownership
 │   ├── YYYY-MM-DD.md      Daily episodic notes
-│   └── archive/           Historical notes (never deleted)
+│   ├── logs/              Voice activity logs (backed up hourly)
+│   ├── scripts/           Backup scripts (redundant copies for recovery)
+│   └── archive/           Historical notes + compressed logs (never deleted)
 ├── private/               Sensitive context (git-ignored)
+├── scripts/               Backup & maintenance utilities
+│   ├── backup_memory.py   Main backup executor (retry + health check)
+│   ├── verify_startup.py  Startup ritual enforcement
+│   ├── verify_backup_health.py Health check (GitHub connectivity)
+│   └── rotate_voice_logs.py Voice log archival (monthly gzip)
 ├── ui/                    Voice Box web UI & Discord integration
-│   ├── server.py          FastAPI server (voice feedback, Discord webhooks)
+│   ├── server.py          FastAPI server (voice feedback, Discord webhooks, backup status)
 │   ├── discord_bot.py     Discord bot client
 │   ├── discord_monitor.py Discord message monitor & Mistral response handler
 │   ├── discord_logger.py  Logging forwarder to Discord channel
 │   ├── speak.sh           Voice feedback endpoint (send to Voice Box)
 │   ├── start.sh           Startup script
-│   └── static/            Web UI assets
+│   └── static/            Web UI assets (backup status popup integrated)
 └── scratchpad/            Temporary workspace (not synced)
 ```
 
@@ -438,13 +468,51 @@ jq 'select(.author == "nick")' /tmp/discord_messages/messages.jsonl
 
 ---
 
-### Daily Notes
+### Daily Notes & Archival
 
 The agent writes a daily note to `memory/YYYY-MM-DD.md` at the end of each session. Notes are never deleted — they accumulate over time. Every 7 days the agent reviews recent notes and promotes lasting knowledge to LTMemory.md.
 
-### Daily Notes
+**Archival & Cleanup Process:**
+1. Before compression: Daily notes are copied to `memory/archive/` (permanent backup)
+2. After compression: Notes are compressed to 1-2 paragraphs in place
+3. Root cleanup: Notes older than 7 days are deleted from `memory/` root (full versions preserved in archive)
 
-The agent writes a daily note to `memory/YYYY-MM-DD.md` at the end of each session. Notes are never deleted — they accumulate over time. Every 7 days the agent reviews recent notes and promotes lasting knowledge to LTMemory.md.
+This ensures the startup context window stays fresh (7 recent days) while maintaining complete historical records in the archive.
+
+### Memory Backup System
+
+Lucent maintains a three-layer backup strategy ensuring zero data loss:
+
+**Layer 1: Startup Backup**
+- Runs automatically at session start via `verify_startup.py`
+- Ensures memory changes are pushed before session begins
+- Includes health verification (GitHub connectivity check)
+
+**Layer 2: Post-Compression Backup**
+- Runs after daily note compression
+- Backs up newly compressed notes immediately
+- Guarantees compressed knowledge is persisted
+
+**Layer 3: Hourly Backup Cron**
+- `0 * * * *` (every hour on the hour)
+- Catches any changes between sessions
+- Provides continuous protection throughout the day
+
+**Backup Components:**
+- `scripts/backup_memory.py` — Main backup executor (3-attempt retry with exponential backoff)
+- `scripts/verify_backup_health.py` — Health check (GitHub connectivity, recent push verification)
+- `scripts/verify_startup.py` — Startup ritual and backup enforcement
+
+**Voice Log Backups:**
+- Voice activity logs moved from `ui/logs/` to `memory/logs/`
+- Included in hourly memory folder backups
+- Gzipped and archived monthly to `memory/archive/voice-box/YYYY-MM/`
+
+**Failure Handling:**
+- Retry logic: 3 attempts with exponential backoff (1s, 2s, 4s)
+- Health checks: Verify GitHub push via `git rev-parse origin/main`
+- Failure notifications: All issues logged to daily note with timestamps
+- Automated backup trigger: When backup status enters warning state (>2 hours old), system automatically runs backup + voice notification
 
 ### Sub-Agents
 
