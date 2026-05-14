@@ -26,12 +26,45 @@ Lucent is a personal AI assistant framework with a private GitHub repository as 
 
 ## Key Features
 
-### Voice Feedback (Voice Box)
+### Voice Feedback (Voice Box + NX Vox)
 The Voice Box web UI (port 8001) provides voice acknowledgment for every interaction. When an agent receives input from Nick, it sends a voice confirmation via the `/speak` endpoint. This ensures Nick always knows the system received his input, even when away from keyboard.
 
 - **Server:** `ui/server.py` (FastAPI, port 8001)
-- **Startup:** `bash ui/start.sh`
-- **Voice Send:** `bash ui/speak.sh "Your message"`
+- **Startup:** managed by `lucent-voice-box.service` (systemd)
+- **Voice Send:** `curl -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text": "message"}'`
+
+#### NX Vox — Neural TTS Engine
+
+As of 2026-05-14, the Voice Box uses **Piper TTS** for server-side neural speech synthesis. This replaces the browser's built-in `window.speechSynthesis` (which used the OS-native engine — robotic `espeak-ng` on Linux).
+
+- **Engine:** [Piper TTS](https://github.com/OHF-Voice/piper1-gpl) (OHF-Voice, GPL-3.0, v1.4.2)
+- **Integration:** In-process Python library — no separate service, no cloud dependency, no API key
+- **Audio delivery:** Base64-encoded WAV over the existing SSE pipeline
+- **Default voice:** `en_GB-cori-high` (Southern British female, high quality)
+- **Voice model directory:** `ui/voices/` (git-ignored — must be downloaded per machine)
+- **Full voice guide:** [docs/VOICES.md](docs/VOICES.md)
+
+**Voice API endpoints:**
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/vox/voices` | GET | List installed voices and current active voice |
+| `/vox/voice` | POST | Switch active voice model (`{"voice": "en_GB-alan-medium"}`) |
+| `/vox/status` | GET | Runtime stats: synthesis count, latency, uptime |
+| `/vox/speak` | POST | Synthesize audio and return WAV directly (no SSE broadcast) |
+| `/vox/config` | GET | Read avatar→voice mapping |
+| `/vox/config` | POST | Update a voice assignment (`{"avatar": "Emma", "voice": "en_GB-jenny_dioco-medium"}`) |
+
+**Installed voices (2026-05-14):**
+
+| Voice | Gender | Quality | Default for |
+|---|---|---|---|
+| `en_GB-cori-high` | Female | High | Lucent, Karen |
+| `en_GB-jenny_dioco-medium` | Female | Medium | Emma |
+| `en_GB-alan-medium` | Male | Medium | Alex |
+| `en_GB-northern_english_male-medium` | Male | Medium | (available) |
+
+**Per-avatar voice assignment** is configured in `ui/voice_config.json`. Switching the avatar in the UI automatically switches the active Piper voice on the server. See [docs/VOICES.md](docs/VOICES.md) for the complete guide to browsing, downloading, and assigning voices.
 
 **Features:**
 - **Multi-Client Broadcasting:** When multiple browsers have the Voice Box open, all instances receive and speak messages simultaneously via Server-Sent Events (SSE). No more "only one browser speaks" limitation.
@@ -123,13 +156,24 @@ lucent/
 │   ├── verify_backup_health.py Health check (GitHub connectivity)
 │   └── rotate_voice_logs.py Voice log archival (monthly gzip)
 ├── ui/                    Voice Box web UI & Discord integration
-│   ├── server.py          FastAPI server (voice feedback, Discord webhooks, backup status)
+│   ├── server.py          FastAPI server (voice, Piper TTS, Discord, backup status)
+│   ├── piper_manager.py   Piper TTS wrapper (thread-safe synthesis, voice switching)
+│   ├── voice_config.json  Avatar→voice mapping (edit or use POST /vox/config)
 │   ├── discord_bot.py     Discord bot client
 │   ├── discord_monitor.py Discord message monitor & Mistral response handler
 │   ├── discord_logger.py  Logging forwarder to Discord channel
 │   ├── speak.sh           Voice feedback endpoint (send to Voice Box)
 │   ├── start.sh           Startup script
-│   └── static/            Web UI assets (backup status popup integrated)
+│   ├── voices/            Piper TTS model files (git-ignored, ~290MB total)
+│   │   ├── en_GB-cori-high.onnx(.json)
+│   │   ├── en_GB-jenny_dioco-medium.onnx(.json)
+│   │   ├── en_GB-alan-medium.onnx(.json)
+│   │   └── en_GB-northern_english_male-medium.onnx(.json)
+│   └── static/            Web UI assets (audio-player.js, app.js, avatars)
+└── docs/                  Documentation
+    ├── DEPLOYMENT.md      Full deployment/recovery guide
+    ├── NX_VOX_PLAN.md     Piper TTS integration design document
+    └── VOICES.md          Voice browsing, download, and assignment guide
 └── scratchpad/            Temporary workspace (not synced)
 ```
 

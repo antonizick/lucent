@@ -1,0 +1,9 @@
+{
+  "avatar_voices": {
+    "Lucent": "en_GB-cori-high",
+    "Emma": "en_GB-jenny_dioco-medium",
+    "Alex": "en_GB-alan-medium",
+    "Karen": "en_GB-cori-high"
+  },
+  "default_voice": "en_GB-cori-high"
+}

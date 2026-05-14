@@ -1,3 +1,4 @@
+import base64
 import os
 import re
 import json
@@ -6,10 +7,13 @@ import requests
 import subprocess
 import tarfile
 import shutil
+import time
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from datetime import datetime, date
 from pathlib import Path
 from collections import deque
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,6 +28,47 @@ load_dotenv()
 from discord_logger import setup_discord_logging
 setup_discord_logging()
 logger = logging.getLogger(__name__)
+
+# Piper TTS setup
+try:
+    from piper_manager import PiperManager
+    _VOICES_DIR = Path(__file__).parent / "voices"
+    piper = PiperManager(_VOICES_DIR)
+    piper_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="piper")
+    PIPER_AVAILABLE = True
+except Exception as _piper_err:
+    logger.warning(f"Piper TTS unavailable: {_piper_err}")
+    piper = None
+    piper_executor = None
+    PIPER_AVAILABLE = False
+
+DEFAULT_VOICE = "en_GB-cori-high"
+VOICE_CONFIG_PATH = Path(__file__).parent / "voice_config.json"
+
+
+def load_voice_config() -> dict:
+    if VOICE_CONFIG_PATH.exists():
+        try:
+            return json.loads(VOICE_CONFIG_PATH.read_text())
+        except Exception:
+            pass
+    return {"avatar_voices": {}, "default_voice": DEFAULT_VOICE}
+
+
+def save_voice_config(config: dict) -> None:
+    VOICE_CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n")
+
+
+async def synthesize_async(text: str) -> bytes | None:
+    """Run Piper synthesis in thread pool without blocking event loop."""
+    if not PIPER_AVAILABLE or not piper.is_loaded:
+        return None
+    loop = asyncio.get_running_loop()
+    try:
+        return await loop.run_in_executor(piper_executor, piper.synthesize_wav, text)
+    except Exception as exc:
+        logger.error(f"Piper synthesis failed: {exc}")
+        return None
 
 # Activity logging for Voice Box
 LOGS_DIR = Path(__file__).parent / "logs"
@@ -91,7 +136,21 @@ def compress_monthly_logs():
         logger.error(f"Failed to compress logs: {e}")
         return {"status": "error", "message": str(e)}
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_logs_dirs()
+    logger.info("Voice Box activity logging initialized")
+    result = compress_monthly_logs()
+    if result.get("status") == "success":
+        logger.info(f"Monthly compression completed: {result}")
+    if PIPER_AVAILABLE:
+        loaded = piper.load_voice(DEFAULT_VOICE)
+        logger.info(f"Piper TTS: {'loaded ' + DEFAULT_VOICE if loaded else 'voice load FAILED'}")
+    yield
+    if PIPER_AVAILABLE and piper:
+        piper.unload()
+
+app = FastAPI(lifespan=lifespan)
 
 # In-memory queues
 speech_queue = deque(maxlen=100)  # Voice UI speech (backward compat)
@@ -157,16 +216,21 @@ async def root():
 
 @app.post("/speak")
 async def speak(request: SpeakRequest):
-    """Queue text to be spoken via TTS on the frontend (broadcast to all SSE clients)."""
+    """Queue text to be spoken. Synthesizes audio via Piper and broadcasts via SSE."""
     global last_speech
 
     if not request.text or not request.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
 
-    item = {
-        "text": request.text,
-        "timestamp": datetime.now().isoformat()
-    }
+    timestamp = datetime.now().isoformat()
+    item: dict = {"text": request.text, "timestamp": timestamp}
+
+    # Synthesize audio with Piper
+    wav_bytes = await synthesize_async(request.text)
+    if wav_bytes:
+        item["audio"] = base64.b64encode(wav_bytes).decode("ascii")
+        item["format"] = "audio/wav"
+        item["sample_rate"] = piper.sample_rate
 
     # Keep for backward compat polling
     speech_queue.append(item)
@@ -178,11 +242,12 @@ async def speak(request: SpeakRequest):
     # Log activity
     log_activity(request.text)
 
-    return {
-        "status": "queued",
-        "text": request.text,
-        "timestamp": item["timestamp"]
-    }
+    response = {"status": "queued", "text": request.text, "timestamp": timestamp}
+    if wav_bytes:
+        response["audio"] = item["audio"]
+        response["format"] = item["format"]
+        response["sample_rate"] = item["sample_rate"]
+    return response
 
 @app.post("/message/pending")
 async def queue_message(request: MessageRequest):
@@ -489,7 +554,8 @@ async def services_health():
     services.append({"name": "Ollama Local inference engine", "status": ollama_status})
 
     # Voice Box (self)
-    services.append({"name": "Voice box", "status": "online"})
+    piper_status = "ready" if (PIPER_AVAILABLE and piper and piper.is_loaded) else "loading"
+    services.append({"name": "Voice box", "status": "online", "piper": piper_status})
 
     # Discord Bot Flask server
     try:
@@ -1203,16 +1269,117 @@ async def activity_log_viewer():
     """
     return HTMLResponse(content=html_content)
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize logs directory on startup."""
-    init_logs_dirs()
-    logger.info("Voice Box activity logging initialized")
-    # Check if we need to compress logs (monthly task)
-    # This is a simple check at startup; for production use APScheduler
-    result = compress_monthly_logs()
-    if result.get("status") == "success":
-        logger.info(f"Monthly compression completed: {result}")
+class VoiceSwitchRequest(BaseModel):
+    voice: str
+
+
+class VoiceConfigUpdateRequest(BaseModel):
+    avatar: str
+    voice: str
+
+
+@app.get("/vox/config")
+async def vox_get_config():
+    """Get the avatar→voice mapping configuration."""
+    return load_voice_config()
+
+
+@app.post("/vox/config")
+async def vox_update_config(request: VoiceConfigUpdateRequest):
+    """Update the voice for a specific avatar."""
+    if PIPER_AVAILABLE:
+        voices = [v.name for v in piper.list_available()]
+        if request.voice not in voices and request.voice != "none":
+            raise HTTPException(status_code=404, detail=f"Voice '{request.voice}' not found")
+
+    config = load_voice_config()
+    config["avatar_voices"][request.avatar] = request.voice
+    save_voice_config(config)
+    return {"status": "updated", "avatar": request.avatar, "voice": request.voice}
+
+
+@app.get("/vox/voices")
+async def vox_voices():
+    """List available voice models and the currently active one."""
+    if not PIPER_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Piper TTS unavailable")
+    voices = piper.list_available()
+    return {
+        "voices": [
+            {
+                "name": v.name,
+                "language": v.language,
+                "quality": v.quality,
+                "gender": v.gender,
+                "sample_rate": v.sample_rate,
+            }
+            for v in voices
+        ],
+        "current": piper.current_name,
+    }
+
+
+@app.post("/vox/voice")
+async def vox_switch_voice(request: VoiceSwitchRequest):
+    """Switch the active voice model."""
+    if not PIPER_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Piper TTS unavailable")
+
+    voice_path = Path(__file__).parent / "voices" / f"{request.voice}.onnx"
+    if not voice_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Voice '{request.voice}' not found. Download with: python3 -m piper.download_voices {request.voice}"
+        )
+
+    previous = piper.current_name
+    start = time.monotonic()
+    loop = asyncio.get_running_loop()
+    success = await loop.run_in_executor(piper_executor, piper.load_voice, request.voice)
+    duration_ms = round((time.monotonic() - start) * 1000)
+
+    if not success:
+        raise HTTPException(status_code=500, detail=f"Failed to load voice '{request.voice}'")
+
+    return {
+        "status": "switched",
+        "voice": request.voice,
+        "previous": previous,
+        "duration_ms": duration_ms,
+    }
+
+
+@app.get("/vox/status")
+async def vox_status():
+    """Runtime status of the Piper TTS subsystem."""
+    if not PIPER_AVAILABLE:
+        return {"loaded": False, "error": "Piper TTS unavailable"}
+    return piper.get_stats()
+
+
+@app.post("/vox/speak")
+async def vox_speak(request: SpeakRequest, accept: str = "application/json"):
+    """Synthesize text and return audio directly (no SSE broadcast)."""
+    if not PIPER_AVAILABLE or not piper.is_loaded:
+        raise HTTPException(status_code=503, detail="Piper TTS not ready")
+
+    if not request.text or not request.text.strip():
+        raise HTTPException(status_code=400, detail="Text cannot be empty")
+
+    wav_bytes = await synthesize_async(request.text)
+    if not wav_bytes:
+        raise HTTPException(status_code=500, detail="Synthesis failed")
+
+    if "audio/wav" in accept:
+        return Response(content=wav_bytes, media_type="audio/wav")
+
+    return {
+        "text": request.text,
+        "audio": base64.b64encode(wav_bytes).decode("ascii"),
+        "format": "audio/wav",
+        "sample_rate": piper.sample_rate,
+    }
+
 
 if __name__ == "__main__":
     import uvicorn

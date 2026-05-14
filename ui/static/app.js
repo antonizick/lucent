@@ -26,9 +26,8 @@ let lastSecurityContent = '';
 let refreshCountdown = 30;
 let refreshTimerInterval = null;
 
-// Load and populate available voices
-function loadVoices() {
-    const voices = window.speechSynthesis.getVoices();
+// Load and populate available voices from server Piper API
+async function loadVoices() {
     voiceSelect.innerHTML = '';
 
     // Add "None" option for muting
@@ -37,59 +36,134 @@ function loadVoices() {
     noneOption.textContent = 'None (muted)';
     voiceSelect.appendChild(noneOption);
 
-    voices.forEach((voice, index) => {
-        const option = document.createElement('option');
-        option.value = index;
-        option.textContent = `${voice.name} (${voice.lang})`;
-        voiceSelect.appendChild(option);
-    });
+    try {
+        const resp = await fetch('/vox/voices');
+        if (resp.ok) {
+            const data = await resp.json();
+            const savedVoice = localStorage.getItem('selectedVoice');
 
-    // Try to auto-select British English voice
-    const britishVoices = voices.filter(v =>
-        v.name.includes('Zira') ||
-        (v.lang.includes('en-GB') && v.name.includes('Female'))
-    );
+            data.voices.forEach(voice => {
+                const option = document.createElement('option');
+                option.value = voice.name;
+                const genderTag = voice.gender !== 'unknown' ? ` (${voice.gender})` : '';
+                option.textContent = `${voice.name}${genderTag}`;
+                voiceSelect.appendChild(option);
+            });
 
-    if (britishVoices.length > 0) {
-        const selectedIndex = voices.indexOf(britishVoices[0]);
-        voiceSelect.value = selectedIndex;
-        currentVoice = britishVoices[0];
-        status.textContent = `Voice: ${britishVoices[0].name}`;
-    } else if (voices.length > 0) {
-        voiceSelect.value = 0;
-        currentVoice = voices[0];
+            // Select current server voice or saved preference
+            const target = savedVoice && savedVoice !== 'none' ? savedVoice : data.current;
+            if (target && voiceSelect.querySelector(`option[value="${target}"]`)) {
+                voiceSelect.value = target;
+                currentVoice = target;
+            } else if (data.current) {
+                voiceSelect.value = data.current;
+                currentVoice = data.current;
+            }
+
+            if (currentVoice && currentVoice !== 'none') {
+                status.textContent = `Voice: ${currentVoice}`;
+            }
+        }
+    } catch (err) {
+        // Fall back to browser TTS if server voices unavailable
+        console.warn('Server voices unavailable, using browser TTS:', err);
+        const voices = window.speechSynthesis.getVoices();
+        voices.forEach((voice, index) => {
+            const option = document.createElement('option');
+            option.value = `browser:${index}`;
+            option.textContent = `${voice.name} (${voice.lang})`;
+            voiceSelect.appendChild(option);
+        });
+        if (voices.length > 0) {
+            voiceSelect.value = `browser:0`;
+            currentVoice = `browser:0`;
+        }
     }
 }
 
-// Initialize voices when they load
-window.speechSynthesis.onvoiceschanged = loadVoices;
 loadVoices();
 
-// Voice selection change
-voiceSelect.addEventListener('change', (e) => {
-    localStorage.setItem('selectedVoice', e.target.value);
+// Voice selection change — switch server voice if it's a Piper voice
+voiceSelect.addEventListener('change', async (e) => {
+    const val = e.target.value;
+    localStorage.setItem('selectedVoice', val);
 
-    if (e.target.value === 'none') {
+    if (val === 'none') {
         currentVoice = null;
         status.textContent = 'Voice: Muted (visualizations only)';
+        return;
+    }
+
+    currentVoice = val;
+
+    if (!val.startsWith('browser:')) {
+        // Switch server voice
+        try {
+            await fetch('/vox/voice', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ voice: val }),
+            });
+            status.textContent = `Voice: ${val}`;
+        } catch (err) {
+            console.error('Voice switch failed:', err);
+        }
     } else {
+        const idx = parseInt(val.replace('browser:', ''));
         const voices = window.speechSynthesis.getVoices();
-        currentVoice = voices[e.target.value];
-        status.textContent = `Voice: ${currentVoice.name}`;
+        status.textContent = `Voice: ${voices[idx]?.name || val}`;
     }
 });
 
-// Restore selected voice from localStorage
-const savedVoice = localStorage.getItem('selectedVoice');
-if (savedVoice) {
-    if (savedVoice === 'none') {
-        voiceSelect.value = 'none';
-        currentVoice = null;
-        status.textContent = 'Voice: Muted (visualizations only)';
-    } else if (voiceSelect.options[savedVoice]) {
-        voiceSelect.value = savedVoice;
-        const voices = window.speechSynthesis.getVoices();
-        currentVoice = voices[savedVoice];
+// Update avatar→voice mapping when user manually changes voice
+// (persists the new preference for the current avatar to the server config)
+async function saveAvatarVoicePreference(avatarName, voiceName) {
+    if (!avatarName || !voiceName || voiceName === 'none' || voiceName.startsWith('browser:')) return;
+    try {
+        voiceConfigCache = null; // invalidate cache
+        await fetch('/vox/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ avatar: avatarName, voice: voiceName }),
+        });
+    } catch (_) {}
+}
+
+// Voice config cache
+let voiceConfigCache = null;
+
+async function getVoiceConfig() {
+    if (!voiceConfigCache) {
+        try {
+            const resp = await fetch('/vox/config');
+            if (resp.ok) voiceConfigCache = await resp.json();
+        } catch (_) {}
+    }
+    return voiceConfigCache || { avatar_voices: {}, default_voice: null };
+}
+
+async function applyAvatarVoice(avatarName) {
+    try {
+        const config = await getVoiceConfig();
+        const mapped = config.avatar_voices[avatarName] || config.default_voice;
+        if (!mapped) return;
+
+        // Only switch if different from current
+        if (mapped === currentVoice) return;
+
+        await fetch('/vox/voice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ voice: mapped }),
+        });
+        currentVoice = mapped;
+
+        // Update dropdown to reflect new voice
+        if (voiceSelect.querySelector(`option[value="${mapped}"]`)) {
+            voiceSelect.value = mapped;
+        }
+    } catch (err) {
+        console.warn('Avatar voice switch failed:', err);
     }
 }
 
@@ -104,6 +178,8 @@ async function selectAvatarProfile(name) {
     avatarSelect.value = name || '';
     await window.character.setAvatar(name || null);
     localStorage.setItem('selectedAvatar', name || '');
+    // Switch voice to match this avatar
+    if (name) await applyAvatarVoice(name);
 }
 
 async function applyAgentAvatar(agentName) {
@@ -119,7 +195,7 @@ async function applyAgentAvatar(agentName) {
                        findAvatarByName('Emma') ||
                        avatarManager.avatars[0] ||
                        null;
-        await selectAvatarProfile(target);
+        await selectAvatarProfile(target || 'Lucent');
     } else {
         // Save Lucent's current avatar before switching away
         if (wasLucent) {
@@ -129,6 +205,9 @@ async function applyAgentAvatar(agentName) {
         const match = findAvatarByName(agentName);
         if (match) {
             await selectAvatarProfile(match);
+        } else {
+            // No matching avatar image, but still switch voice
+            await applyAvatarVoice(agentName);
         }
     }
 }
@@ -326,10 +405,49 @@ function setupSpeechListener() {
         status.textContent = 'Listening for speech requests...';
     };
 
-    eventSource.onmessage = (event) => {
+    eventSource.onmessage = async (event) => {
         try {
             const data = JSON.parse(event.data);
-            if (data && data.text) {
+            if (!data || !data.text) return;
+
+            // Always update text display
+            currentTextContent.textContent = data.text;
+            updateTimestamp();
+            if (fadeTimeout) {
+                clearTimeout(fadeTimeout);
+                fadeTimeout = null;
+            }
+            currentText.style.opacity = '1';
+
+            if (currentVoice === 'none' || currentVoice === null) {
+                // Muted — visualize only
+                speakText(data.text);
+                return;
+            }
+
+            if (data.audio && speechEnabled && window.AudioPlayer && window.AudioPlayer.isAudioContextAvailable()) {
+                // Server-side Piper audio
+                startSpeakingAnimation();
+                try {
+                    const source = await window.AudioPlayer.playAudioFromBase64(data.audio);
+                    source.onended = () => {
+                        stopSpeakingAnimation();
+                        fadeTimeout = setTimeout(() => {
+                            currentText.style.opacity = '0.2';
+                            fadeTimeout = null;
+                        }, 120000);
+                    };
+                } catch (err) {
+                    console.error('Audio playback failed:', err);
+                    stopSpeakingAnimation();
+                    if (window.speechSynthesis && currentVoice && !currentVoice.startsWith('browser:')) {
+                        speakFallback(data.text);
+                    } else {
+                        speakText(data.text);
+                    }
+                }
+            } else {
+                // Browser TTS fallback
                 speakText(data.text);
             }
         } catch (error) {
@@ -340,9 +458,39 @@ function setupSpeechListener() {
     eventSource.onerror = () => {
         status.textContent = 'Reconnecting to speech stream...';
         eventSource.close();
-        // Attempt to reconnect after 3 seconds
         setTimeout(setupSpeechListener, 3000);
     };
+}
+
+function startSpeakingAnimation() {
+    isSpeaking = true;
+    const scanner = document.getElementById('scanner');
+    const speakingAnimation = document.getElementById('speakingAnimation');
+    scanner.style.display = 'none';
+    speakingAnimation.classList.remove('hidden');
+    speakingAnimation.style.display = 'flex';
+    voicePanelLabel.textContent = 'AI VOICE BOX — SPEAKING';
+    voicePanelLabel.classList.add('speaking');
+    status.textContent = 'Speaking...';
+    if (window.character) window.character.startSpeaking();
+}
+
+async function stopSpeakingAnimation() {
+    isSpeaking = false;
+    const scanner = document.getElementById('scanner');
+    const speakingAnimation = document.getElementById('speakingAnimation');
+    scanner.style.display = 'flex';
+    speakingAnimation.classList.add('hidden');
+    speakingAnimation.style.display = 'none';
+    voicePanelLabel.textContent = 'AI VOICE BOX — IDLE';
+    voicePanelLabel.classList.remove('speaking');
+    status.textContent = 'Ready';
+    if (window.character) await window.character.stopSpeaking();
+}
+
+function speakFallback(text) {
+    const utterance = new SpeechSynthesisUtterance(text);
+    window.speechSynthesis.speak(utterance);
 }
 
 // Poll for log updates
@@ -882,10 +1030,11 @@ avatarSelect.addEventListener('change', async (e) => {
     const avatar = e.target.value || null;
     localStorage.setItem('selectedAvatar', avatar || '');
     if (!currentAgent) {
-        // In Lucent mode: save as Lucent's preference
         localStorage.setItem('lucentAvatar', avatar || '');
     }
     await window.character.setAvatar(avatar);
+    // Switch to this avatar's configured voice
+    if (avatar) await applyAvatarVoice(avatar);
 });
 
 loadAvatars();
