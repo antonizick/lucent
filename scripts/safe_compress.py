@@ -12,14 +12,16 @@ Usage:
 
 import sys
 from pathlib import Path
+from datetime import date
 from verify_startup import archive_daily_note
 
 LUCENT_ROOT = Path(__file__).parent.parent
 
 def safe_compress(note_date: str) -> int:
     """
-    Archive and compress a daily note. Archival is mandatory — compression
-    only proceeds if archival succeeds.
+    Archive a daily note and write the compression marker to today's note.
+    Archival is mandatory — marker is only written if archival succeeds.
+    Actual summarization is performed by Claude after this script exits.
 
     Args:
         note_date: Date string (YYYY-MM-DD)
@@ -33,7 +35,7 @@ def safe_compress(note_date: str) -> int:
         print(f"✗ Note not found: {note_path}")
         return 1
 
-    # STEP 1: Archive (mandatory)
+    # STEP 1: Archive (mandatory — refuses to proceed if archival fails)
     success, message = archive_daily_note(LUCENT_ROOT, note_date)
     print(message)
 
@@ -42,15 +44,20 @@ def safe_compress(note_date: str) -> int:
         print(f"  Archival is mandatory and must succeed before compression.")
         return 1
 
-    # STEP 2: Compress (only if archival succeeded)
-    print(f"→ Compressing {note_date}.md...")
-    # Note: Actual compression logic goes here (trimming to 1-2 paragraphs)
-    # For now, just signal success since the Curator handles actual trimming
+    # STEP 2: Write compression marker to today's note
+    # check_compression.py mark-done looks for this string in today's note
+    today_note = LUCENT_ROOT / "memory" / f"{date.today().isoformat()}.md"
+    marker = f"\nCompressed {note_date} at session start.\n"
+    try:
+        with open(today_note, "a") as f:
+            f.write(marker)
+        print(f"✓ Compression marker written to {today_note.name}")
+    except Exception as e:
+        print(f"✗ Failed to write compression marker: {e}")
+        return 1
 
-    # STEP 3: Add compression marker (only after successful archival)
-    # Marker format: "Compressed YYYY-MM-DD at session start." on line 3 after header
-    marker = f"Compressed {note_date} at session start."
-    print(f"→ Adding marker: {marker}")
+    print(f"→ Ready for Claude to summarize: memory/archive/{note_date}.md")
+    print(f"  After summarizing, overwrite memory/{note_date}.md with the summary.")
 
     return 0
 
