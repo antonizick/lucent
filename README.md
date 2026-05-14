@@ -22,6 +22,8 @@ A personal AI assistant framework built on persistent memory. Lucent maintains c
 
 Lucent is a personal AI assistant framework with a private GitHub repository as the single source of truth.
 
+> **Recovering or deploying from scratch?** See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the complete step-by-step guide — covers both repos, all services, cron jobs, shell config, Claude Code, Ollama, and OpenCode.
+
 ## Key Features
 
 ### Voice Feedback (Voice Box)
@@ -132,6 +134,8 @@ lucent/
 ```
 
 ## Setup
+
+> **Fresh deployment or disaster recovery?** The [Deployment Guide](docs/DEPLOYMENT.md) covers the full process end-to-end: system prerequisites, cloning both repos, Python and Node dependencies, environment variables, installing and enabling all five systemd services, cron jobs, `.bashrc` auto-starts, and step-by-step setup for Claude Code, Ollama, and OpenCode. The quick steps below are for reference only.
 
 ### 1. Clone the repo
 
