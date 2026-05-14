@@ -552,7 +552,7 @@ body {
     flex-direction: column;
     gap: 12px;
     padding: 20px;
-    width: 25vw;
+    width: 40vw;
     background-color: var(--bg-secondary);
     border: 1px solid var(--neon-cyan);
     box-shadow: var(--neon-glow-cyan);
