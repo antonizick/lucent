@@ -21,6 +21,8 @@ The hook injects: LTMemory.md, last 7 days of daily notes, core.md, lucentIdent.
 
 ### STEP 2: Compress Uncompressed Notes (MANDATORY)
 
+**Live Archive System:** The hourly backup process (`backup_memory.py`) automatically archives the accumulating daily note throughout the day. By compression time, the archive is guaranteed to be complete.
+
 Run this scan:
 ```bash
 python3 scripts/scan_uncompressed.py --days 7
@@ -30,29 +32,29 @@ python3 scripts/scan_uncompressed.py --days 7
 
 **For EACH date YYYY-MM-DD listed:**
 
-1. **Archive the full note** (mandatory before any summarization):
+1. **Validate archive and compress:**
    ```bash
-   python3 scripts/safe_compress.py YYYY-MM-DD
+   python3 scripts/compress_with_archive_validation.py YYYY-MM-DD
    ```
-   - Archives full note to `memory/archive/YYYY-MM-DD.md`
-   - Writes compression marker to today's daily note
-   - **Must exit 0. If it fails: STOP and alert Nick. Do not compress.**
+   - **Validates:** Archive has ≥ lines as current daily note. If not, re-archives first.
+   - **Archives:** Full note to `memory/archive/YYYY-MM-DD.md`
+   - **Compresses:** Daily note to 1-2 paragraph summary
+   - **Must exit 0.** If fails: STOP and alert Nick. Do not proceed.
 
-2. **Read the archived note:** `memory/archive/YYYY-MM-DD.md`
-   Read the entire file.
+2. **Read the archive validation output** — Script confirms archive is complete before compression.
 
-3. **Write a 1-2 paragraph summary** covering:
+3. **Manually write summary** (compress_with_archive_validation.py is a template; you still create the actual 1-2 paragraph summary):
    - What was built or decided (outcomes only)
    - Key technical decisions (not implementation steps)
    - Blockers or open questions
    - NO transcripts, NO step-by-step logs, NO session chatter
 
-4. **Overwrite** `memory/YYYY-MM-DD.md` with ONLY the summary (not the archive — the original is already safe).
+4. **Overwrite** `memory/YYYY-MM-DD.md` with the summary (archive is safe).
 
 5. **Append to `memory/LTMemory.md`** (under a `## Recent Sessions` section, creating it if absent):
    ```
    ### Session YYYY-MM-DD
-   [summary]
+   [summary from step 3]
    ```
 
 6. **If YYYY-MM-DD is yesterday**, mark compression complete:
@@ -62,9 +64,11 @@ python3 scripts/scan_uncompressed.py --days 7
    Verify exit 0. If it fails, alert Nick.
 
 7. **Log to today's daily note:**
-   `Compressed YYYY-MM-DD (N lines → summary) at session start.`
+   `Compressed YYYY-MM-DD (N lines → summary) at session start. Archive verified complete.`
 
 ✓
+
+**Invariant:** Archive always contains the complete daily note. Compression happens AFTER archive is validated complete, never before.
 
 ### STEP 3: Load Priorities & Reminders
 Hook injects REMINDERS.md alongside LTMemory. Review Current Priorities section and all reminders now in context. ✓

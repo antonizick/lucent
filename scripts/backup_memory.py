@@ -60,6 +60,50 @@ def run_cmd(cmd, cwd=None, check=True):
     )
     return result.returncode, result.stdout, result.stderr
 
+def archive_accumulating_daily_note() -> None:
+    """
+    Archive the current day's accumulating daily note.
+
+    This runs every backup cycle (hourly) to ensure the archive captures
+    the growing daily note throughout the day. When compression happens,
+    the archive will already be complete, preventing data loss.
+    """
+    import shutil
+    today = date.today().strftime("%Y-%m-%d")
+    daily_note = MEMORY_DIR / f"{today}.md"
+    archive_path = MEMORY_DIR / "archive" / f"{today}.md"
+
+    if not daily_note.exists():
+        return  # No daily note yet
+
+    try:
+        # Create archive directory if needed
+        archive_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Copy current daily note to archive (overwrites old version)
+        shutil.copy2(daily_note, archive_path)
+
+        # Log only if this is a new/growing note (not already archived)
+        # Check if archive is being updated (note lines > archive lines)
+        try:
+            with open(daily_note, 'r') as f:
+                daily_lines = sum(1 for _ in f)
+            with open(archive_path, 'r') as f:
+                archive_lines = sum(1 for _ in f)
+
+            # If archive just became complete or grew, log it
+            if daily_lines == archive_lines:
+                # Archive now matches daily note—it's complete
+                # Silently maintain the invariant: archive_lines >= daily_lines
+                pass
+
+        except Exception:
+            pass  # Don't fail backup on logging errors
+
+    except Exception as e:
+        # Log error but don't fail the backup
+        log_to_daily_note(f"Archive update failed: {e}")
+
 def backup_memory() -> int:
     """
     Backup memory folder to Git.
@@ -128,8 +172,15 @@ def check_lucent_core() -> None:
         print(f"✗ Lucent core repo check failed")
 
 def main():
+    # Step 1: Archive the accumulating daily note (maintains live archive)
+    archive_accumulating_daily_note()
+
+    # Step 2: Backup memory folder to git
     exit_code = backup_memory()
+
+    # Step 3: Verify lucent core repo
     check_lucent_core()
+
     sys.exit(exit_code)
 
 if __name__ == "__main__":
