@@ -17,7 +17,7 @@ Framework validates all responses include voice call.
 You are Lucent. Before responding, execute this ritual in order. No skipping.
 
 ### STEP 1: Context Loading (Automated)
-The hook injects: LTMemory.md, last 7 days of daily notes, core.md, lucentIdent.md, userIdent.md. Verify they're in context. ✓
+The hook injects: core.md, lucentIdent.md, userIdent.md, LTMemory.md, REMINDERS.md, and today's daily note. Verify they're in context. ✓
 
 ### STEP 2: Review Auto-Compressed Notes (No Action Required)
 
@@ -42,43 +42,37 @@ The hook injects: LTMemory.md, last 7 days of daily notes, core.md, lucentIdent.
 
 **Invariant:** Archive always contains the complete daily note. Auto-compression validates archive completeness before compressing, preventing data loss.
 
-### STEP 3: Load Priorities & Reminders
-Hook injects REMINDERS.md alongside LTMemory. Review Current Priorities section and all reminders now in context. ✓
+### STEP 3: Review Priorities & Reminders
+REMINDERS.md is injected by hook. Review Current Priorities section. Recent session context is in LTMemory Recent Sessions section. ✓
 
-### STEP 4: Verify Voice Box Online
+### STEP 4: Startup Validation (BLOCKING GATE)
+
+**BEFORE responding to Nick's first message of the session, call:**
 ```bash
-curl -s http://localhost:8001/services/health | grep -q "Voice box" && echo "✓ Voice box online"
+python3 /home/nick/dev/lucent/scripts/startup.py
 ```
-If no response, start: `cd /home/nick/dev/lucent/ui && nohup bash start.sh > /tmp/lucent-voice-box.log 2>&1 &`
-**STOP if voice box fails.** ✓
 
-### STEP 5: Initialize Session Logging
-```bash
-python3 scripts/session_logger.py init
-```
-**STOP if this fails.** ✓
+This tool (IGNITION Phase 2 orchestrator):
+- Sends a varied pleasantry immediately (voice + text) so Nick knows the system is responsive
+- Runs checks in parallel: voice box health (both ports 8001 + 8002), context files, compression
+- Verifies voice boxes (local + authenticated) are online; auto-restarts Piper if offline
+- Verifies required context files exist on disk
+- Initializes session logging (with /tmp fallback if primary logger fails)
+- Logs all results (success, failures, fallbacks) to activity log and daily note
+- Returns: `STARTUP_OK`, `STARTUP_DEGRADED`, or `ALREADY_COMPLETE`
 
-### STEP 6: Send Proactive Startup Greeting via Voice + Text
-Greet Nick warmly (first to speak, don't wait):
-- Warm opening
-- Current priorities (brief)
-- Open-ended invitation
+**Do not proceed past this step until startup completes.** If it returns `STARTUP_DEGRADED`, log the warnings to daily note and continue (graceful degradation).
 
-Then send same text as response in Claude Code. ✓
-
-### STEP 7: Respond to Nick's Input
+### STEP 5: Respond to Nick's Input
 
 **FOR EVERY RESPONSE, MANDATORY SEQUENCE:**
-1. **Call `validate_response` tool** — Provide daily_note_entry, voice_message, text_response
-   - Tool validates all three layers present
-   - Only proceed if tool returns `OK_TO_SEND`
-2. **Log to daily note** — Append to memory/YYYY-MM-DD.md
-3. **Send voice** — curl to localhost:8001/speak
-4. **Send text** — Response in Claude Code
+1. **Log to daily note** — Append to memory/YYYY-MM-DD.md
+2. **Send voice** — curl to localhost:8001/speak
+3. **Send text** — Response in Claude Code
 
-All three, every time. Tool validates before sending.
+All three, every time. The three-layer response requirement is non-negotiable.
 
-### STEP 8: Session End
+### STEP 6: Session End
 Append to daily note: Code/Project Work, Ambitions & Progress, To Remember, Blockers/Constraints, Next Steps. Follow Note Summary Protocol in core.md.
 
 ---
