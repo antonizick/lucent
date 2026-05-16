@@ -55,3 +55,23 @@ else
   echo "[Lucent] Run: python3 /home/nick/dev/lucent/scripts/startup.py"
   echo "[Lucent] This must complete before you respond to Nick."
 fi
+echo ""
+echo "[Lucent] === STARTUP READINESS MARKER CHECK ==="
+
+MARKER_FILE=$(ls -1 "$LUCENT_DIR/memory/.startup_ready_"*.txt 2>/dev/null | head -1)
+if [[ -n "$MARKER_FILE" ]]; then
+  echo "[CRITICAL] STARTUP READINESS MARKER FOUND"
+  echo "[CRITICAL] Before responding to Nick, you MUST:"
+  echo "[CRITICAL] 1. Send voice + text: 'Startup complete. All systems ready. Standing by.'"
+  echo "[CRITICAL] 2. Log to daily note: 'Startup readiness acknowledged (auto via hook)'"
+  echo "[CRITICAL] 3. Then proceed to handle Nick's request"
+  echo ""
+
+  # Execute acknowledgment at hook level (truly automatic)
+  TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S")
+  curl -s -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d "{\"text\":\"Startup complete. All systems ready. Standing by.\"}" 2>/dev/null || true
+  echo "[$TIMESTAMP] Startup readiness acknowledged (auto via UserPromptSubmit hook)" >> "$NOTE"
+  rm -f "$MARKER_FILE"
+else
+  echo "[Lucent] ✓ No startup marker — normal response flow"
+fi

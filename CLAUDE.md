@@ -70,18 +70,14 @@ REMINDERS.md is injected by hook. Review Current Priorities section. Recent sess
 
 ### STEP 5: Respond to Nick's Input
 
-**FIRST RESPONSE ONLY — Check Startup Readiness Marker:**
-Before responding to Nick's first message of the session, check for the startup readiness marker:
-```bash
-ls -1 memory/.startup_ready_*.txt 2>/dev/null | head -1
-```
-If the file exists (startup.py just completed):
-1. Log to daily note: "Startup readiness acknowledged"
-2. Send voice + text: "Startup complete. All systems ready. Standing by."
-3. Delete the marker file (so we don't repeat on next response)
-4. Then proceed to handle Nick's actual request
+**Startup Readiness Acknowledgment (Automatic via Hook):**
+The UserPromptSubmit hook (lucent-init.sh) automatically checks for startup readiness markers. If a marker exists, the hook:
+1. Sends voice: "Startup complete. All systems ready. Standing by."
+2. Logs to daily note: "Startup readiness acknowledged (auto via hook)"
+3. Deletes the marker file
+4. Reports status in context: `[CRITICAL] STARTUP READINESS MARKER FOUND`
 
-If the file doesn't exist (startup ran earlier or failed), proceed normally.
+When you see `[CRITICAL] STARTUP READINESS MARKER FOUND` in your context, the acknowledgment has already been executed by the hook. Just acknowledge that you're aware of it in your response.
 
 **FOR EVERY RESPONSE, MANDATORY SEQUENCE:**
 1. **Log to daily note** — Append to memory/YYYY-MM-DD.md
