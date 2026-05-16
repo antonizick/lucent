@@ -151,9 +151,12 @@ lucent/
 │   └── archive/           Historical notes + compressed logs (never deleted)
 ├── private/               Sensitive context (git-ignored)
 ├── scripts/               Backup & maintenance utilities
+│   ├── startup.py         IGNITION Phase 2: Robust startup orchestrator (parallel checks, auto-restart, /tmp fallback)
+│   ├── validate_startup.py IGNITION Phase 1: Sequential validation gate (preserved for backward compat)
+│   ├── verify_startup.py  Checkpoint utilities (ritual enforcement, hash validation)
 │   ├── backup_memory.py   Main backup executor (retry + health check)
-│   ├── verify_startup.py  Startup ritual enforcement
 │   ├── verify_backup_health.py Health check (GitHub connectivity)
+│   ├── session_logger.py  Session logging initialization
 │   └── rotate_voice_logs.py Voice log archival (monthly gzip)
 ├── ui/                    Voice Box web UI & Discord integration
 │   ├── server.py          FastAPI server (voice, Piper TTS, Discord, backup status)
@@ -233,48 +236,73 @@ Source your aliases and run `brain` to perform the initial push, or `lucent` to 
 
 ### The Startup Ritual — Complete Reference
 
-Every agent session executes an 8-step startup ritual that ensures continuity and reliable operation. This section documents what happens, what context is available, and what may be missing.
+**IGNITION Phase 3** makes the startup ritual **fully automatic** via Claude Code's `SessionStart` hook. The ritual runs once when the session opens — before any user interaction — with no manual execution required.
 
-#### **What Happens at Startup (Step-by-Step)**
+#### **What Happens at Startup (Automatic Flow)**
 
-1. **Hook injects context** (automated)
-   - memory/LTMemory.md (long-term knowledge)
-   - Last 7 days of daily notes (compressed to 1-2 paragraphs each, except today in full)
-   - memory/core.md, memory/lucentIdent.md, memory/userIdent.md (identity and rules)
-   - These files appear in system context automatically
+1. **SessionStart Hook Fires** (automatic)
+   - Triggers when Claude Code session opens, before any user message
+   - Executes `python3 scripts/startup.py` with 60-second timeout
+   - Runs silently in background, writes checkpoint file
 
-2. **Compress yesterday's note** (mandatory)
-   - If yesterday's daily note exists, invoke Curator to compress it to 1-2 paragraphs (outcomes + key decisions only)
-   - Verify "Compressed [date]" marker in today's note
-   - Update ritual checkpoint
+2. **IGNITION Phase 2 Orchestrator Runs** (`scripts/startup.py`)
+   - Sends varied pleasantry immediately (voice + text) — Nick knows system is responsive
+   - **Parallel checks** (concurrent via ThreadPoolExecutor):
+     - **Voice Box Health:** Checks both ports 8001 (local) and 8002 (authenticated)
+     - **Context Files:** Verifies memory/core.md, memory/lucentIdent.md, memory/userIdent.md, memory/LTMemory.md exist
+     - **Compression Trigger:** Fires backup_memory.py to archive previous session's notes (non-blocking)
+   - **Auto-Restart Fallback:** If voice box offline, automatically runs `bash ui/start.sh` and polls for up to 20 seconds
+   - **Logger Initialization:** Runs `session_logger.py init` with /tmp fallback if primary logger fails
+   - **Checkpoint Write:** Stores ritual completion in `memory/.ritual_checkpoint.json`
+   - **Exit Status:** Returns STARTUP_OK, STARTUP_DEGRADED, or ALREADY_COMPLETE
 
-3. **Load priorities and reminders** (automated)
+3. **UserPromptSubmit Hook Injects Context** (automated)
+   - `lucent-init.sh` runs when user types first message
+   - Injects memory files: memory/LTMemory.md, core.md, lucentIdent.md, userIdent.md, today's note, REMINDERS.md
+   - Shows checkpoint status: "✓ Startup validated for today (auto-triggered via SessionStart hook)" if successful
+   - Shows fallback warning if checkpoint is stale, with manual `startup.py` command
+
+4. **Load priorities and reminders** (automated)
    - Read Current Priorities section in LTMemory.md (injected by hook)
-   - Read REMINDERS.md (now injected by hook alongside LTMemory.md)
+   - Read REMINDERS.md (injected by hook alongside LTMemory.md)
    - Review pattern-based reminders (due today), context-triggered reminders, opportunistic reminders
 
-4. **Verify Voice Box** (mandatory for Claude Code)
-   - Check `curl -s http://localhost:8001/health`
-   - Start if missing: `cd /home/nick/dev/lucent/ui && nohup bash start.sh &`
-   - **STOP if voice box fails** — cannot proceed
+5. **Ready for Interaction**
+   - Ritual complete; voice box online, context loaded, checkpoint valid
+   - Ready to respond to Nick
 
-5. **Initialize session logging** (mandatory for Claude Code)
-   - Run `python3 scripts/session_logger.py /home/nick/dev/lucent`
-   - Creates session marker in daily note
-   - **STOP if this fails** — cannot proceed
-
-6. **Send proactive greeting** (mandatory for Claude Code)
-   - Greet Nick warmly via voice + text (Lucent speaks first, no waiting)
-   - Include current priorities, active reminders, open-ended invitation
-
-7. **Wait for Nick's input** (ready state)
-   - Ritual complete; ready to respond
-
-8. **Respond using three-layer requirement**
+6. **Respond using three-layer requirement**
    - Log to daily note (append to memory/YYYY-MM-DD.md)
    - Send voice (curl to localhost:8001/speak)
    - Send text (response in Claude Code)
    - All three, every time. Framework validates.
+
+#### **IGNITION — Startup Ritual Architecture**
+
+The startup ritual is built on **IGNITION**, a three-phase system that ensures reliable, automatic, resilient initialization:
+
+| Phase | Component | Status | Function |
+|---|---|---|---|
+| **Phase 1** | `validate_startup.py` | Complete | Sequential validation gate: voice box + context files + session logger + checkpoint |
+| **Phase 2** | `scripts/startup.py` | Complete | Robust orchestrator: parallel checks, dual voice box (8001 + 8002), auto-restart fallback, /tmp logger fallback, comprehensive logging |
+| **Phase 3** | `SessionStart` hook in `.claude/settings.json` | Complete | Automatic execution: fires at session open before any user interaction, no manual execution required |
+
+**Phase 2 Features (Robust Orchestrator):**
+- **Parallel Execution:** Voice box + context + compression run concurrently (ThreadPoolExecutor)
+- **Dual Voice Box Support:** Both ports 8001 (local) and 8002 (authenticated) validated together
+- **Auto-Restart Fallback:** If either port offline, automatically restarts Piper and polls up to 20 seconds
+- **Session Logger Fallback:** If primary logger fails, writes to `/tmp/lucent_session_YYYYMMDD.log`
+- **Per-Step Timeouts:** 3s health check, 20s restart window, 5s logger, 10s compression
+- **Graceful Degradation:** Returns STARTUP_OK, STARTUP_DEGRADED, or ALREADY_COMPLETE with detailed logging
+- **Idempotency Guard:** Same-day reruns short-circuit to ALREADY_COMPLETE instantly
+- **Comprehensive Logging:** All events logged to activity log and daily note with timestamps
+
+**Phase 3 Automation:**
+- `SessionStart` hook in `.claude/settings.json` fires `startup.py` automatically when session opens
+- Runs before any user interaction — guaranteed initialization
+- Silent execution (output to log, not context) — checkpoint verified via lucent-init.sh output
+- Per-session-once mechanism via checkpoint file (`memory/.ritual_checkpoint.json`)
+- Fallback: If checkpoint stale, `lucent-init.sh` prints warning with manual `startup.py` command
 
 #### **Context Available at Startup**
 
