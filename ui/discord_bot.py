@@ -25,6 +25,12 @@ CLAUDE_MODEL_PATH = "/tmp/lucent_discord_claude_model"
 CLAUDE_MODEL_ALIASES = {"opus": "opus", "sonnet": "sonnet", "haiku": "haiku"}
 CLAUDE_MODEL_DEFAULT = "sonnet"
 
+# Single-word command aliases
+COMMAND_ALIASES = {
+    "clear": "/clear",
+    "model": "/model",
+}
+
 # Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
@@ -93,13 +99,19 @@ async def on_message(message):
 
 async def queue_message(message: discord.Message):
     """Post Discord message to backend /message/pending queue."""
+    text = message.content.strip()
+
+    # Apply single-word command aliases
+    if text.lower() in COMMAND_ALIASES:
+        text = COMMAND_ALIASES[text.lower()]
+
     payload = {
         "source": "discord_command",
         "user_id": str(message.author.id),
         "channel_id": str(message.channel.id),
         "message_id": str(message.id),
         "thread_id": str(message.channel.id) if hasattr(message.channel, 'parent') else None,
-        "text": message.content,
+        "text": text,
         "timestamp": datetime.now().isoformat()
     }
 
@@ -162,6 +174,10 @@ async def handle_claude_message(message: discord.Message):
     """Handle messages in the dedicated Claude CLI channel."""
     text = message.content.strip()
 
+    # Apply single-word command aliases
+    if text.lower() in COMMAND_ALIASES:
+        text = COMMAND_ALIASES[text.lower()]
+
     if text.lower() in ("/clear", "/new"):
         with open(RESET_FLAG_PATH, "w") as f:
             f.write("reset")
@@ -220,13 +236,16 @@ async def handle_claude_message(message: discord.Message):
 
         await message.remove_reaction("⏳", bot.user)
 
-        # Clean output: remove "session complete" and similar messages for voice box
+        # Clean output: remove "session complete" and "(no response)" for voice box
         voice_output = output
         if "session complete" in voice_output.lower():
             # Remove the "session complete" line
             lines = voice_output.split('\n')
             lines = [line for line in lines if "session complete" not in line.lower()]
             voice_output = '\n'.join(lines).strip()
+
+        # Remove "(no response)" markers - never send to voice box
+        voice_output = voice_output.replace("*(no response)*", "").strip()
 
         chunks = [output[i:i+1900] for i in range(0, len(output), 1900)]
 

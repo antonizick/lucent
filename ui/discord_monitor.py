@@ -31,6 +31,12 @@ LUCENT_ROOT = os.getenv("LUCENT_ROOT", "/home/nick/dev/lucent")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 POLLING_INTERVAL = 3  # Seconds between polls for pending messages
 
+# Single-word command aliases
+COMMAND_ALIASES = {
+    "clear": "/clear",
+    "model": "/model",
+}
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -385,6 +391,10 @@ Respond naturally and concisely to Nick's question above. Keep responses under 2
     def handle_command(self, message: dict):
         """Handle special Discord commands. Returns (is_command, response)."""
         text = message.get("text", "").strip().lower()
+
+        # Apply single-word command aliases (case-insensitive)
+        if text in COMMAND_ALIASES:
+            text = COMMAND_ALIASES[text.lower()]
 
         # Check for list models commands
         if any(phrase in text for phrase in ["list models", "show models", "available models", "what models"]):
