@@ -34,10 +34,10 @@ The hook injects: core.md, lucentIdent.md, userIdent.md, LTMemory.md, REMINDERS.
 
 **If you see a placeholder and want to improve it:**
 1. Read the full archive: `memory/archive/YYYY-MM-DD.md`
-2. Write 1-2 paragraph summary covering:
-   - What was built or decided (outcomes only)
-   - Key technical decisions (not implementation steps)
-   - Blockers or open questions
+2. Write 2-3 paragraph summary covering:
+   - **Paragraph 1:** What was built, shipped, or completed (outcomes + deliverables)
+   - **Paragraph 2:** Technical decisions, architecture choices, and implementations
+   - **Paragraph 3:** Blockers, constraints, open questions, or deferred work
 3. Replace the stub in LTMemory with your summary
 
 **Invariant:** Archive always contains the complete daily note. Auto-compression validates archive completeness before compressing, preventing data loss.

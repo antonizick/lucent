@@ -473,42 +473,39 @@ async def get_log():
 
 @app.get("/log/weekly")
 async def get_weekly_log():
-    """Get insights from the last 4 days of daily notes."""
-    from datetime import timedelta
-
+    """Get recent sessions from LTMemory.md."""
     memory_dir = Path(__file__).parent.parent / "memory"
-    today = date.today()
-    insights = []
+    memory_file = memory_dir / "LTMemory.md"
 
-    # Collect the last 4 days (not including today)
-    for i in range(1, 5):
-        day = today - timedelta(days=i)
-        log_path = memory_dir / f"{day.isoformat()}.md"
+    if not memory_file.exists():
+        return {"content": "No long-term memory file found."}
 
-        if log_path.exists():
-            try:
-                content = log_path.read_text()
-                # Extract first paragraph or key insights
-                lines = content.split('\n')
-                summary = []
-                for line in lines:
-                    if line.strip() and not line.startswith('#'):
-                        summary.append(line)
-                        if len(summary) >= 3:  # First 3 lines of content
-                            break
+    try:
+        content = memory_file.read_text()
+        # Extract Recent Sessions section
+        lines = content.split('\n')
+        in_recent = False
+        recent_content = []
 
-                if summary:
-                    day_str = day.strftime("%a, %b %d")
-                    insights.append(f"**{day_str}**\n" + '\n'.join(summary[:3]))
-            except Exception as e:
-                logger.error(f"Error reading {log_path}: {e}")
+        for line in lines:
+            if line.strip().startswith('## Recent Sessions'):
+                in_recent = True
+                continue
+            elif line.strip().startswith('##') and in_recent:
+                # Hit next major section, stop collecting
+                break
+            elif in_recent:
+                recent_content.append(line)
 
-    if insights:
-        content = "\n\n".join(insights)
-    else:
-        content = "No logs from the past 4 days."
-
-    return {"content": content}
+        if recent_content:
+            # Clean up leading/trailing empty lines
+            text = '\n'.join(recent_content).strip()
+            return {"content": text}
+        else:
+            return {"content": "No recent sessions found in long-term memory."}
+    except Exception as e:
+        logger.error(f"Error reading memory file: {e}")
+        return {"content": f"Error reading memory: {str(e)}"}
 
 @app.get("/log/memory")
 async def get_memory_log():
