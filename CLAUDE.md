@@ -70,6 +70,19 @@ REMINDERS.md is injected by hook. Review Current Priorities section. Recent sess
 
 ### STEP 5: Respond to Nick's Input
 
+**FIRST RESPONSE ONLY — Check Startup Readiness Marker:**
+Before responding to Nick's first message of the session, check for the startup readiness marker:
+```bash
+ls -1 memory/.startup_ready_*.txt 2>/dev/null | head -1
+```
+If the file exists (startup.py just completed):
+1. Log to daily note: "Startup readiness acknowledged"
+2. Send voice + text: "Startup complete. All systems ready. Standing by."
+3. Delete the marker file (so we don't repeat on next response)
+4. Then proceed to handle Nick's actual request
+
+If the file doesn't exist (startup ran earlier or failed), proceed normally.
+
 **FOR EVERY RESPONSE, MANDATORY SEQUENCE:**
 1. **Log to daily note** — Append to memory/YYYY-MM-DD.md
 2. **Send voice** — curl to localhost:8001/speak

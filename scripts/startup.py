@@ -299,6 +299,18 @@ def write_checkpoint_today(degraded: bool) -> None:
         log_to_daily_note(f"Checkpoint write failed: {e}")
 
 
+def write_readiness_marker() -> None:
+    """Write marker file to signal startup completion to Claude."""
+    try:
+        today = date.today().strftime("%Y-%m-%d")
+        marker_path = LUCENT_ROOT / "memory" / f".startup_ready_{today}.txt"
+        timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        with open(marker_path, "w") as f:
+            f.write(f"{timestamp}\nSTARTUP_OK\n")
+    except Exception as e:
+        log_to_activity(f"Failed to write readiness marker: {e}")
+
+
 def run(json_mode: bool = False) -> dict:
     """Main orchestrator. Returns dict with status, checks, and diagnostics."""
     if is_already_complete():
@@ -414,6 +426,7 @@ def run(json_mode: bool = False) -> dict:
             speak_thread_ready = threading.Thread(target=speak, args=(readiness,), daemon=True)
             speak_thread_ready.start()
             print(f"→ {readiness}")  # Arrow prefix to signal readiness
+            write_readiness_marker()
         else:
             print(f"⚠ Startup validation complete with issues.")
             if failures:
