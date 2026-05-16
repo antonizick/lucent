@@ -63,16 +63,15 @@ def send_voice(message: str) -> bool:
         return False
 
 
-def log_to_daily_note(message: str) -> bool:
-    """Append message to today's daily note."""
+def log_to_activity(message: str) -> bool:
+    """Append message to activity log."""
     try:
         today = date.today().strftime("%Y-%m-%d")
-        daily_note = MARKER_DIR / f"{today}.md"
-        timestamp = datetime.now().strftime("%H:%M:%S")
-
-        if daily_note.exists():
-            with open(daily_note, "a") as f:
-                f.write(f"[{timestamp}] {message}\n")
+        log_path = MARKER_DIR / "logs" / f"activity_{today}.log"
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "a") as f:
+            f.write(f"[{timestamp}] [startup-ack] {message}\n")
         return True
     except Exception:
         return False
@@ -96,8 +95,8 @@ def main():
     # Send voice
     send_voice(message)
 
-    # Log to daily note
-    log_to_daily_note(f"**Startup acknowledgement sent:** {message}")
+    # Log to activity log
+    log_to_activity(f"Startup acknowledgement sent: {message}")
 
     return 0
 

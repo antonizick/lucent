@@ -48,7 +48,7 @@ REQUIRED_CONTEXT_FILES = [
 def log_to_activity(message: str) -> None:
     today = date.today().strftime("%Y-%m-%d")
     log_path = LUCENT_ROOT / "memory" / "logs" / f"activity_{today}.log"
-    timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(log_path, "a") as f:

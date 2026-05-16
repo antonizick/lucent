@@ -98,7 +98,7 @@ class CheckResult(NamedTuple):
 def log_to_activity(message: str) -> None:
     today = date.today().strftime("%Y-%m-%d")
     log_path = LUCENT_ROOT / "memory" / "logs" / f"activity_{today}.log"
-    timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(log_path, "a") as f:
@@ -304,7 +304,7 @@ def write_readiness_marker() -> None:
     try:
         today = date.today().strftime("%Y-%m-%d")
         marker_path = LUCENT_ROOT / "memory" / f".startup_ready_{today}.txt"
-        timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         with open(marker_path, "w") as f:
             f.write(f"{timestamp}\nSTARTUP_OK\n")
     except Exception as e:
@@ -371,15 +371,11 @@ def run(json_mode: bool = False) -> dict:
         failures.append(f"Voice box: {vb_result.reason}")
         log_to_activity(f"FAILURE: {vb_result.reason}")
         log_to_daily_note(f"STARTUP FAILURE: {vb_result.reason}")
-    else:
-        log_to_activity(f"✓ {vb_result.reason}")
 
     if not context_result.ok:
         warnings.append(f"Context: {context_result.reason}")
         log_to_activity(f"WARNING: {context_result.reason}")
         log_to_daily_note(f"STARTUP WARNING: {context_result.reason}")
-    else:
-        log_to_activity(f"✓ {context_result.reason}")
 
     if not compression_result.ok:
         if not compression_result.ok and "timed out" in compression_result.reason:

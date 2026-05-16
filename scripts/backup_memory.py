@@ -48,6 +48,18 @@ def log_to_daily_note(message: str) -> None:
     except Exception:
         pass  # Fail silently
 
+def log_to_activity(message: str) -> None:
+    """Append timestamped message to activity log."""
+    today = date.today().strftime("%Y-%m-%d")
+    log_path = LUCENT_ROOT / "memory" / "logs" / f"activity_{today}.log"
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "a") as f:
+            f.write(f"[{timestamp}] [backup] {message}\n")
+    except Exception:
+        pass  # Fail silently
+
 def run_cmd(cmd, cwd=None, check=True):
     """Run shell command, return (returncode, stdout, stderr)."""
     result = subprocess.run(
@@ -250,7 +262,7 @@ def backup_memory() -> int:
         return 1
 
     print(f"✓ Pushed to origin (memory backed up)")
-    log_to_daily_note(f"Backup: Committed and pushed (Automated backup by Lucent)")
+    log_to_activity(f"Backup: Committed and pushed (Automated backup by Lucent)")
     write_health_check("memory")
     return 0
 
