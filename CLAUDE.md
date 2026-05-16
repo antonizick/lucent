@@ -45,14 +45,18 @@ The hook injects: core.md, lucentIdent.md, userIdent.md, LTMemory.md, REMINDERS.
 ### STEP 3: Review Priorities & Reminders
 REMINDERS.md is injected by hook. Review Current Priorities section. Recent session context is in LTMemory Recent Sessions section. ✓
 
-### STEP 4: Startup Validation (BLOCKING GATE)
+### STEP 4: Startup Validation (AUTOMATED)
 
-**BEFORE responding to Nick's first message of the session, call:**
-```bash
-python3 /home/nick/dev/lucent/scripts/startup.py
-```
+**Startup is now automated.** The `SessionStart` hook fires `startup.py` automatically when Claude Code opens — before any user interaction. You don't need to run this manually.
 
-This tool (IGNITION Phase 2 orchestrator):
+**Verification:** Check the `lucent-init.sh` output (injected into context below):
+- If it shows `✓ Startup validated for today (auto-triggered via SessionStart hook)`, proceed normally.
+- If it shows `⚠ Startup checkpoint is stale` or `⚠ No startup checkpoint found`, run the fallback:
+  ```bash
+  python3 /home/nick/dev/lucent/scripts/startup.py
+  ```
+
+**What startup.py does** (Phase 2 orchestrator):
 - Sends a varied pleasantry immediately (voice + text) so Nick knows the system is responsive
 - Runs checks in parallel: voice box health (both ports 8001 + 8002), context files, compression
 - Verifies voice boxes (local + authenticated) are online; auto-restarts Piper if offline
@@ -61,7 +65,7 @@ This tool (IGNITION Phase 2 orchestrator):
 - Logs all results (success, failures, fallbacks) to activity log and daily note
 - Returns: `STARTUP_OK`, `STARTUP_DEGRADED`, or `ALREADY_COMPLETE`
 
-**Do not proceed past this step until startup completes.** If it returns `STARTUP_DEGRADED`, log the warnings to daily note and continue (graceful degradation).
+**Do not respond to Nick until the checkpoint shows today's date.** If startup returns `STARTUP_DEGRADED`, log the warnings to daily note and continue (graceful degradation).
 
 ### STEP 5: Respond to Nick's Input
 

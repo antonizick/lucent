@@ -31,19 +31,27 @@ else
   echo "[Lucent] No reminders file found."
 fi
 echo ""
-echo "[Lucent] === RECENT DAILY NOTES (Last 7 days) ==="
+echo "[Lucent] === TODAY'S SESSION LOG ==="
+if [[ -f "$NOTE" ]]; then
+  cat "$NOTE"
+else
+  echo "[Lucent] (No session activity yet)"
+fi
+echo ""
+echo "[Lucent] === STARTUP VALIDATION STATUS ==="
 
-# Output daily notes from the last 7 days in chronological order
-for i in {6..0}; do
-  DATE=$(date -d "$i days ago" +%Y-%m-%d 2>/dev/null || date -v-${i}d +%Y-%m-%d 2>/dev/null)
-  FILE="$LUCENT_DIR/memory/$DATE.md"
-  if [[ -f "$FILE" ]]; then
-    if [[ "$DATE" == "$TODAY" ]]; then
-      echo "[Lucent] === $DATE (TODAY - full detail) ==="
-    else
-      echo "[Lucent] === $DATE (condensed) ==="
-    fi
-    cat "$FILE"
-    echo ""
+CHECKPOINT_FILE="$LUCENT_DIR/memory/.ritual_checkpoint.json"
+if [[ -f "$CHECKPOINT_FILE" ]]; then
+  CHECKPOINT_DATE=$(grep -o '"date": "[^"]*"' "$CHECKPOINT_FILE" | head -1 | cut -d'"' -f4)
+  if [[ "$CHECKPOINT_DATE" == "$TODAY" ]]; then
+    echo "[Lucent] ✓ Startup validated for today (auto-triggered via SessionStart hook)."
+  else
+    echo "[Lucent] ⚠ Startup checkpoint is stale (from $CHECKPOINT_DATE)."
+    echo "[Lucent] Run: python3 /home/nick/dev/lucent/scripts/startup.py"
+    echo "[Lucent] This must complete before you respond to Nick."
   fi
-done
+else
+  echo "[Lucent] ⚠ No startup checkpoint found."
+  echo "[Lucent] Run: python3 /home/nick/dev/lucent/scripts/startup.py"
+  echo "[Lucent] This must complete before you respond to Nick."
+fi
