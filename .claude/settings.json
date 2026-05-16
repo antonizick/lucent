@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /home/nick/dev/lucent/scripts/startup.py",
+            "command": "python3 /home/nick/dev/lucent/scripts/startup.py && python3 /home/nick/dev/lucent/scripts/acknowledge_startup.py",
             "timeout": 60
           }
         ]
