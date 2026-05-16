@@ -304,6 +304,44 @@ The startup ritual is built on **IGNITION**, a three-phase system that ensures r
 - Per-session-once mechanism via checkpoint file (`memory/.ritual_checkpoint.json`)
 - Fallback: If checkpoint stale, `lucent-init.sh` prints warning with manual `startup.py` command
 
+#### **Startup Readiness Marker & Acknowledgment (Hook-Level Enforcement)**
+
+When startup completes successfully, `startup.py` writes a **readiness marker file** (`memory/.startup_ready_YYYY-MM-DD.txt`) and sends a readiness pleasantry (voice + text). This signals that startup is complete and the system is ready.
+
+The marker acknowledgment is handled **automatically at the hook level** (not by Claude):
+
+1. **Marker Creation** (SessionStart hook → startup.py)
+   - When startup completes with `STARTUP_OK` status
+   - Writes file: `memory/.startup_ready_2026-05-16.txt` (contains timestamp + status)
+   - Sends voice: random readiness pleasantry ("Ready when you are", "All set", "Standing by", etc.)
+
+2. **Marker Acknowledgment** (UserPromptSubmit hook → lucent-init.sh)
+   - When user sends first message/command
+   - `lucent-init.sh` detects marker file automatically
+   - If found:
+     - Sends voice: "Startup complete. All systems ready. Standing by."
+     - Logs to daily note: `[HH:MM:SS] Startup readiness acknowledged (auto via hook)`
+     - Deletes marker file
+     - Outputs `[CRITICAL] STARTUP READINESS MARKER FOUND` to context
+   - Claude reads the [CRITICAL] flag and acknowledges in response
+
+**Why Hook-Level Acknowledgment?**
+- **Automatic:** No Claude compliance required — marker check runs at platform level
+- **Reliable:** Impossible to skip — runs before Claude generates any output
+- **Clean Separation:** Hook handles state management, Claude handles responses
+- **Proven Pattern:** SessionStart hook (same architecture) works reliably all session
+
+**What Claude Sees:**
+```
+[CRITICAL] STARTUP READINESS MARKER FOUND
+[CRITICAL] Before responding to Nick, you MUST:
+[CRITICAL] 1. Send voice + text: 'Startup complete. All systems ready. Standing by.'
+[CRITICAL] 2. Log to daily note: 'Startup readiness acknowledged (auto via hook)'
+[CRITICAL] 3. Then proceed to handle Nick's request
+```
+
+When this appears in context, the hook has already executed the acknowledgment — Claude just confirms awareness in its response.
+
 #### **Context Available at Startup**
 
 **Automatically injected by hook:**

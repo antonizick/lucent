@@ -58,8 +58,16 @@ fi
 echo ""
 echo "[Lucent] === STARTUP READINESS MARKER CHECK ==="
 
+# Check for startup readiness marker created by startup.py (SessionStart hook)
+# If marker exists, startup.py just completed and acknowledged startup via voice.
+# This hook handles the acknowledgment at the platform level (not Claude level),
+# ensuring it always happens automatically.
+#
+# Marker file: memory/.startup_ready_YYYY-MM-DD.txt (created by startup.py on STARTUP_OK)
+# Acknowledgment: Send voice, log to daily note, report [CRITICAL] flag to context, delete marker
 MARKER_FILE=$(ls -1 "$LUCENT_DIR/memory/.startup_ready_"*.txt 2>/dev/null | head -1)
 if [[ -n "$MARKER_FILE" ]]; then
+  # Marker found: startup just completed. Report [CRITICAL] flag for Claude to acknowledge.
   echo "[CRITICAL] STARTUP READINESS MARKER FOUND"
   echo "[CRITICAL] Before responding to Nick, you MUST:"
   echo "[CRITICAL] 1. Send voice + text: 'Startup complete. All systems ready. Standing by.'"
@@ -67,11 +75,12 @@ if [[ -n "$MARKER_FILE" ]]; then
   echo "[CRITICAL] 3. Then proceed to handle Nick's request"
   echo ""
 
-  # Execute acknowledgment at hook level (truly automatic)
+  # Execute acknowledgment at hook level (truly automatic — no Claude compliance needed)
   TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S")
   curl -s -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d "{\"text\":\"Startup complete. All systems ready. Standing by.\"}" 2>/dev/null || true
   echo "[$TIMESTAMP] Startup readiness acknowledged (auto via UserPromptSubmit hook)" >> "$NOTE"
   rm -f "$MARKER_FILE"
 else
+  # No marker found: normal flow (startup ran earlier or this is a continuation message)
   echo "[Lucent] ✓ No startup marker — normal response flow"
 fi
