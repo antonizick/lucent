@@ -61,6 +61,24 @@ READINESS_PLEASANTRIES = [
     "Fire away.",
     "Ready to work.",
     "At your service.",
+    "Fully online.",
+    "Locked and loaded.",
+    "Ready to assist.",
+    "What's on your mind?",
+    "I'm ready.",
+    "All clear.",
+    "Standing at attention.",
+    "Good to go.",
+    "Systems nominal.",
+    "Ready for action.",
+    "What shall we tackle?",
+    "Await your command.",
+    "Ready as ever.",
+    "All pistons firing.",
+    "Count me in.",
+    "Let's make some magic.",
+    "Primed and ready.",
+    "What's the mission?",
 ]
 
 REQUIRED_CONTEXT_FILES = [
@@ -391,10 +409,11 @@ def run(json_mode: bool = False) -> dict:
     else:
         if status == "STARTUP_OK":
             print("✓ Startup validation complete — all checks passed.")
+            print()  # Blank line for visual separation
             readiness = random.choice(READINESS_PLEASANTRIES)
             speak_thread_ready = threading.Thread(target=speak, args=(readiness,), daemon=True)
             speak_thread_ready.start()
-            print(f"Lucent: {readiness}")
+            print(f"→ {readiness}")  # Arrow prefix to signal readiness
         else:
             print(f"⚠ Startup validation complete with issues.")
             if failures:
