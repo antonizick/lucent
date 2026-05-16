@@ -1,5 +1,6 @@
 import io
 import json
+import re
 import threading
 import time
 import wave
@@ -8,6 +9,33 @@ from pathlib import Path
 
 from piper import PiperVoice
 from piper.config import SynthesisConfig
+
+
+def sanitize_for_tts(text: str) -> str:
+    """Remove markdown and special formatting characters for cleaner TTS output."""
+    # Remove markdown bold/italic: **text** → text, *text* → text, __text__ → text
+    text = re.sub(r'[\*_]{1,2}', '', text)
+    # Remove markdown headers: # → nothing (including multi-level like ###)
+    text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
+    # Remove inline header markers that don't have leading space: "### heading" → "heading"
+    text = re.sub(r'\s+#+\s+', ' ', text)
+    # Remove markdown strikethrough: ~~text~~ → text
+    text = re.sub(r'~~', '', text)
+    # Remove markdown inline code: `text` → text
+    text = re.sub(r'`', '', text)
+    # Remove markdown links: [text](url) → text
+    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+    # Remove markdown blockquotes: > → nothing
+    text = re.sub(r'^>\s*', '', text, flags=re.MULTILINE)
+    # Remove markdown list markers: - → nothing, * → nothing
+    text = re.sub(r'^[\-\*]\s+', '', text, flags=re.MULTILINE)
+    # Remove markdown numbered lists: 1. → nothing
+    text = re.sub(r'^\d+\.\s+', '', text, flags=re.MULTILINE)
+    # Remove markdown horizontal rules: --- → nothing, *** → nothing
+    text = re.sub(r'^[-_*]{3,}$', '', text, flags=re.MULTILINE)
+    # Clean up any multiple spaces that may have resulted
+    text = re.sub(r'  +', ' ', text)
+    return text
 
 
 @dataclass

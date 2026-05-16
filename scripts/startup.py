@@ -48,6 +48,21 @@ PLEASANTRIES = [
     "Just pulling things together...",
 ]
 
+READINESS_PLEASANTRIES = [
+    "Ready when you are.",
+    "All set.",
+    "Let's go.",
+    "Standing by.",
+    "Ready to roll.",
+    "What's next?",
+    "All systems go.",
+    "I'm listening.",
+    "What can I do for you?",
+    "Fire away.",
+    "Ready to work.",
+    "At your service.",
+]
+
 REQUIRED_CONTEXT_FILES = [
     "memory/LTMemory.md",
     "memory/lucentIdent.md",
@@ -376,6 +391,10 @@ def run(json_mode: bool = False) -> dict:
     else:
         if status == "STARTUP_OK":
             print("✓ Startup validation complete — all checks passed.")
+            readiness = random.choice(READINESS_PLEASANTRIES)
+            speak_thread_ready = threading.Thread(target=speak, args=(readiness,), daemon=True)
+            speak_thread_ready.start()
+            print(f"Lucent: {readiness}")
         else:
             print(f"⚠ Startup validation complete with issues.")
             if failures:

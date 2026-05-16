@@ -5,6 +5,6 @@
     "Alex": "en_GB-alan-medium",
     "Karen": "en_GB-cori-high"
   },
-  "default_voice": "en_GB-cori-high",
+  "default_voice": "en_GB-alan-medium",
   "speed": 0.7
 }

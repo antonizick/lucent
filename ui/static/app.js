@@ -478,6 +478,11 @@ function setupSpeechListener() {
             }
             currentText.style.opacity = '1';
 
+            // Log Discord source responses
+            if (data.source === 'discord') {
+                console.log('[SPEECH] Discord response received and displayed:', data.text.substring(0, 80));
+            }
+
             if (currentVoice === 'none' || currentVoice === null) {
                 // Muted — visualize only
                 speakText(data.text);
@@ -1142,8 +1147,8 @@ async function loadAvatars() {
             avatarSelect.appendChild(option);
         });
 
-        // Initialize with Lucent avatar using fallback chain
-        await applyAgentAvatar(null);
+        // Initialize with Alex avatar as default
+        await selectAvatarProfile('Alex');
     } catch (error) {
         console.error('Error loading avatars:', error);
         avatarSelect.innerHTML = '<option value="">No Avatar</option>';

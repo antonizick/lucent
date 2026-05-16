@@ -220,7 +220,38 @@ async def handle_claude_message(message: discord.Message):
 
         await message.remove_reaction("⏳", bot.user)
 
+        # Clean output: remove "session complete" and similar messages for voice box
+        voice_output = output
+        if "session complete" in voice_output.lower():
+            # Remove the "session complete" line
+            lines = voice_output.split('\n')
+            lines = [line for line in lines if "session complete" not in line.lower()]
+            voice_output = '\n'.join(lines).strip()
+
         chunks = [output[i:i+1900] for i in range(0, len(output), 1900)]
+
+        # Send cleaned response to voice box ONLY if there's actual content after filtering
+        if voice_output:
+            try:
+                speak_payload = {
+                    "text": voice_output,
+                    "source": "discord"
+                }
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        "http://localhost:8001/speak",
+                        json=speak_payload,
+                        timeout=aiohttp.ClientTimeout(total=10)
+                    ) as resp:
+                        if resp.status == 200:
+                            print(f"[DISCORD] Sent response to voice box via /speak")
+                        else:
+                            print(f"[DISCORD] Voice box /speak failed: {resp.status}")
+            except Exception as e:
+                print(f"[ERROR] Exception sending to voice box: {e}")
+        else:
+            print(f"[DISCORD] Filtered output is empty, skipping voice box send")
+
         for i, chunk in enumerate(chunks):
             label = "**Lucent:**" if i == 0 else "**Lucent (cont.):**"
             if i == 0:

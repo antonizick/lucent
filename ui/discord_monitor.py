@@ -284,14 +284,40 @@ Respond naturally and concisely to Nick's question above. Keep responses under 2
             return False
 
     def post_response(self, message: dict, response_text: str, search_used: bool = False) -> bool:
-        """Post response back to Discord and send voice feedback."""
+        """Post response back to Discord AND voice box UI with audio synthesis."""
         try:
-            logger.info(f"[RESPONSE] Posting response back to Discord (search_used={search_used})")
-            # Send voice feedback to Voice Box
-            self.send_voice_feedback(response_text)
-            logger.info(f"[RESPONSE] Voice feedback sent")
+            logger.info(f"[RESPONSE] Posting response back to Discord + voice box (search_used={search_used})")
 
-            # Post response to Discord
+            # Clean output: remove "session complete" and similar messages for voice box
+            voice_output = response_text
+            if "session complete" in voice_output.lower():
+                # Remove the "session complete" line
+                lines = voice_output.split('\n')
+                lines = [line for line in lines if "session complete" not in line.lower()]
+                voice_output = '\n'.join(lines).strip()
+
+            # Send to voice box UI via /speak endpoint ONLY if there's actual content after filtering
+            if voice_output:
+                try:
+                    speak_payload = {
+                        "text": voice_output,
+                        "source": "discord"  # Tag responses as Discord-originated
+                    }
+                    speak_resp = requests.post(
+                        f"{self.backend_url}/speak",
+                        json=speak_payload,
+                        timeout=10
+                    )
+                    if speak_resp.status_code == 200:
+                        logger.info(f"[RESPONSE] Voice box updated: {voice_output[:80]}")
+                    else:
+                        logger.warning(f"[RESPONSE] Voice box post failed: {speak_resp.status_code}")
+                except Exception as e:
+                    logger.warning(f"[RESPONSE] Exception sending to voice box: {e}")
+            else:
+                logger.info(f"[RESPONSE] Filtered output is empty, skipping voice box send")
+
+            # Post response to Discord webhook
             payload = {
                 "source": "discord_command",  # All Discord messages have this source
                 "message_id": message.get("message_id"),
@@ -303,19 +329,19 @@ Respond naturally and concisely to Nick's question above. Keep responses under 2
                 "search_used": search_used  # Flag to add newspaper emoji reaction
             }
 
-            logger.info(f"[RESPONSE] Posting to {self.backend_url}/response with payload")
+            logger.info(f"[RESPONSE] Posting to Discord webhook")
             resp = requests.post(
                 f"{self.backend_url}/response",
                 json=payload,
                 timeout=10
             )
 
-            logger.info(f"[RESPONSE] Backend response status: {resp.status_code}")
+            logger.info(f"[RESPONSE] Discord webhook status: {resp.status_code}")
             if resp.status_code == 200:
-                logger.info(f"[RESPONSE] Successfully posted: {response_text[:80]}")
+                logger.info(f"[RESPONSE] Successfully posted to both Discord and voice box: {response_text[:80]}")
                 return True
             else:
-                logger.error(f"[RESPONSE] Failed to post response: {resp.status_code} - {resp.text[:200]}")
+                logger.error(f"[RESPONSE] Discord webhook error: {resp.status_code} - {resp.text[:200]}")
                 return False
         except Exception as e:
             logger.error(f"Exception posting response: {e}")

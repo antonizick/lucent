@@ -62,10 +62,11 @@ REMINDERS.md is injected by hook. Review Current Priorities section. Recent sess
 - Verifies voice boxes (local + authenticated) are online; auto-restarts Piper if offline
 - Verifies required context files exist on disk
 - Initializes session logging (with /tmp fallback if primary logger fails)
+- **On successful completion only:** Sends a random readiness pleasantry (voice + text) to signal all clear
 - Logs all results (success, failures, fallbacks) to activity log and daily note
 - Returns: `STARTUP_OK`, `STARTUP_DEGRADED`, or `ALREADY_COMPLETE`
 
-**Do not respond to Nick until the checkpoint shows today's date.** If startup returns `STARTUP_DEGRADED`, log the warnings to daily note and continue (graceful degradation).
+**Readiness Signal:** When startup completes with `STARTUP_OK`, startup.py sends a **random readiness pleasantry** (voice + text). This signals that all checks passed and you are ready to work. Examples: "Ready when you are", "All set", "Standing by", "Fire away". **Do not respond to Nick until you hear this readiness signal.** If startup returns `STARTUP_DEGRADED`, log the warnings to daily note and continue (graceful degradation) — in degraded mode, there is no readiness pleasantry; proceed once all checks complete.
 
 ### STEP 5: Respond to Nick's Input
 

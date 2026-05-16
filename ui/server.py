@@ -22,6 +22,9 @@ from typing import Optional, Set
 from dotenv import load_dotenv
 import asyncio
 
+# Import TTS sanitizer
+from piper_manager import sanitize_for_tts
+
 load_dotenv()
 
 # Setup Discord logging (optional, depends on webhook URL)
@@ -272,8 +275,9 @@ async def speak(request: SpeakRequest):
     if request.source:
         item["source"] = request.source
 
-    # Synthesize audio with Piper
-    wav_bytes = await synthesize_async(request.text)
+    # Synthesize audio with Piper (sanitize text for TTS only)
+    sanitized_text = sanitize_for_tts(request.text)
+    wav_bytes = await synthesize_async(sanitized_text)
     if wav_bytes:
         item["audio"] = base64.b64encode(wav_bytes).decode("ascii")
         item["format"] = "audio/wav"
@@ -1487,7 +1491,8 @@ async def vox_speak(request: SpeakRequest, accept: str = "application/json"):
     if not request.text or not request.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
 
-    wav_bytes = await synthesize_async(request.text)
+    sanitized_text = sanitize_for_tts(request.text)
+    wav_bytes = await synthesize_async(sanitized_text)
     if not wav_bytes:
         raise HTTPException(status_code=500, detail="Synthesis failed")
 
