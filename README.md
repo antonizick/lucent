@@ -152,6 +152,7 @@ lucent/
 ├── private/               Sensitive context (git-ignored)
 ├── scripts/               Backup & maintenance utilities
 │   ├── startup.py         IGNITION Phase 2: Robust startup orchestrator (parallel checks, auto-restart, /tmp fallback)
+│   ├── acknowledge_startup.py Proactive acknowledgement: sends random confirmation after startup.py completes
 │   ├── validate_startup.py IGNITION Phase 1: Sequential validation gate (preserved for backward compat)
 │   ├── verify_startup.py  Checkpoint utilities (ritual enforcement, hash validation)
 │   ├── backup_memory.py   Main backup executor (retry + health check)
@@ -246,7 +247,7 @@ Source your aliases and run `brain` to perform the initial push, or `lucent` to 
    - Runs silently in background, writes checkpoint file
 
 2. **IGNITION Phase 2 Orchestrator Runs** (`scripts/startup.py`)
-   - Sends varied pleasantry immediately (voice + text) — Nick knows system is responsive
+   - Sends varied initial pleasantry immediately (voice + text) — Nick knows system is responsive
    - **Parallel checks** (concurrent via ThreadPoolExecutor):
      - **Voice Box Health:** Checks both ports 8001 (local) and 8002 (authenticated)
      - **Context Files:** Verifies memory/core.md, memory/lucentIdent.md, memory/userIdent.md, memory/LTMemory.md exist
@@ -304,43 +305,67 @@ The startup ritual is built on **IGNITION**, a three-phase system that ensures r
 - Per-session-once mechanism via checkpoint file (`memory/.ritual_checkpoint.json`)
 - Fallback: If checkpoint stale, `lucent-init.sh` prints warning with manual `startup.py` command
 
-#### **Startup Readiness Marker & Acknowledgment (Hook-Level Enforcement)**
+#### **Proactive Startup Acknowledgement (100% Automatic)**
 
-When startup completes successfully, `startup.py` writes a **readiness marker file** (`memory/.startup_ready_YYYY-MM-DD.txt`) and sends a readiness pleasantry (voice + text). This signals that startup is complete and the system is ready.
+When startup completes successfully, the system sends a **proactive acknowledgement** before the user needs to send a message. This ensures Nick gets immediate confirmation that all systems are initialized and ready.
 
-The marker acknowledgment is handled **automatically at the hook level** (not by Claude):
+**Complete Flow:**
 
-1. **Marker Creation** (SessionStart hook → startup.py)
-   - When startup completes with `STARTUP_OK` status
-   - Writes file: `memory/.startup_ready_2026-05-16.txt` (contains timestamp + status)
-   - Sends voice: random readiness pleasantry ("Ready when you are", "All set", "Standing by", etc.)
+1. **Startup Validation** (SessionStart hook → `scripts/startup.py`)
+   - Runs parallel checks (voice box, context files, compression)
+   - Sends initial pleasantry: "Give me just a moment..." (voice + text)
+   - Writes readiness marker: `memory/.startup_ready_YYYY-MM-DD.txt`
+   - Returns: STARTUP_OK, STARTUP_DEGRADED, or ALREADY_COMPLETE
+   - Sends readiness pleasantry: "Ready when you are" (voice + text from READINESS_PLEASANTRIES pool)
 
-2. **Marker Acknowledgment** (UserPromptSubmit hook → lucent-init.sh)
-   - When user sends first message/command
-   - `lucent-init.sh` detects marker file automatically
-   - If found:
-     - Sends voice: "Startup complete. All systems ready. Standing by."
-     - Logs to daily note: `[HH:MM:SS] Startup readiness acknowledged (auto via hook)`
-     - Deletes marker file
-     - Outputs `[CRITICAL] STARTUP READINESS MARKER FOUND` to context
-   - Claude reads the [CRITICAL] flag and acknowledges in response
+2. **Proactive Acknowledgement** (SessionStart hook → `scripts/acknowledge_startup.py`)
+   - Runs immediately after `startup.py` completes (same hook, chained execution)
+   - Reads startup marker to confirm STARTUP_OK status
+   - Selects random message from 20-message acknowledgement pool
+   - Sends voice + text: "Startup ritual complete. Standing by." (example; varies each time)
+   - Logs to daily note: `[HH:MM:SS] **Startup acknowledgement sent:** <message>`
+   - Exits cleanly
 
-**Why Hook-Level Acknowledgment?**
-- **Automatic:** No Claude compliance required — marker check runs at platform level
-- **Reliable:** Impossible to skip — runs before Claude generates any output
-- **Clean Separation:** Hook handles state management, Claude handles responses
-- **Proven Pattern:** SessionStart hook (same architecture) works reliably all session
+**Key Properties:**
+- **100% Reliable:** No Claude agent invocation — direct Python script in SessionStart hook
+- **Proactive (Not Reactive):** Sends acknowledgement before user sends first message
+- **Unpredictable:** 20-message pool rotates randomly — never robotic or repetitive
+- **Fast:** ~1-2 seconds total (startup.py + acknowledge_startup.py)
+- **Logged:** Every acknowledgement recorded with timestamp in daily note
+- **Zero Latency:** Runs in hook context, doesn't block user input
 
-**What Claude Sees:**
+**Acknowledgement Message Pool (20 variations):**
+- "Startup ritual complete. Standing by."
+- "Context loaded. Ready for your command."
+- "Initialization sequence finished. Awaiting instruction."
+- "All systems initialized. Let's begin."
+- ...and 16 more unique phrases
+
+**SessionStart Hook Configuration:**
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/nick/dev/lucent/scripts/startup.py && python3 /home/nick/dev/lucent/scripts/acknowledge_startup.py",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}
 ```
-[CRITICAL] STARTUP READINESS MARKER FOUND
-[CRITICAL] Before responding to Nick, you MUST:
-[CRITICAL] 1. Send voice + text: 'Startup complete. All systems ready. Standing by.'
-[CRITICAL] 2. Log to daily note: 'Startup readiness acknowledged (auto via hook)'
-[CRITICAL] 3. Then proceed to handle Nick's request
-```
 
-When this appears in context, the hook has already executed the acknowledgment — Claude just confirms awareness in its response.
+**User Experience:**
+- Session opens → SessionStart hook fires automatically
+- Hears: Initial pleasantry (voice) → Startup checks run in parallel → Readiness pleasantry (voice) → Proactive acknowledgement (voice)
+- All before user types anything
+- Ready to accept commands immediately
 
 #### **Context Available at Startup**
 
