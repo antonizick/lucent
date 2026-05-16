@@ -15,7 +15,7 @@ import subprocess
 import sys
 import json
 from pathlib import Path
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 LUCENT_ROOT = Path(__file__).parent.parent
 MEMORY_DIR = LUCENT_ROOT / "memory"
@@ -59,6 +59,99 @@ def run_cmd(cmd, cwd=None, check=True):
         check=False
     )
     return result.returncode, result.stdout, result.stderr
+
+def compress_yesterday_if_needed() -> None:
+    """
+    Auto-compress yesterday's daily note if it exists and is uncompressed.
+
+    Triggered at day boundary (first backup after midnight UTC).
+    Uses archive validation to ensure completeness before compression.
+    """
+    yesterday = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+    daily_note = MEMORY_DIR / f"{yesterday}.md"
+    archive_path = MEMORY_DIR / "archive" / f"{yesterday}.md"
+
+    # Check if yesterday's note exists
+    if not daily_note.exists():
+        return
+
+    # Count lines to determine if compressed (compressed notes are typically < 10 lines)
+    try:
+        with open(daily_note, 'r') as f:
+            note_lines = sum(1 for _ in f)
+
+        # Skip if already compressed (< 10 lines indicates summary)
+        if note_lines < 10:
+            return
+
+        # Validate archive exists and is complete
+        if not archive_path.exists():
+            log_to_daily_note(f"[Compression] ERROR: Archive missing for {yesterday}, cannot compress")
+            return
+
+        with open(archive_path, 'r') as f:
+            archive_lines = sum(1 for _ in f)
+
+        # Ensure archive is complete
+        if archive_lines < note_lines:
+            # Re-archive first
+            import shutil
+            shutil.copy2(daily_note, archive_path)
+            log_to_daily_note(f"[Compression] Re-archived {yesterday}: {note_lines} lines")
+
+        # Create placeholder summary with archive reference
+        summary = f"""## Session {yesterday}
+
+*Summary to be filled in. See full details in memory/archive/{yesterday}.md*
+
+**Archive validation:** ✓ Complete ({archive_lines} lines preserved)
+"""
+
+        # Overwrite daily note with summary
+        with open(daily_note, 'w') as f:
+            f.write(summary)
+
+        # Log completion
+        log_to_daily_note(f"[Compression] Auto-compressed {yesterday}: {note_lines} → {sum(1 for line in summary.split(chr(10)))} lines. Archive preserved.")
+
+        # Add to LTMemory Recent Sessions (user can fill in details later)
+        _update_ltmemory_with_stub(yesterday)
+
+    except Exception as e:
+        log_to_daily_note(f"[Compression] WARNING: Failed to auto-compress {yesterday}: {e}")
+
+def _update_ltmemory_with_stub(date_str: str) -> None:
+    """Add stub entry to LTMemory.md Recent Sessions if not already present."""
+    ltmemory_path = MEMORY_DIR / "LTMemory.md"
+
+    if not ltmemory_path.exists():
+        return
+
+    try:
+        with open(ltmemory_path, 'r') as f:
+            content = f.read()
+
+        # Check if this session already has an entry
+        if f"### Session {date_str}" in content:
+            return  # Already added
+
+        # Find "## Recent Sessions" section and add entry
+        if "## Recent Sessions" in content:
+            lines = content.split('\n')
+            insert_idx = None
+            for i, line in enumerate(lines):
+                if line == "## Recent Sessions":
+                    insert_idx = i + 1
+                    break
+
+            if insert_idx:
+                stub_entry = f"\n### Session {date_str}\n*Auto-compressed. See memory/archive/{date_str}.md for full details.*\n"
+                lines.insert(insert_idx, stub_entry)
+
+                with open(ltmemory_path, 'w') as f:
+                    f.write('\n'.join(lines))
+    except Exception as e:
+        pass  # Fail silently—LTMemory update not critical
 
 def archive_accumulating_daily_note() -> None:
     """
@@ -172,13 +265,16 @@ def check_lucent_core() -> None:
         print(f"✗ Lucent core repo check failed")
 
 def main():
-    # Step 1: Archive the accumulating daily note (maintains live archive)
+    # Step 1: Auto-compress yesterday's note if day boundary crossed (no-op otherwise)
+    compress_yesterday_if_needed()
+
+    # Step 2: Archive the accumulating daily note (maintains live archive)
     archive_accumulating_daily_note()
 
-    # Step 2: Backup memory folder to git
+    # Step 3: Backup memory folder to git
     exit_code = backup_memory()
 
-    # Step 3: Verify lucent core repo
+    # Step 4: Verify lucent core repo
     check_lucent_core()
 
     sys.exit(exit_code)
