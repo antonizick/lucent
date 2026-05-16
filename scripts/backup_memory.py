@@ -51,7 +51,7 @@ def log_to_daily_note(message: str) -> None:
 def log_to_activity(message: str) -> None:
     """Append timestamped message to activity log."""
     today = date.today().strftime("%Y-%m-%d")
-    log_path = LUCENT_ROOT / "memory" / "logs" / f"activity_{today}.log"
+    log_path = LUCENT_ROOT / "ui" / "logs" / f"activity_{today}.log"
     timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -238,6 +238,7 @@ def backup_memory() -> int:
     code, status, _ = run_cmd("git status --porcelain", cwd=str(MEMORY_DIR))
     if not status.strip():
         print(f"✓ No changes to commit (memory already up-to-date)")
+        log_to_activity(f"Backup: No changes (memory already up-to-date)")
         # Still write health check timestamp (verified, no changes needed)
         write_health_check("memory")
         return 0
@@ -250,19 +251,22 @@ def backup_memory() -> int:
     if code != 0:
         print(f"✗ Commit failed: {stderr}")
         log_to_daily_note(f"Backup FAILED: commit error")
+        log_to_activity(f"Backup: FAILED (commit error)")
         return 1
 
     print(f"✓ Committed: Automated backup by Lucent")
+    log_to_activity(f"Backup: Committed (Automated backup by Lucent)")
 
     # Push to origin
     code, stdout, stderr = run_cmd("git push origin", cwd=str(MEMORY_DIR))
     if code != 0:
         print(f"✗ Push failed: {stderr}")
         log_to_daily_note(f"Backup FAILED: push error")
+        log_to_activity(f"Backup: Commit OK, push FAILED")
         return 1
 
     print(f"✓ Pushed to origin (memory backed up)")
-    log_to_activity(f"Backup: Committed and pushed (Automated backup by Lucent)")
+    log_to_activity(f"Backup: Pushed to origin")
     write_health_check("memory")
     return 0
 
