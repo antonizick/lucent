@@ -491,8 +491,8 @@ async def get_weekly_log():
             if line.strip().startswith('## Recent Sessions'):
                 in_recent = True
                 continue
-            elif line.strip().startswith('##') and in_recent:
-                # Hit next major section, stop collecting
+            elif in_recent and line.strip().startswith('## ') and not line.strip().startswith('### '):
+                # Hit next major section (## but not ###), stop collecting
                 break
             elif in_recent:
                 recent_content.append(line)
