@@ -525,22 +525,11 @@ async def get_memory_log():
 async def get_email_log():
     """Get priority emails from the email system."""
     try:
-        from src.lucent_email.config import EmailConfig, IMAPConfig, DatabaseConfig
+        from src.lucent_email.config import load_config
         from src.lucent_email.email_service import EmailService
 
-        # Initialize email service with default config
-        config_path = Path(__file__).parent.parent / "src" / "lucent_email" / "config.json"
-        imap_config = IMAPConfig(
-            email_address="nick@example.com",
-            imap_host="imap.gmail.com"
-        )
-        db_config = DatabaseConfig(path="/tmp/lucent_email.db")
-        config = EmailConfig(
-            pst_file_path="/nonexistent/test.pst",
-            imap=imap_config,
-            database=db_config
-        )
-
+        # Load actual email config from ~/.lucent/email.config.json
+        config = load_config()
         service = EmailService(config)
 
         # Get emails with priority score >= 7.0
