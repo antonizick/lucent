@@ -26,7 +26,7 @@ class IMAPConfig:
 @dataclass
 class DatabaseConfig:
     """Database configuration."""
-    path: str = None  # Defaults to ~/.lucent/email.db
+    path: str = None  # Defaults to ~/dev/lucent/memory/email/email.db
 
 
 @dataclass
@@ -58,7 +58,7 @@ class EmailConfig:
         """Fill in defaults."""
         if self.database is None:
             self.database = DatabaseConfig(
-                path=os.path.expanduser("~/.lucent/email.db")
+                path=os.path.expanduser("~/dev/lucent/memory/email/email.db")
             )
         if self.logging is None:
             self.logging = LoggingConfig()
@@ -84,7 +84,7 @@ def load_config(config_path: str = None) -> EmailConfig:
         # Search common locations
         candidates = [
             Path("lucent_email.config.json"),
-            Path.home() / ".lucent" / "email.config.json",
+            Path("~/dev/lucent/memory/email/email.config.json").expanduser(),
             Path("/etc/lucent/email.config.json"),
         ]
         for path in candidates:
@@ -126,7 +126,7 @@ def load_config(config_path: str = None) -> EmailConfig:
     # Build database config
     db_data = email_data.get("database", {})
     db_config = DatabaseConfig(
-        path=db_data.get("path", os.path.expanduser("~/.lucent/email.db"))
+        path=db_data.get("path", os.path.expanduser("~/dev/lucent/memory/email/email.db"))
     )
 
     # Build logging config

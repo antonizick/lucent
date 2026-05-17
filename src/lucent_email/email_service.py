@@ -821,7 +821,7 @@ class EmailService:
             )
 
             # Log to daily note
-            note_path = Path.home() / ".lucent" / "memory"
+            note_path = Path.home() / "dev/lucent/memory"
             from datetime import date
             today = date.today().isoformat()
             note_file = note_path / f"{today}.md"

@@ -534,7 +534,7 @@ async def get_email_log():
         from src.lucent_email.config import load_config
         from src.lucent_email.email_service import EmailService
 
-        # Load actual email config from ~/.lucent/email.config.json
+        # Load actual email config from ~/dev/lucent/memory/email/email.config.json
         config = load_config()
         service = EmailService(config)
 

@@ -18,11 +18,16 @@ logger = logging.getLogger(__name__)
 class PriorityDetector:
     """Detects and scores email priority using Claude Haiku."""
 
-    # Keywords that suggest low priority (newsletters, notifications)
+    # Keywords that suggest low priority (newsletters, notifications, financial spam)
     LOW_PRIORITY_KEYWORDS = [
         "newsletter", "digest", "promotion", "marketing",
         "noreply", "notification", "alert", "update",
         "weekly report", "monthly report",
+        # Financial spam / unsolicited offers (from updated guidelines)
+        "refinancing", "property", "vehicle", "insurance quote",
+        "pending offer", "utility bill relief", "right away",
+        "new option", "refi", "vehicle quote", "relief offer",
+        "home relief", "property notice", "property inquiry",
     ]
 
     # Keywords that suggest high priority (urgent action needed)

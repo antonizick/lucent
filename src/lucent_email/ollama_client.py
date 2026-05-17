@@ -38,11 +38,11 @@ class OllamaClient:
         self._guidelines_cache = None
 
     def _load_priority_guidelines(self) -> str:
-        """Load email priority guidelines from ~/.lucent/priority_guidelines.md."""
+        """Load email priority guidelines from ~/dev/lucent/memory/email/priority_guidelines.md."""
         if self._guidelines_cache is not None:
             return self._guidelines_cache
 
-        guidelines_path = Path.home() / ".lucent" / "priority_guidelines.md"
+        guidelines_path = Path("~/dev/lucent/memory/email/priority_guidelines.md").expanduser()
 
         if guidelines_path.exists():
             try:

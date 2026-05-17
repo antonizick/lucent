@@ -70,11 +70,11 @@ def main():
         service = EmailService(config)
 
         # Determine note path
-        note_path = Path.home() / ".lucent" / "memory" / "2026-05-17.md"
+        note_path = Path.home() / "dev/lucent/memory" / "2026-05-17.md"
         if not note_path.exists():
             # Fallback to current date
             today = datetime.now().strftime("%Y-%m-%d")
-            note_path = Path.home() / ".lucent" / "memory" / f"{today}.md"
+            note_path = Path.home() / "dev/lucent/memory" / f"{today}.md"
 
         # Create monitor
         monitor = EmailMonitor(service, config, note_path=note_path)
