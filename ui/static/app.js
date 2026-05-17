@@ -644,14 +644,15 @@ function switchLogTab(tab) {
     const logContentElement = document.getElementById('logContent');
     const emailSearchPanel = document.getElementById('emailSearchPanel');
 
-    // When email-search is active: hide header and main content, show only email panel
+    // Always show header (tabs are needed for navigation)
+    if (logHeader) logHeader.classList.remove('hidden');
+
+    // When email-search is active: hide main log content, show email panel
     if (tab === 'email-search') {
-        if (logHeader) logHeader.classList.add('hidden');
         if (logContentElement) logContentElement.classList.add('hidden');
         if (emailSearchPanel) emailSearchPanel.classList.remove('hidden');
     } else {
-        // For other tabs: show header and content, hide email panel
-        if (logHeader) logHeader.classList.remove('hidden');
+        // For other tabs: show main content, hide email panel
         if (logContentElement) logContentElement.classList.remove('hidden');
         if (emailSearchPanel) emailSearchPanel.classList.add('hidden');
     }
