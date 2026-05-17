@@ -65,13 +65,21 @@ class IMAPBackend(EmailBackend):
 
             # Connect to SMTP
             try:
-                self.smtp = smtplib.SMTP(
-                    self.config.smtp_host,
-                    self.config.smtp_port
-                )
-                if self.config.use_tls:
-                    self.smtp.starttls()
-                self.smtp.login(self.config.email_address, password)
+                # Port 465 requires SMTP_SSL, 587 uses SMTP with STARTTLS
+                if self.config.smtp_port == 465:
+                    self.smtp = smtplib.SMTP_SSL(
+                        self.config.smtp_host,
+                        self.config.smtp_port
+                    )
+                    self.smtp.login(self.config.email_address, password)
+                else:
+                    self.smtp = smtplib.SMTP(
+                        self.config.smtp_host,
+                        self.config.smtp_port
+                    )
+                    if self.config.use_tls:
+                        self.smtp.starttls()
+                    self.smtp.login(self.config.email_address, password)
                 logger.info(f"Connected to SMTP: {self.config.smtp_host}")
             except smtplib.SMTPException as e:
                 logger.error(f"SMTP login failed: {e}")
