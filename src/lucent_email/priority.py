@@ -23,11 +23,13 @@ class PriorityDetector:
         "newsletter", "digest", "promotion", "marketing",
         "noreply", "notification", "alert", "update",
         "weekly report", "monthly report",
-        # Financial spam / unsolicited offers (from updated guidelines)
-        "refinancing", "property", "vehicle", "insurance quote",
-        "pending offer", "utility bill relief", "right away",
-        "new option", "refi", "vehicle quote", "relief offer",
+        # Financial spam / unsolicited offers (from feedback + guidelines)
+        "refinancing", "property", "vehicle", "insurance quote", "insurance quotes",
+        "pending offer", "pending offers", "utility bill", "relief", "right away",
+        "new option", "new options", "refi", "vehicle quote", "relief offer",
         "home relief", "property notice", "property inquiry",
+        # EverQuote / vehicle quote senders (from feedback)
+        "everquote", "providing quotes", "deals@providingquotes",
     ]
 
     # Keywords that suggest high priority (urgent action needed)
@@ -44,8 +46,8 @@ class PriorityDetector:
 
         Returns 0 (low), 5 (medium), 9 (high), or None (needs Haiku analysis).
         """
-        text = (email.subject + " " + email.snippet).lower()
-        from_addr = email.from_addr.lower()
+        # Include FROM address in keyword matching (catches noreply@, sender domains, etc)
+        text = (email.subject + " " + email.snippet + " " + email.from_addr).lower()
 
         # Check low-priority patterns
         for keyword in cls.LOW_PRIORITY_KEYWORDS:
