@@ -126,44 +126,9 @@ def compress_yesterday_if_needed() -> None:
         # Log completion
         log_to_daily_note(f"[Compression] Auto-compressed {yesterday}: {note_lines} → {sum(1 for line in summary.split(chr(10)))} lines. Archive preserved.")
 
-        # Add to LTMemory Recent Sessions (user can fill in details later)
-        _update_ltmemory_with_stub(yesterday)
-
     except Exception as e:
         log_to_daily_note(f"[Compression] WARNING: Failed to auto-compress {yesterday}: {e}")
 
-def _update_ltmemory_with_stub(date_str: str) -> None:
-    """Add stub entry to LTMemory.md Recent Sessions if not already present."""
-    ltmemory_path = MEMORY_DIR / "LTMemory.md"
-
-    if not ltmemory_path.exists():
-        return
-
-    try:
-        with open(ltmemory_path, 'r') as f:
-            content = f.read()
-
-        # Check if this session already has an entry
-        if f"### Session {date_str}" in content:
-            return  # Already added
-
-        # Find "## Recent Sessions" section and add entry
-        if "## Recent Sessions" in content:
-            lines = content.split('\n')
-            insert_idx = None
-            for i, line in enumerate(lines):
-                if line == "## Recent Sessions":
-                    insert_idx = i + 1
-                    break
-
-            if insert_idx:
-                stub_entry = f"\n### Session {date_str}\n*Auto-compressed. See memory/archive/{date_str}.md for full details.*\n"
-                lines.insert(insert_idx, stub_entry)
-
-                with open(ltmemory_path, 'w') as f:
-                    f.write('\n'.join(lines))
-    except Exception as e:
-        pass  # Fail silently—LTMemory update not critical
 
 def archive_accumulating_daily_note() -> None:
     """

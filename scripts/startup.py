@@ -88,6 +88,8 @@ REQUIRED_CONTEXT_FILES = [
     "memory/core.md",
 ]
 
+UNSUMMARIZED_MARKER = LUCENT_ROOT / "memory" / ".unsummarized_sessions.json"
+
 
 class CheckResult(NamedTuple):
     ok: bool
@@ -271,6 +273,37 @@ def trigger_compression(timeout: float = 10.0) -> CheckResult:
         return CheckResult(False, f"Compression failed: {e} (non-fatal)", fallback_used=False)
 
 
+def check_unsummarized_sessions() -> CheckResult:
+    """Check for daily notes missing from LTMemory Recent Sessions."""
+    try:
+        result = subprocess.run(
+            ["python3", str(LUCENT_ROOT / "scripts" / "check_unsummarized_sessions.py")],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return CheckResult(True, "Unsummarized check completed")
+
+        data = json.loads(result.stdout)
+        count = data.get("count", 0)
+
+        if count > 0:
+            # Write marker file for Claude to handle
+            unsummarized = data.get("unsummarized", [])
+            with open(UNSUMMARIZED_MARKER, "w") as f:
+                json.dump(unsummarized, f)
+            return CheckResult(True, f"{count} session(s) need summarization")
+        else:
+            # Clean up marker if no unsummarized sessions
+            if UNSUMMARIZED_MARKER.exists():
+                UNSUMMARIZED_MARKER.unlink()
+            return CheckResult(True, "All sessions summarized")
+
+    except Exception as e:
+        return CheckResult(True, f"Unsummarized check: {str(e)}")
+
+
 def is_already_complete() -> bool:
     """Return True if today's startup checkpoint is still valid."""
     try:
@@ -352,6 +385,7 @@ def run(json_mode: bool = False) -> dict:
             compression_result = CheckResult(False, "Compression timed out")
 
     logger_result = init_session_logger()
+    unsummarized_result = check_unsummarized_sessions()
 
     speak_thread.join(timeout=6)
 
@@ -359,6 +393,7 @@ def run(json_mode: bool = False) -> dict:
     checks["context_files"] = {"ok": context_result.ok, "reason": context_result.reason}
     checks["compression"] = {"ok": compression_result.ok, "reason": compression_result.reason}
     checks["session_logger"] = {"ok": logger_result.ok, "reason": logger_result.reason}
+    checks["unsummarized_sessions"] = {"ok": unsummarized_result.ok, "reason": unsummarized_result.reason}
 
     if vb_result.fallback_used:
         fallbacks_used.append("voice_box_restart")
@@ -391,6 +426,9 @@ def run(json_mode: bool = False) -> dict:
     elif logger_result.fallback_used:
         log_to_activity(f"FALLBACK: {logger_result.reason}")
         log_to_daily_note(f"STARTUP FALLBACK: {logger_result.reason}")
+
+    if "need" in unsummarized_result.reason.lower():
+        log_to_activity(f"NOTICE: {unsummarized_result.reason}")
 
     degraded = bool(failures or warnings or fallbacks_used)
     status = "STARTUP_DEGRADED" if degraded else "STARTUP_OK"

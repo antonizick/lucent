@@ -24,21 +24,9 @@ The hook injects: core.md, lucentIdent.md, userIdent.md, LTMemory.md, REMINDERS.
 **Automated Compression System:** The hourly backup process (`backup_memory.py`) automatically:
 1. **Archives** the accumulating daily note every hour (live mirror to `memory/archive/YYYY-MM-DD.md`)
 2. **Auto-compresses** yesterday's note at the day boundary (00:05 UTC), if uncompressed
-3. **Adds stub entry** to LTMemory Recent Sessions with archive reference
+3. Compresses to ~6 lines with archive reference (full content preserved forever)
 
-**You only need to act if compression was incomplete.** Check for placeholder entries in LTMemory:
-```
-### Session YYYY-MM-DD
-*Auto-compressed. See memory/archive/YYYY-MM-DD.md for full details.*
-```
-
-**If you see a placeholder and want to improve it:**
-1. Read the full archive: `memory/archive/YYYY-MM-DD.md`
-2. Write 2-3 paragraph summary covering:
-   - **Paragraph 1:** What was built, shipped, or completed (outcomes + deliverables)
-   - **Paragraph 2:** Technical decisions, architecture choices, and implementations
-   - **Paragraph 3:** Blockers, constraints, open questions, or deferred work
-3. Replace the stub in LTMemory with your summary
+**No action required.** Compression happens automatically. Summaries are handled in STEP 4.5.
 
 **Invariant:** Archive always contains the complete daily note. Auto-compression validates archive completeness before compressing, preventing data loss.
 
@@ -67,6 +55,26 @@ REMINDERS.md is injected by hook. Review Current Priorities section. Recent sess
 - Returns: `STARTUP_OK`, `STARTUP_DEGRADED`, or `ALREADY_COMPLETE`
 
 **Readiness Signal:** When startup completes with `STARTUP_OK`, startup.py sends a **random readiness pleasantry** (voice + text). This signals that all checks passed and you are ready to work. Examples: "Ready when you are", "All set", "Standing by", "Fire away". **Do not respond to Nick until you hear this readiness signal.** If startup returns `STARTUP_DEGRADED`, log the warnings to daily note and continue (graceful degradation) — in degraded mode, there is no readiness pleasantry; proceed once all checks complete.
+
+### STEP 4.5: Enforce Unsummarized Session Summaries (BLOCKING)
+
+**Blocking check:** Before responding to Nick, check if `memory/.unsummarized_sessions.json` exists.
+
+**If file EXISTS (sessions need summaries):**
+1. Read the file — it contains list of unsummarized session dates
+2. For each session, read `memory/archive/YYYY-MM-DD.md` to understand what happened
+3. Write 2-3 paragraph summary for each session:
+   - **Paragraph 1:** What was built, shipped, or completed (outcomes + deliverables)
+   - **Paragraph 2:** Technical decisions, architecture choices, and implementations
+   - **Paragraph 3:** Blockers, constraints, open questions, or deferred work
+4. Add each summary as a new entry in LTMemory.md Recent Sessions under `### Session YYYY-MM-DD`
+5. Delete `memory/.unsummarized_sessions.json` after all summaries written
+6. Log to daily note: "Unsummarized sessions summary written: [dates]"
+7. Then proceed to respond to Nick
+
+**If file DOES NOT EXIST:** All sessions are summarized. Proceed normally.
+
+**Enforcement:** This is a blocking step. Do not respond to Nick's input until all unsummarized sessions have summaries in LTMemory.md.
 
 ### STEP 5: Respond to Nick's Input
 
