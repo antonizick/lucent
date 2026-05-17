@@ -2,6 +2,12 @@
 Email Service API — High-level interface for email operations.
 
 Unifies PST + IMAP backends, provides search, sync, and drafting.
+
+FILTERING RULES:
+- Monitor (prioritization + drafting): Only processes emails < 8 days old
+- Search (user queries): Global - all emails visible
+- History/context queries: Global - all emails visible
+- get_recent_emails(): Returns emails from last N days (default 8)
 """
 
 import json
@@ -12,17 +18,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-try:
-    import anthropic
-except ImportError:
-    anthropic = None
-
 from .composer import DraftComposer
 from .config import EmailConfig, get_api_key
 from .db import EmailDatabase
 from .imap_backend import IMAPBackend
 from .learner import PriorityLearner
 from .models import Draft, EmailMetadata, FullEmail, SyncResult
+from .ollama_client import OllamaClient, OllamaConfig
 from .priority import PriorityDetector
 from .pst_backend import PSTBackend
 from .sender import SendValidator
@@ -36,7 +38,12 @@ class EmailService:
 
     Provides unified interface over PST + IMAP backends.
     Manages caching, searching, syncing, and drafting.
+
+    MONITOR_MAX_EMAIL_AGE_DAYS = 8: Email monitor only processes emails
+    from last 8 days for prioritization and drafting.
     """
+
+    MONITOR_MAX_EMAIL_AGE_DAYS = 8
 
     def __init__(self, config: EmailConfig):
         """
@@ -51,7 +58,7 @@ class EmailService:
         self.db = EmailDatabase(config.database.path)
         self.db.initialize_schema()
         self.backends = [self.pst_backend, self.imap_backend]
-        self._claude_client: Optional[anthropic.Anthropic] = None
+        self._ollama_client: Optional[OllamaClient] = None
 
     # Query operations
 
@@ -235,16 +242,12 @@ class EmailService:
 
     # Priority analysis (Phase 2+)
 
-    def _get_claude_client(self) -> Optional[anthropic.Anthropic]:
-        """Get Anthropic client (lazy init)."""
-        if self._claude_client is None and anthropic:
-            try:
-                api_key = get_api_key(self.config)
-                self._claude_client = anthropic.Anthropic(api_key=api_key)
-            except (ValueError, ImportError) as e:
-                logger.warning(f"Could not init Anthropic client: {e}")
-                return None
-        return self._claude_client
+    def _get_ollama_client(self) -> OllamaClient:
+        """Get Ollama client (lazy init)."""
+        if self._ollama_client is None:
+            ollama_config = OllamaConfig()
+            self._ollama_client = OllamaClient(ollama_config)
+        return self._ollama_client
 
     def compute_sender_priority(self, from_addr: str) -> float:
         """
@@ -285,7 +288,7 @@ class EmailService:
         """
         Score emails and persist priority scores.
 
-        Uses Claude Haiku via PriorityDetector.
+        Uses Ollama local LLM via PriorityDetector.
 
         Args:
             emails: List of emails to score.
@@ -294,14 +297,9 @@ class EmailService:
             Dictionary mapping email_id to score.
         """
         try:
-            client = self._get_claude_client()
-            if not client:
-                logger.warning("Skipping email scoring (no Anthropic client)")
-                return {}
+            ollama_client = self._get_ollama_client()
 
-            scores = PriorityDetector.score_emails(
-                emails, client, self.config.claude.model_haiku
-            )
+            scores = PriorityDetector.score_emails(emails, ollama_client)
 
             # Persist scores to database
             for email_id, score in scores.items():
@@ -316,11 +314,37 @@ class EmailService:
             logger.error(f"Error scoring emails: {e}")
             return {}
 
+    def get_recent_emails(self, days: int = 8, limit: int = 100) -> List[EmailMetadata]:
+        """
+        Get emails from the last N days.
+
+        Used for monitoring and drafting (only recent emails).
+
+        Args:
+            days: Only include emails from the last N days (default 8).
+            limit: Maximum emails to return.
+
+        Returns:
+            List of EmailMetadata objects from the last N days.
+        """
+        from datetime import datetime, timedelta
+
+        cutoff_date = datetime.now() - timedelta(days=days)
+        all_emails = self.list_emails(limit=limit * 2)  # Fetch more to filter
+
+        recent = [
+            e for e in all_emails
+            if e.timestamp and e.timestamp > cutoff_date
+        ]
+
+        return recent[:limit]
+
     def detect_high_priority_emails(self, limit: int = 10) -> List[EmailMetadata]:
         """
-        Get high-priority emails.
+        Get high-priority emails from the last 8 days.
 
-        Uses Claude Haiku for priority detection. Returns emails scoring >= 7.0.
+        Uses Ollama for priority detection. Returns emails scoring >= 7.0
+        from recent emails only (< MONITOR_MAX_EMAIL_AGE_DAYS old).
 
         Args:
             limit: Maximum emails to return.
@@ -329,8 +353,10 @@ class EmailService:
             List of high-priority EmailMetadata objects.
         """
         try:
-            # Get recent unread emails
-            recent = self.list_emails(limit=100)
+            # Get emails from last 8 days only (monitor rule)
+            recent = self.get_recent_emails(
+                days=self.MONITOR_MAX_EMAIL_AGE_DAYS, limit=100
+            )
             unread = [e for e in recent if not e.read]
 
             if not unread:

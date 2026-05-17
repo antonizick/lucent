@@ -521,6 +521,56 @@ async def get_memory_log():
     else:
         return {"content": "No long-term memory file found."}
 
+@app.get("/log/email")
+async def get_email_log():
+    """Get priority emails from the email system."""
+    try:
+        from src.lucent_email.config import EmailConfig, IMAPConfig, DatabaseConfig
+        from src.lucent_email.email_service import EmailService
+
+        # Initialize email service with default config
+        config_path = Path(__file__).parent.parent / "src" / "lucent_email" / "config.json"
+        imap_config = IMAPConfig(
+            email_address="nick@example.com",
+            imap_host="imap.gmail.com"
+        )
+        db_config = DatabaseConfig(path="/tmp/lucent_email.db")
+        config = EmailConfig(
+            pst_file_path="/nonexistent/test.pst",
+            imap=imap_config,
+            database=db_config
+        )
+
+        service = EmailService(config)
+
+        # Get emails with priority score >= 7.0
+        priority_emails = service.db.search("", limit=100)
+        priority_emails = [e for e in priority_emails if e.priority_score >= 7.0]
+
+        # Format for display
+        if not priority_emails:
+            content = "No priority emails requiring attention."
+        else:
+            lines = ["PRIORITY EMAILS — HIGH-ATTENTION ITEMS\n"]
+            lines.append(f"Found {len(priority_emails)} high-priority email(s)\n")
+            lines.append("=" * 70 + "\n")
+
+            for email in priority_emails[:20]:  # Show top 20
+                timestamp = email.timestamp.strftime("%Y-%m-%d %H:%M") if email.timestamp else "Unknown"
+                score = f"{email.priority_score:.1f}" if email.priority_score else "—"
+                lines.append(f"\n[{timestamp}] Score: {score}/10")
+                lines.append(f"From: {email.from_addr or '(unknown)'}")
+                lines.append(f"Subject: {email.subject or '(no subject)'}")
+                lines.append(f"Preview: {email.snippet[:100] if email.snippet else '(no preview)'}")
+                lines.append("-" * 70)
+
+            content = "\n".join(lines)
+
+        return {"content": content}
+    except Exception as e:
+        logger.error(f"Error loading emails: {e}")
+        return {"content": f"Error loading emails: {str(e)}\n\nMake sure the email database is initialized."}
+
 @app.get("/activity-log")
 async def get_activity_log():
     """Get today's activity log (Voice Box speech history)."""

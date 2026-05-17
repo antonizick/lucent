@@ -27,3 +27,10 @@ scratchpad/
 
 # Project workspace (local development only, not synced to repo)
 idea/
+
+# Email system credentials and local config (contains API keys, credentials, etc.)
+*.email.config.json
+lucent_email.config.json
+.lucent/
+src/lucent_email/*.db
+src/lucent_email/*.db-*

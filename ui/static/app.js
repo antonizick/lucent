@@ -21,10 +21,11 @@ let lastLogContent = '';
 let fadeTimeout = null;
 let speechEnabled = false;
 let currentAgent = null;  // null = Lucent mode, string = named agent
-let currentLogTab = 'daily';  // 'daily', 'weekly', 'memory', or 'security'
+let currentLogTab = 'daily';  // 'daily', 'weekly', 'memory', 'security', or 'email'
 let lastWeeklyContent = '';
 let lastMemoryContent = '';
 let lastSecurityContent = '';
+let lastEmailContent = '';
 let refreshCountdown = 30;
 let refreshTimerInterval = null;
 
@@ -592,6 +593,14 @@ async function pollForLog() {
                 lastSecurityContent = data.content;
                 logContent.scrollTop = logContent.scrollHeight;
             }
+        } else if (currentLogTab === 'email') {
+            const response = await fetch('/log/email');
+            const data = await response.json();
+            if (data.content && data.content !== lastEmailContent) {
+                logContent.textContent = data.content;
+                lastEmailContent = data.content;
+                logContent.scrollTop = logContent.scrollHeight;
+            }
         }
     } catch (error) {
         console.error('Error polling for log:', error);
@@ -611,6 +620,8 @@ function switchLogTab(tab) {
         lastMemoryContent = '';
     } else if (tab === 'security') {
         lastSecurityContent = '';
+    } else if (tab === 'email') {
+        lastEmailContent = '';
     }
 
     // Update button states
@@ -624,6 +635,7 @@ function switchLogTab(tab) {
     document.getElementById('logLabelWeekly').classList.toggle('hidden', tab !== 'weekly');
     document.getElementById('logLabelMemory').classList.toggle('hidden', tab !== 'memory');
     document.getElementById('logLabelSecurity').classList.toggle('hidden', tab !== 'security');
+    document.getElementById('logLabelEmail').classList.toggle('hidden', tab !== 'email');
 
     // Clear content and poll immediately
     logContent.textContent = 'Loading...';
