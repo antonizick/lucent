@@ -201,6 +201,7 @@ class EmailService:
         except Exception as e:
             logger.error(f"PST indexing error: {e}")
             self._pst_indexing_status["completed"] = True
+            self._pst_indexing_status["error"] = str(e)
 
     def get_pst_index_status(self) -> dict:
         """

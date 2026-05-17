@@ -61,8 +61,9 @@ class PSTBackend(EmailBackend):
                 return True
             except ImportError:
                 logger.warning(
-                    "python-pst library not installed. "
-                    "Install with: pip install python-pst"
+                    "PST library not available. Python-pst doesn't exist on PyPI. "
+                    "PST indexing disabled. Using IMAP for email indexing instead. "
+                    "To enable PST support, use 'readpst' command-line tool via system libpst library."
                 )
                 return False
             except Exception as e:
