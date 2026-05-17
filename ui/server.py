@@ -525,6 +525,12 @@ async def get_memory_log():
 async def get_email_log():
     """Get priority emails from the email system."""
     try:
+        import sys
+        # Add parent directory to path so we can import src
+        parent_dir = str(Path(__file__).parent.parent)
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+
         from src.lucent_email.config import load_config
         from src.lucent_email.email_service import EmailService
 
