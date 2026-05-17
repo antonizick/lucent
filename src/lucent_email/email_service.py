@@ -9,10 +9,16 @@ import time
 from datetime import datetime
 from typing import List, Optional
 
-from .config import EmailConfig
+try:
+    import anthropic
+except ImportError:
+    anthropic = None
+
+from .config import EmailConfig, get_api_key
 from .db import EmailDatabase
 from .imap_backend import IMAPBackend
 from .models import Draft, EmailMetadata, FullEmail, SyncResult
+from .priority import PriorityDetector
 from .pst_backend import PSTBackend
 
 logger = logging.getLogger(__name__)
@@ -39,6 +45,7 @@ class EmailService:
         self.db = EmailDatabase(config.database.path)
         self.db.initialize_schema()
         self.backends = [self.pst_backend, self.imap_backend]
+        self._claude_client: Optional[anthropic.Anthropic] = None
 
     # Query operations
 
@@ -222,6 +229,17 @@ class EmailService:
 
     # Priority analysis (Phase 2+)
 
+    def _get_claude_client(self) -> Optional[anthropic.Anthropic]:
+        """Get Anthropic client (lazy init)."""
+        if self._claude_client is None and anthropic:
+            try:
+                api_key = get_api_key(self.config)
+                self._claude_client = anthropic.Anthropic(api_key=api_key)
+            except (ValueError, ImportError) as e:
+                logger.warning(f"Could not init Anthropic client: {e}")
+                return None
+        return self._claude_client
+
     def compute_sender_priority(self, from_addr: str) -> float:
         """
         Compute priority score for sender.
@@ -234,15 +252,48 @@ class EmailService:
         Returns:
             Priority score (0-10 scale).
         """
-        # Phase 2: Will integrate Claude Haiku
-        # For now, return cached score or default
         return self.db.get_sender_priority(from_addr)
+
+    def score_new_emails(self, emails: List[EmailMetadata]) -> dict:
+        """
+        Score emails and persist priority scores.
+
+        Uses Claude Haiku via PriorityDetector.
+
+        Args:
+            emails: List of emails to score.
+
+        Returns:
+            Dictionary mapping email_id to score.
+        """
+        try:
+            client = self._get_claude_client()
+            if not client:
+                logger.warning("Skipping email scoring (no Anthropic client)")
+                return {}
+
+            scores = PriorityDetector.score_emails(
+                emails, client, self.config.claude.model_haiku
+            )
+
+            # Persist scores to database
+            for email_id, score in scores.items():
+                email = next((e for e in emails if e.id == email_id), None)
+                if email:
+                    self.db.update_sender_priority(email.from_addr, score)
+
+            logger.info(f"Scored {len(scores)} emails")
+            return scores
+
+        except Exception as e:
+            logger.error(f"Error scoring emails: {e}")
+            return {}
 
     def detect_high_priority_emails(self, limit: int = 10) -> List[EmailMetadata]:
         """
         Get high-priority emails.
 
-        Phase 2: Will use Claude Haiku for priority detection.
+        Uses Claude Haiku for priority detection. Returns emails scoring >= 7.0.
 
         Args:
             limit: Maximum emails to return.
@@ -250,9 +301,29 @@ class EmailService:
         Returns:
             List of high-priority EmailMetadata objects.
         """
-        # Phase 2: Will call Claude Haiku for each email
-        # For now, return empty (placeholder)
-        return []
+        try:
+            # Get recent unread emails
+            recent = self.list_emails(limit=100)
+            unread = [e for e in recent if not e.read]
+
+            if not unread:
+                return []
+
+            # Score them
+            scores = self.score_new_emails(unread)
+
+            # Filter high-priority (>= 7.0)
+            high_priority = [
+                e for e in unread
+                if scores.get(e.id, 0.0) >= 7.0
+            ][:limit]
+
+            logger.info(f"Detected {len(high_priority)} high-priority emails")
+            return high_priority
+
+        except Exception as e:
+            logger.error(f"Error detecting high-priority emails: {e}")
+            return []
 
     # Draft operations (Phase 3+)
 

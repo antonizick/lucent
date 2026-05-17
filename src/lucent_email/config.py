@@ -33,8 +33,8 @@ class DatabaseConfig:
 class ClaudeConfig:
     """Claude API configuration."""
     api_key_env: str = "ANTHROPIC_API_KEY"
-    model_haiku: str = "claude-3-5-haiku-20241022"
-    model_sonnet: str = "claude-3-5-sonnet-20241022"
+    model_haiku: str = "claude-haiku-4-5-20251001"
+    model_sonnet: str = "claude-sonnet-4-6"
 
 
 @dataclass
