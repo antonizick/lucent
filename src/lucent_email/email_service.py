@@ -14,6 +14,7 @@ try:
 except ImportError:
     anthropic = None
 
+from .composer import DraftComposer
 from .config import EmailConfig, get_api_key
 from .db import EmailDatabase
 from .imap_backend import IMAPBackend
@@ -398,6 +399,119 @@ class EmailService:
             return True
         except Exception as e:
             logger.error(f"Error approving draft: {e}")
+            return False
+
+    def compose_reply(self, email_id: str, instructions: str = "") -> str:
+        """
+        Compose a reply to an email using Claude Sonnet.
+
+        Fetches the original email, generates a reply draft, and persists it.
+
+        Args:
+            email_id: ID of the email to reply to.
+            instructions: Optional custom instructions for the reply.
+
+        Returns:
+            Draft ID of the composed reply, or empty string on error.
+        """
+        try:
+            # Try to get full email with body
+            full_email = self.get_email(email_id)
+
+            # Fall back to cached metadata if full email fetch fails
+            if not full_email:
+                original_email = self.db.get_email_by_id(email_id)
+                if not original_email:
+                    logger.error(f"Email not found: {email_id}")
+                    return ""
+            else:
+                original_email = full_email
+
+            # Get Sonnet client
+            client = self._get_claude_client()
+            if not client:
+                logger.warning("Skipping composition (no Anthropic client)")
+                return ""
+
+            # Compose reply
+            draft = DraftComposer.compose_reply(
+                original_email=original_email,
+                full_email=full_email,
+                client=client,
+                model=self.config.claude.model_sonnet,
+                instructions=instructions,
+            )
+
+            # Persist draft
+            draft_id = self.db.create_draft(draft)
+            logger.info(f"Composed reply to {email_id} as draft {draft_id}")
+            return draft_id
+
+        except Exception as e:
+            logger.error(f"Error composing reply: {e}")
+            return ""
+
+    def compose_new(
+        self,
+        to: str,
+        subject: str,
+        context: str = "",
+        instructions: str = "",
+    ) -> str:
+        """
+        Compose a new email using Claude Sonnet.
+
+        Args:
+            to: Recipient email address.
+            subject: Email subject.
+            context: Context or topic for the email.
+            instructions: Optional custom instructions.
+
+        Returns:
+            Draft ID, or empty string on error.
+        """
+        try:
+            # Get Sonnet client
+            client = self._get_claude_client()
+            if not client:
+                logger.warning("Skipping composition (no Anthropic client)")
+                return ""
+
+            # Compose email
+            draft = DraftComposer.compose_new(
+                to=to,
+                subject=subject,
+                context=context,
+                client=client,
+                model=self.config.claude.model_sonnet,
+                instructions=instructions,
+            )
+
+            # Persist draft
+            draft_id = self.db.create_draft(draft)
+            logger.info(f"Composed new email to {to} as draft {draft_id}")
+            return draft_id
+
+        except Exception as e:
+            logger.error(f"Error composing email: {e}")
+            return ""
+
+    def discard_draft(self, draft_id: str) -> bool:
+        """
+        Mark draft as discarded.
+
+        Args:
+            draft_id: Draft ID.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        try:
+            self.db.update_draft_status(draft_id, "discarded")
+            logger.info(f"Discarded draft {draft_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Error discarding draft: {e}")
             return False
 
     # Sending (Phase 4+)
