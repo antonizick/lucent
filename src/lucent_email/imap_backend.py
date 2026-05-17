@@ -106,11 +106,26 @@ class IMAPBackend(EmailBackend):
             _, mailboxes = self.imap.list()
             folders = []
             for mailbox in mailboxes:
-                # Parse mailbox response
-                parts = mailbox.decode().split(' "/" ')
-                if len(parts) > 1:
-                    folder_name = parts[1].strip('"')
-                    folders.append(folder_name)
+                decoded = mailbox.decode()
+                # IMAP LIST format: (flags) "delimiter" mailbox-name
+                # Example: (\\HasChildren) "." INBOX
+                # Example: (\\HasNoChildren) "." "INBOX.Deleted Messages"
+
+                # Find the second quoted string (delimiter) and extract mailbox name after it
+                quote_count = 0
+                in_quote = False
+                for i, char in enumerate(decoded):
+                    if char == '"':
+                        quote_count += 1
+                        in_quote = not in_quote
+                    elif quote_count == 2 and not in_quote and char != ' ':
+                        # After the delimiter quote, find the mailbox name
+                        mailbox_name = decoded[i:]
+                        # Remove surrounding quotes if present
+                        mailbox_name = mailbox_name.strip().strip('"')
+                        if mailbox_name:
+                            folders.append(mailbox_name)
+                        break
             return folders
         except Exception as e:
             logger.error(f"Error listing folders: {e}")

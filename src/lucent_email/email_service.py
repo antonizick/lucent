@@ -59,6 +59,7 @@ class EmailService:
         self.db.initialize_schema()
         self.backends = [self.pst_backend, self.imap_backend]
         self._ollama_client: Optional[OllamaClient] = None
+        self._pst_indexing_status = {"completed": False, "total": 0, "indexed": 0}
 
     # Query operations
 
@@ -162,6 +163,53 @@ class EmailService:
             return []
 
     # Sync operations
+
+    def index_pst(self) -> None:
+        """
+        Index all PST emails into database (one-time operation).
+
+        Loads all emails from PST file and syncs to database with progress tracking.
+        Updates self._pst_indexing_status.
+        """
+        try:
+            if not self.pst_backend.authenticate():
+                logger.warning("PST authentication failed, skipping indexing")
+                self._pst_indexing_status["completed"] = True
+                return
+
+            pst_emails = self.pst_backend.sync_metadata()
+            self._pst_indexing_status["total"] = len(pst_emails)
+
+            if not pst_emails:
+                logger.info("No emails found in PST")
+                self._pst_indexing_status["completed"] = True
+                return
+
+            # Sync in batches to track progress
+            batch_size = 100
+            for i in range(0, len(pst_emails), batch_size):
+                batch = pst_emails[i : i + batch_size]
+                self.db.sync_emails(batch)
+                self._pst_indexing_status["indexed"] = min(i + batch_size, len(pst_emails))
+                logger.info(
+                    f"PST indexing: {self._pst_indexing_status['indexed']}/{len(pst_emails)}"
+                )
+
+            self._pst_indexing_status["completed"] = True
+            logger.info(f"PST indexing complete: {len(pst_emails)} emails indexed")
+
+        except Exception as e:
+            logger.error(f"PST indexing error: {e}")
+            self._pst_indexing_status["completed"] = True
+
+    def get_pst_index_status(self) -> dict:
+        """
+        Get current PST indexing status.
+
+        Returns:
+            Dict with keys: completed (bool), total (int), indexed (int).
+        """
+        return self._pst_indexing_status.copy()
 
     def sync_all(self) -> SyncResult:
         """

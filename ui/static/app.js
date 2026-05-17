@@ -620,10 +620,10 @@ function switchLogTab(tab) {
         lastMemoryContent = '';
     } else if (tab === 'security') {
         lastSecurityContent = '';
-    } else if (tab === 'email') {
-        lastEmailContent = '';
     } else if (tab === 'email-search') {
-        // Email search doesn't auto-load, user must search
+        // Load priority emails (email monitor) and poll PST status
+        loadEmailMonitor();
+        pollPSTStatus();
     }
 
     // Update button states
@@ -637,11 +637,24 @@ function switchLogTab(tab) {
     document.getElementById('logLabelWeekly').classList.toggle('hidden', tab !== 'weekly');
     document.getElementById('logLabelMemory').classList.toggle('hidden', tab !== 'memory');
     document.getElementById('logLabelSecurity').classList.toggle('hidden', tab !== 'security');
-    document.getElementById('logLabelEmail').classList.toggle('hidden', tab !== 'email');
     document.getElementById('logLabelEmailSearch').classList.toggle('hidden', tab !== 'email-search');
 
     // Show/hide appropriate panels
-    document.getElementById('emailSearchPanel').classList.toggle('hidden', tab !== 'email-search');
+    const logHeader = document.querySelector('.log-header');
+    const logContentElement = document.getElementById('logContent');
+    const emailSearchPanel = document.getElementById('emailSearchPanel');
+
+    // When email-search is active: hide header and main content, show only email panel
+    if (tab === 'email-search') {
+        if (logHeader) logHeader.classList.add('hidden');
+        if (logContentElement) logContentElement.classList.add('hidden');
+        if (emailSearchPanel) emailSearchPanel.classList.remove('hidden');
+    } else {
+        // For other tabs: show header and content, hide email panel
+        if (logHeader) logHeader.classList.remove('hidden');
+        if (logContentElement) logContentElement.classList.remove('hidden');
+        if (emailSearchPanel) emailSearchPanel.classList.add('hidden');
+    }
 
     // Clear content and poll immediately (but not for email-search which is manual)
     if (tab !== 'email-search') {
@@ -740,6 +753,93 @@ function setupLogListener() {
                 emailSearchBtn.click();
             }
         });
+    }
+}
+
+// Load and display high-priority emails (email monitor)
+async function loadEmailMonitor() {
+    try {
+        const monitorContent = document.getElementById('emailMonitorContent');
+        if (!monitorContent) {
+            return;
+        }
+
+        const response = await fetch('/log/email');
+        if (!response.ok) {
+            console.warn('Email monitor endpoint error:', response.status);
+            return;
+        }
+
+        const data = await response.json();
+
+        if (data.content) {
+            monitorContent.textContent = data.content;
+        } else {
+            monitorContent.textContent = 'No priority emails at this time.\n';
+        }
+    } catch (error) {
+        console.error('Error loading email monitor:', error);
+    }
+}
+
+// Poll PST indexing status
+async function pollPSTStatus() {
+    try {
+        const statusDiv = document.getElementById('pstIndexStatus');
+        const statusText = document.getElementById('pstStatusText');
+        const progressFill = document.getElementById('pstProgressFill');
+        const statusDetails = document.getElementById('pstStatusDetails');
+
+        // Check if elements exist (defensive check)
+        if (!statusDiv || !statusText || !progressFill || !statusDetails) {
+            console.warn('PST status elements not found in DOM');
+            return;
+        }
+
+        const response = await fetch('/pst/status');
+        if (!response.ok) {
+            console.warn('PST status endpoint error:', response.status);
+            return;
+        }
+
+        const data = await response.json();
+
+        if (data.completed) {
+            if (data.total > 0) {
+                statusDiv.classList.add('hidden');
+            }
+        } else if (data.total > 0) {
+            statusDiv.classList.remove('hidden');
+            const percentage = data.percentage || 0;
+            statusText.textContent = `Indexing PST file (${percentage}% complete)...`;
+            progressFill.style.width = percentage + '%';
+            statusDetails.textContent = `${data.indexed} / ${data.total}`;
+
+            // Keep polling if not complete
+            setTimeout(pollPSTStatus, 1000);
+        } else if (!data.completed && data.total === 0) {
+            // Not yet started
+            statusDiv.classList.remove('hidden');
+            statusText.textContent = 'Ready to index PST file. Starting indexing...';
+            progressFill.style.width = '0%';
+            statusDetails.textContent = '0 / 0';
+
+            // Start indexing
+            try {
+                const indexResponse = await fetch('/pst/index', { method: 'POST' });
+                if (indexResponse.ok) {
+                    // Poll again after starting
+                    setTimeout(pollPSTStatus, 500);
+                } else {
+                    statusText.textContent = 'Error starting indexing (HTTP ' + indexResponse.status + ')';
+                }
+            } catch (error) {
+                console.error('Error starting indexing:', error);
+                statusText.textContent = 'Error starting indexing: ' + error.message;
+            }
+        }
+    } catch (error) {
+        console.error('Error polling PST status:', error);
     }
 }
 
@@ -959,6 +1059,7 @@ const FONT_SIZE_STEP = 1;
 
 let logFontSize = parseInt(localStorage.getItem('logFontSize')) || 11;
 let agentsFontSize = parseInt(localStorage.getItem('agentsFontSize')) || 11;
+let emailMonitorFontSize = parseInt(localStorage.getItem('emailMonitorFontSize')) || 11;
 
 // Font size adjustment functions
 function adjustFontSize(panel, increase) {
@@ -975,6 +1076,10 @@ function adjustFontSize(panel, increase) {
         storageKey = 'agentsFontSize';
         element = document.querySelector('.agents-table');
         if (!element) element = document.getElementById('agentsContainer');
+    } else if (panel === 'email-monitor') {
+        fontSize = emailMonitorFontSize;
+        storageKey = 'emailMonitorFontSize';
+        element = document.getElementById('emailMonitorContent');
     }
 
     if (!element) return;
@@ -990,6 +1095,8 @@ function adjustFontSize(panel, increase) {
         logFontSize = newSize;
     } else if (panel === 'agents') {
         agentsFontSize = newSize;
+    } else if (panel === 'email-monitor') {
+        emailMonitorFontSize = newSize;
     }
 }
 
@@ -997,6 +1104,7 @@ function adjustFontSize(panel, increase) {
 function applySavedFontSizes() {
     const logContent = document.getElementById('logContent');
     const agentsContainer = document.getElementById('agentsContainer');
+    const emailMonitorContent = document.getElementById('emailMonitorContent');
 
     if (logContent) {
         logContent.style.fontSize = logFontSize + 'px';
@@ -1004,6 +1112,10 @@ function applySavedFontSizes() {
 
     if (agentsContainer) {
         agentsContainer.style.fontSize = agentsFontSize + 'px';
+    }
+
+    if (emailMonitorContent) {
+        emailMonitorContent.style.fontSize = emailMonitorFontSize + 'px';
     }
 }
 
@@ -1117,6 +1229,12 @@ const logFontUp = document.getElementById('logFontUp');
 const logFontDown = document.getElementById('logFontDown');
 if (logFontUp) logFontUp.addEventListener('click', () => adjustFontSize('log', true));
 if (logFontDown) logFontDown.addEventListener('click', () => adjustFontSize('log', false));
+
+// Set up font size controls for email monitor
+const emailMonitorFontUp = document.getElementById('emailMonitorFontUp');
+const emailMonitorFontDown = document.getElementById('emailMonitorFontDown');
+if (emailMonitorFontUp) emailMonitorFontUp.addEventListener('click', () => adjustFontSize('email-monitor', true));
+if (emailMonitorFontDown) emailMonitorFontDown.addEventListener('click', () => adjustFontSize('email-monitor', false));
 
 setupSpeechListener();
 setupLogListener();

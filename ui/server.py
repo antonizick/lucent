@@ -615,6 +615,59 @@ async def search_emails(q: str = ""):
             "query": q
         }
 
+@app.post("/pst/index")
+async def index_pst():
+    """Trigger PST file indexing (loads all emails into database)."""
+    try:
+        import sys
+        parent_dir = str(Path(__file__).parent.parent)
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+
+        from src.lucent_email.config import load_config
+        from src.lucent_email.email_service import EmailService
+        import threading
+
+        config = load_config()
+        service = EmailService(config)
+
+        # Run indexing in background thread
+        thread = threading.Thread(target=service.index_pst, daemon=True)
+        thread.start()
+
+        return {"status": "indexing_started"}
+
+    except Exception as e:
+        logger.error(f"Error starting PST indexing: {e}")
+        return {"error": f"Failed to start indexing: {str(e)}"}, 500
+
+@app.get("/pst/status")
+async def get_pst_status():
+    """Get PST indexing status."""
+    try:
+        import sys
+        parent_dir = str(Path(__file__).parent.parent)
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+
+        from src.lucent_email.config import load_config
+        from src.lucent_email.email_service import EmailService
+
+        config = load_config()
+        service = EmailService(config)
+        status = service.get_pst_index_status()
+
+        return {
+            "completed": status["completed"],
+            "total": status["total"],
+            "indexed": status["indexed"],
+            "percentage": int(100 * status["indexed"] / max(status["total"], 1)) if status["total"] > 0 else 0
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting PST status: {e}")
+        return {"error": f"Failed to get status: {str(e)}"}, 500
+
 @app.get("/activity-log")
 async def get_activity_log():
     """Get today's activity log (Voice Box speech history)."""
