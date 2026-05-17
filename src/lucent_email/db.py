@@ -119,6 +119,8 @@ class EmailDatabase:
 
         # Prepare data
         to_addrs_json = json.dumps(email.to_addrs) if email.to_addrs else "[]"
+        # Use NULL for missing message_id (empty string breaks UNIQUE constraint)
+        message_id = email.message_id if email.message_id else None
 
         cursor.execute("""
             INSERT OR REPLACE INTO emails (
@@ -129,31 +131,26 @@ class EmailDatabase:
         """, (
             email.id, email.backend, email.from_addr, to_addrs_json,
             email.subject, email.timestamp.isoformat(),
-            email.timestamp.isoformat(), email.read, email.flagged,
+            email.timestamp.isoformat(), int(email.read), int(email.flagged),
             email.folder, "[]", email.snippet,
-            email.message_id, email.in_reply_to,
+            message_id, email.in_reply_to,
             email.priority_score, datetime.now().isoformat()
         ))
-
-        # Update FTS index
-        cursor.execute("""
-            INSERT OR REPLACE INTO emails_fts (rowid, subject, snippet, from_addr)
-            VALUES (?, ?, ?, ?)
-        """, (email.id, email.subject, email.snippet, email.from_addr))
 
         self.connection.commit()
 
     def search(self, query: str, limit: int = 100) -> List[EmailMetadata]:
-        """Full-text search via FTS5."""
+        """Full-text search via LIKE (FTS5 optimization available)."""
         cursor = self.connection.cursor()
 
+        # Simple LIKE search on subject and snippet (FTS5 can optimize this later)
+        search_term = f"%{query}%"
         cursor.execute("""
-            SELECT e.* FROM emails e
-            INNER JOIN emails_fts f ON e.id = f.rowid
-            WHERE emails_fts MATCH ?
-            ORDER BY rank
+            SELECT * FROM emails
+            WHERE subject LIKE ? OR snippet LIKE ? OR from_addr LIKE ?
+            ORDER BY timestamp DESC
             LIMIT ?
-        """, (query, limit))
+        """, (search_term, search_term, search_term, limit))
 
         return [self._row_to_email_metadata(row) for row in cursor.fetchall()]
 

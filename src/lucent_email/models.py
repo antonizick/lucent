@@ -58,7 +58,7 @@ class FullEmail(EmailMetadata):
 
     Extends EmailMetadata with content.
     """
-    body: str
+    body: str = ""
     html_body: Optional[str] = None
     attachments: List[Attachment] = field(default_factory=list)
 
