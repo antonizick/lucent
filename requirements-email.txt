@@ -1,0 +1,28 @@
+# Lucent Email System Requirements
+
+# Core dependencies
+anthropic>=0.25.0
+python-keyring>=24.0.0
+
+# Email backends
+# For PST: Use pywin32 on Windows, python-pst on others
+# For IMAP/SMTP: Use stdlib (imaplib, smtplib)
+pywin32>=300; platform_system=='Windows'
+
+# Database
+# sqlite3 is in stdlib, no installation needed
+
+# Testing
+pytest>=7.0
+pytest-asyncio>=0.20.0
+pytest-cov>=4.0
+pytest-mock>=3.10
+
+# Development & Formatting
+black>=23.0
+flake8>=6.0
+mypy>=1.0
+isort>=5.12
+
+# Utilities
+python-dotenv>=1.0  # For .env file support
