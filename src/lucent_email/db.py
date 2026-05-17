@@ -268,10 +268,24 @@ class EmailDatabase:
         """Update draft status."""
         cursor = self.connection.cursor()
 
-        cursor.execute("""
-            UPDATE drafts SET status = ?, approved_at = ?
-            WHERE id = ?
-        """, (status, datetime.now().isoformat() if status == "approved" else None, draft_id))
+        if status == "approved":
+            # Only update approved_at when transitioning to approved
+            cursor.execute("""
+                UPDATE drafts SET status = ?, approved_at = ?
+                WHERE id = ?
+            """, (status, datetime.now().isoformat(), draft_id))
+        elif status == "sent":
+            # Only update sent_at when transitioning to sent
+            cursor.execute("""
+                UPDATE drafts SET status = ?, sent_at = ?
+                WHERE id = ?
+            """, (status, datetime.now().isoformat(), draft_id))
+        else:
+            # For other statuses, only update status
+            cursor.execute("""
+                UPDATE drafts SET status = ?
+                WHERE id = ?
+            """, (status, draft_id))
 
         self.connection.commit()
         logger.info(f"Updated draft {draft_id} to {status}")

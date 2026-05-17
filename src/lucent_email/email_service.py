@@ -4,9 +4,12 @@ Email Service API — High-level interface for email operations.
 Unifies PST + IMAP backends, provides search, sync, and drafting.
 """
 
+import json
 import logging
+import subprocess
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional
 
 try:
@@ -21,6 +24,7 @@ from .imap_backend import IMAPBackend
 from .models import Draft, EmailMetadata, FullEmail, SyncResult
 from .priority import PriorityDetector
 from .pst_backend import PSTBackend
+from .sender import SendValidator
 
 logger = logging.getLogger(__name__)
 
@@ -543,9 +547,9 @@ class EmailService:
 
     def send_draft(self, draft_id: str) -> bool:
         """
-        Send approved draft.
+        Send approved draft with safety checks.
 
-        Phase 4: Send draft from database.
+        Validates draft, sends via IMAP/SMTP, tracks in cache, confirms via voice.
 
         Args:
             draft_id: Draft ID.
@@ -554,27 +558,111 @@ class EmailService:
             True if sent successfully, False otherwise.
         """
         try:
+            # Load draft
             draft = self.get_draft(draft_id)
             if not draft:
                 logger.warning(f"Draft not found: {draft_id}")
                 return False
 
-            if draft.status != "approved":
-                logger.warning(f"Draft not approved: {draft_id}")
+            # Validate before sending
+            errors = SendValidator.validate(draft)
+            if errors:
+                logger.warning(f"Draft validation failed: {', '.join(errors)}")
                 return False
 
-            to = draft.to_addrs[0] if draft.to_addrs else ""
-            if self.send_email(to, draft.subject, draft.body):
-                self.db.update_draft_status(draft_id, "sent")
-                logger.info(f"Sent draft {draft_id}")
-                return True
-            else:
+            # Send to all recipients (comma-separated)
+            to = ", ".join(draft.to_addrs)
+            if not self.send_email(to, draft.subject, draft.body):
                 logger.error(f"Failed to send draft {draft_id}")
                 return False
+
+            # Success: update status with sent_at timestamp
+            self.db.update_draft_status(draft_id, "sent")
+
+            # Track sent email in cache
+            self._track_sent_email(draft)
+
+            # Confirm via voice box
+            self._confirm_send(draft)
+
+            logger.info(f"Sent draft {draft_id}")
+            return True
 
         except Exception as e:
             logger.error(f"Error sending draft: {e}")
             return False
+
+    def _track_sent_email(self, draft: Draft) -> None:
+        """
+        Add sent email to cache in "Sent" folder.
+
+        Args:
+            draft: Draft that was just sent.
+        """
+        try:
+            # Create metadata from draft
+            sent_email = EmailMetadata(
+                id=f"imap_sent_{draft.id}",
+                backend="imap",
+                from_addr=self.config.imap.email_address,
+                to_addrs=draft.to_addrs,
+                subject=draft.subject,
+                timestamp=datetime.now(),
+                snippet=draft.body[:200],
+                read=True,
+                folder="Sent",
+                message_id=None,
+                in_reply_to=None,
+            )
+
+            self.db.insert_or_update_email(sent_email)
+            logger.debug(f"Tracked sent email in cache: {draft.id}")
+
+        except Exception as e:
+            logger.error(f"Error tracking sent email: {e}")
+
+    def _confirm_send(self, draft: Draft) -> None:
+        """
+        Confirm send via voice box and daily note.
+
+        Args:
+            draft: Draft that was just sent.
+        """
+        try:
+            # Format confirmation message
+            to_str = ", ".join(draft.to_addrs[:2])  # First 2 recipients
+            if len(draft.to_addrs) > 2:
+                to_str += f", +{len(draft.to_addrs) - 2} more"
+
+            message = f"[Email] Sent '{draft.subject}' to {to_str}"
+
+            # Send via voice box
+            subprocess.run(
+                [
+                    "curl",
+                    "-X",
+                    "POST",
+                    "http://localhost:8001/speak",
+                    "-H",
+                    "Content-Type: application/json",
+                    "-d",
+                    json.dumps({"text": message}),
+                ],
+                timeout=5,
+            )
+
+            # Log to daily note
+            note_path = Path.home() / ".lucent" / "memory"
+            from datetime import date
+            today = date.today().isoformat()
+            note_file = note_path / f"{today}.md"
+
+            if note_file.exists():
+                with open(note_file, "a") as f:
+                    f.write(f"[{datetime.now().strftime('%H:%M:%S')}] {message}\n")
+
+        except Exception as e:
+            logger.error(f"Error confirming send: {e}")
 
     # Information
 

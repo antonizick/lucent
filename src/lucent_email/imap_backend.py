@@ -254,7 +254,7 @@ class IMAPBackend(EmailBackend):
         Send email via SMTP.
 
         Args:
-            to: Recipient email address(es).
+            to: Recipient email address(es), comma-separated.
             subject: Email subject.
             body: Email body.
 
@@ -266,12 +266,16 @@ class IMAPBackend(EmailBackend):
             return False
 
         try:
+            # Parse comma-separated recipients
+            to_addrs = [addr.strip() for addr in to.split(",")]
+
             msg = MIMEText(body)
             msg["Subject"] = subject
             msg["From"] = self.config.email_address
-            msg["To"] = to
+            msg["To"] = to  # Keep original format in header
 
-            self.smtp.send_message(msg)
+            # Send to all recipients
+            self.smtp.sendmail(self.config.email_address, to_addrs, msg.as_string())
             logger.info(f"Sent email to {to}")
             return True
 

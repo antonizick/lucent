@@ -11,10 +11,12 @@ __author__ = "Lucent"
 from .composer import DraftComposer
 from .email_service import EmailService
 from .models import EmailMetadata, FullEmail, Draft, Attachment
+from .sender import SendValidator
 
 __all__ = [
     "EmailService",
     "DraftComposer",
+    "SendValidator",
     "EmailMetadata",
     "FullEmail",
     "Draft",
