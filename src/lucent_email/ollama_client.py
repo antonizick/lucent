@@ -9,6 +9,7 @@ import requests
 import json
 from typing import Optional
 from dataclasses import dataclass
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,26 @@ class OllamaClient:
         """
         self.config = config or OllamaConfig()
         self.base_url = self.config.base_url.rstrip("/")
+        self._guidelines_cache = None
+
+    def _load_priority_guidelines(self) -> str:
+        """Load email priority guidelines from ~/.lucent/priority_guidelines.md."""
+        if self._guidelines_cache is not None:
+            return self._guidelines_cache
+
+        guidelines_path = Path.home() / ".lucent" / "priority_guidelines.md"
+
+        if guidelines_path.exists():
+            try:
+                content = guidelines_path.read_text()
+                self._guidelines_cache = content
+                return content
+            except Exception as e:
+                logger.warning(f"Failed to load priority guidelines: {e}")
+                return ""
+        else:
+            logger.info(f"Priority guidelines not found at {guidelines_path}")
+            return ""
 
     def _call_ollama(
         self,
@@ -92,8 +113,11 @@ class OllamaClient:
         Returns:
             Priority score 0-10, or None on error.
         """
+        guidelines = self._load_priority_guidelines()
+        guidelines_context = f"\n\nPriority Guidelines:\n{guidelines}" if guidelines else ""
+
         prompt = f"""Analyze this email and score its priority from 0-10.
-Consider: urgency, importance, action required.
+Consider: urgency, importance, action required.{guidelines_context}
 
 Sender: {sender}
 Subject: {subject}
