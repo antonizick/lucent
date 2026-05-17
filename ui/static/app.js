@@ -622,6 +622,8 @@ function switchLogTab(tab) {
         lastSecurityContent = '';
     } else if (tab === 'email') {
         lastEmailContent = '';
+    } else if (tab === 'email-search') {
+        // Email search doesn't auto-load, user must search
     }
 
     // Update button states
@@ -636,10 +638,16 @@ function switchLogTab(tab) {
     document.getElementById('logLabelMemory').classList.toggle('hidden', tab !== 'memory');
     document.getElementById('logLabelSecurity').classList.toggle('hidden', tab !== 'security');
     document.getElementById('logLabelEmail').classList.toggle('hidden', tab !== 'email');
+    document.getElementById('logLabelEmailSearch').classList.toggle('hidden', tab !== 'email-search');
 
-    // Clear content and poll immediately
-    logContent.textContent = 'Loading...';
-    pollForLog();
+    // Show/hide appropriate panels
+    document.getElementById('emailSearchPanel').classList.toggle('hidden', tab !== 'email-search');
+
+    // Clear content and poll immediately (but not for email-search which is manual)
+    if (tab !== 'email-search') {
+        logContent.textContent = 'Loading...';
+        pollForLog();
+    }
 }
 
 // Update refresh timer countdown
@@ -682,6 +690,57 @@ function setupLogListener() {
             switchLogTab(e.target.dataset.tab);
         });
     });
+
+    // Email search functionality
+    const emailSearchInput = document.getElementById('emailSearchInput');
+    const emailSearchBtn = document.getElementById('emailSearchBtn');
+    const emailSearchContent = document.getElementById('emailSearchContent');
+
+    if (emailSearchInput && emailSearchBtn) {
+        // Search on button click
+        emailSearchBtn.addEventListener('click', async () => {
+            const query = emailSearchInput.value.trim();
+            if (!query) {
+                emailSearchContent.textContent = 'Please enter a search term.';
+                return;
+            }
+
+            emailSearchContent.textContent = 'Searching...';
+            try {
+                const response = await fetch(`/search/email?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+
+                if (data.results && data.results.length > 0) {
+                    let content = `SEARCH RESULTS — ${data.results.length} email(s) found\n`;
+                    content += '=' + '='.repeat(69) + '\n\n';
+
+                    data.results.forEach(email => {
+                        const timestamp = email.timestamp || 'Unknown';
+                        const score = email.priority_score ? `${email.priority_score.toFixed(1)}/10` : '—';
+                        content += `[${timestamp}] Score: ${score}\n`;
+                        content += `From: ${email.from_addr || '(unknown)'}\n`;
+                        content += `Subject: ${email.subject || '(no subject)'}\n`;
+                        content += `Preview: ${email.snippet ? email.snippet.substring(0, 200) : '(no preview)'}\n`;
+                        content += '-' + '-'.repeat(69) + '\n\n';
+                    });
+
+                    emailSearchContent.textContent = content;
+                } else {
+                    emailSearchContent.textContent = 'No emails found matching your search.';
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+                emailSearchContent.textContent = 'Error searching emails: ' + error.message;
+            }
+        });
+
+        // Search on Enter key
+        emailSearchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                emailSearchBtn.click();
+            }
+        });
+    }
 }
 
 // Poll for service health

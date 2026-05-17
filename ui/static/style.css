@@ -987,6 +987,58 @@ body {
     font-size: 12px;
 }
 
+/* Email Search Panel */
+.email-search-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+}
+
+.email-search-panel.hidden {
+    display: none;
+}
+
+.search-input-group {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.email-search-input {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+}
+
+.email-search-input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 4px rgba(0, 255, 255, 0.3);
+}
+
+.email-search-btn {
+    padding: 8px 16px;
+    background: var(--accent-color);
+    color: var(--bg-primary);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+
+.email-search-btn:hover {
+    background-color: var(--accent-light);
+}
+
 /* Responsive */
 @media (max-width: 600px) {
     .header h1 {

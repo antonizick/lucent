@@ -566,6 +566,55 @@ async def get_email_log():
         logger.error(f"Error loading emails: {e}")
         return {"content": f"Error loading emails: {str(e)}\n\nMake sure the email database is initialized."}
 
+@app.get("/search/email")
+async def search_emails(q: str = ""):
+    """Search emails by query across subject, sender, receiver, and body."""
+    if not q or len(q.strip()) < 2:
+        return {"results": [], "message": "Query too short"}
+
+    try:
+        import sys
+        parent_dir = str(Path(__file__).parent.parent)
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+
+        from src.lucent_email.config import load_config
+        from src.lucent_email.email_service import EmailService
+
+        # Load config and service
+        config = load_config()
+        service = EmailService(config)
+
+        # Search using FTS5 (searches subject, snippet, from_addr)
+        # FTS5 searches multiple fields automatically
+        search_results = service.db.search(q, limit=100)
+
+        # Format results
+        results = []
+        for email in search_results:
+            results.append({
+                "id": email.id,
+                "from_addr": email.from_addr,
+                "subject": email.subject,
+                "snippet": email.snippet,
+                "timestamp": email.timestamp.strftime("%Y-%m-%d %H:%M") if email.timestamp else "Unknown",
+                "priority_score": email.priority_score
+            })
+
+        return {
+            "results": results,
+            "query": q,
+            "total": len(results)
+        }
+
+    except Exception as e:
+        logger.error(f"Error searching emails: {e}")
+        return {
+            "results": [],
+            "error": f"Search error: {str(e)}",
+            "query": q
+        }
+
 @app.get("/activity-log")
 async def get_activity_log():
     """Get today's activity log (Voice Box speech history)."""
