@@ -593,18 +593,50 @@ async function pollForLog() {
                 lastSecurityContent = data.content;
                 logContent.scrollTop = logContent.scrollHeight;
             }
-        } else if (currentLogTab === 'email') {
+        } else if (currentLogTab === 'email-search') {
             const response = await fetch('/log/email');
             const data = await response.json();
-            if (data.content && data.content !== lastEmailContent) {
-                logContent.textContent = data.content;
+            const emailMonitorContent = document.getElementById('emailMonitorContent');
+            if (emailMonitorContent && data.content && data.content !== lastEmailContent) {
+                // Convert ANSI codes to HTML and preserve text formatting with <pre>
+                const htmlContent = '<pre style="white-space: pre-wrap; word-wrap: break-word; font-family: monospace;">' +
+                                    ansiToHtml(data.content) + '</pre>';
+                emailMonitorContent.innerHTML = htmlContent;
                 lastEmailContent = data.content;
-                logContent.scrollTop = logContent.scrollHeight;
+                emailMonitorContent.scrollTop = emailMonitorContent.scrollHeight;
             }
         }
     } catch (error) {
         console.error('Error polling for log:', error);
     }
+}
+
+// Convert ANSI color codes to HTML
+function ansiToHtml(text) {
+    const ansiRegex = /\033\[([\d;]+)m/g;
+    const colorMap = {
+        '31': 'color: #e74c3c;',      // Red
+        '33': 'color: #f39c12;',      // Yellow
+        '38;5;208': 'color: #ff8c00;' // Orange
+    };
+
+    let html = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+    // Replace ANSI codes with HTML spans
+    html = html.replace(/\033\[([0-9;]+)m([^\033]*)/g, (match, code, content) => {
+        const style = colorMap[code];
+        if (style) {
+            return `<span style="${style}">${content}</span>`;
+        }
+        return content;
+    });
+
+    return html;
 }
 
 // Switch log tab
@@ -621,7 +653,8 @@ function switchLogTab(tab) {
     } else if (tab === 'security') {
         lastSecurityContent = '';
     } else if (tab === 'email-search') {
-        // Load priority emails (email monitor) and poll PST status
+        // Clear cache and load priority emails (email monitor) and poll PST status
+        lastEmailContent = '';
         loadEmailMonitor();
         pollPSTStatus();
     }
@@ -774,7 +807,10 @@ async function loadEmailMonitor() {
         const data = await response.json();
 
         if (data.content) {
-            monitorContent.textContent = data.content;
+            // Convert ANSI codes to HTML and preserve text formatting with <pre>
+            const htmlContent = '<pre style="white-space: pre-wrap; word-wrap: break-word; font-family: monospace;">' +
+                                ansiToHtml(data.content) + '</pre>';
+            monitorContent.innerHTML = htmlContent;
         } else {
             monitorContent.textContent = 'No priority emails at this time.\n';
         }

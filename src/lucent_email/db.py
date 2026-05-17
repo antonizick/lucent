@@ -62,7 +62,7 @@ class EmailDatabase:
                 folder TEXT,
                 labels TEXT,
                 snippet TEXT,
-                message_id TEXT UNIQUE,
+                message_id TEXT,
                 in_reply_to TEXT,
                 sender_priority_score REAL DEFAULT 0.0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -112,6 +112,86 @@ class EmailDatabase:
 
         self.connection.commit()
         logger.info("Database schema initialized")
+
+    def migrate_remove_message_id_unique(self) -> None:
+        """Remove UNIQUE constraint from message_id column.
+
+        Needed because IMAP UIDs are per-folder, and the same message can appear
+        in multiple folders. UNIQUE constraint was causing INSERT OR REPLACE failures.
+        """
+        cursor = self.connection.cursor()
+        try:
+            # Check if emails table exists with UNIQUE constraint on message_id
+            cursor.execute("PRAGMA table_info(emails)")
+            columns = cursor.fetchall()
+
+            # Check if table has the old schema (we can check for message_id existence)
+            has_message_id = any(col[1] == "message_id" for col in columns)
+            if not has_message_id:
+                return
+
+            # Try to get constraint info (SQLite doesn't support PRAGMA for constraints easily)
+            # Instead, we'll try to insert a duplicate message_id and catch the error
+            cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='emails'")
+            if cursor.fetchone()[0] == 0:
+                return
+
+            # Check if we have old schema by trying to access the constraint
+            cursor.execute("""
+                SELECT sql FROM sqlite_master WHERE type='table' AND name='emails'
+            """)
+            table_sql = cursor.fetchone()
+
+            if table_sql and "UNIQUE" in str(table_sql[0]):
+                logger.info("Migrating emails table to remove UNIQUE constraint on message_id...")
+
+                # Rename old table
+                cursor.execute("ALTER TABLE emails RENAME TO emails_old")
+
+                # Create new table without UNIQUE constraint
+                cursor.execute("""
+                    CREATE TABLE emails (
+                        id TEXT PRIMARY KEY,
+                        backend TEXT NOT NULL,
+                        from_addr TEXT,
+                        to_addrs TEXT,
+                        subject TEXT,
+                        timestamp DATETIME,
+                        received_date DATETIME,
+                        read BOOLEAN DEFAULT 0,
+                        flagged BOOLEAN DEFAULT 0,
+                        folder TEXT,
+                        labels TEXT,
+                        snippet TEXT,
+                        message_id TEXT,
+                        in_reply_to TEXT,
+                        sender_priority_score REAL DEFAULT 0.0,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        last_synced DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+
+                # Copy data from old table
+                cursor.execute("""
+                    INSERT INTO emails
+                    SELECT id, backend, from_addr, to_addrs, subject, timestamp,
+                           received_date, read, flagged, folder, labels, snippet,
+                           message_id, in_reply_to, sender_priority_score, created_at, last_synced
+                    FROM emails_old
+                """)
+
+                # Recreate indexes
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_emails_folder ON emails(folder)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_emails_timestamp ON emails(timestamp)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_emails_from ON emails(from_addr)")
+
+                # Drop old table
+                cursor.execute("DROP TABLE emails_old")
+
+                self.connection.commit()
+                logger.info("Migration complete: UNIQUE constraint removed from message_id")
+        except Exception as e:
+            logger.warning(f"Migration error (may not be needed): {e}")
 
     def insert_or_update_email(self, email: EmailMetadata) -> None:
         """Insert or update email metadata."""
@@ -210,6 +290,17 @@ class EmailDatabase:
         """, (message_id, message_id))
 
         return [self._row_to_email_metadata(row) for row in cursor.fetchall()]
+
+    def update_email_priority(self, email_id: str, score: float) -> None:
+        """Update email's priority score."""
+        cursor = self.connection.cursor()
+
+        cursor.execute("""
+            UPDATE emails SET sender_priority_score = ?
+            WHERE id = ?
+        """, (score, email_id))
+
+        self.connection.commit()
 
     def update_sender_priority(self, from_addr: str, score: float) -> None:
         """Update sender priority score."""
@@ -381,6 +472,41 @@ class EmailDatabase:
             SELECT backend, COUNT(*) FROM emails GROUP BY backend
         """)
         return {row[0]: row[1] for row in cursor.fetchall()}
+
+    def cleanup_deleted_emails(self, current_email_ids: List[str], folder: str) -> int:
+        """Remove emails from database that are no longer on the server.
+
+        Args:
+            current_email_ids: List of email IDs currently on the server for this folder.
+            folder: The folder to clean up (e.g., "INBOX", "INBOX.Sent").
+
+        Returns:
+            Number of emails deleted.
+        """
+        cursor = self.connection.cursor()
+
+        # Get all email IDs for this folder in the database
+        cursor.execute("""
+            SELECT id FROM emails WHERE folder = ?
+        """, (folder,))
+        db_emails = set(row[0] for row in cursor.fetchall())
+
+        # Find emails in database but not on server
+        current_set = set(current_email_ids)
+        emails_to_delete = db_emails - current_set
+
+        if emails_to_delete:
+            # Delete the orphaned emails
+            placeholders = ','.join('?' * len(emails_to_delete))
+            cursor.execute(f"""
+                DELETE FROM emails WHERE id IN ({placeholders})
+            """, tuple(emails_to_delete))
+
+            self.connection.commit()
+            logger.info(f"Cleaned up {len(emails_to_delete)} deleted emails from {folder}")
+            return len(emails_to_delete)
+
+        return 0
 
     def vacuum(self) -> None:
         """Optimize database."""

@@ -429,7 +429,7 @@ body {
 
 /* Log Panel */
 .log-panel {
-    flex: 0 0 auto;
+    flex: 1;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -441,7 +441,6 @@ body {
     border-radius: 8px;
     overflow: hidden;
     min-height: 300px;
-    max-height: calc(100vh - 400px);
 }
 
 .log-header {
@@ -574,14 +573,17 @@ body {
     gap: 20px;
     padding: 20px;
     margin: 0;
-    flex: 0 1 auto;
+    flex: 1;
     align-items: start;
+    min-height: 0;
 }
 
 .left-column {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    flex: 1;
+    min-height: 0;
 }
 
 .right-column {

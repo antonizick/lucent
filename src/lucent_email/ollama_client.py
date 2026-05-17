@@ -110,10 +110,32 @@ Respond with ONLY a number 0-10, nothing else."""
 
         if result:
             try:
+                # Try direct float conversion first
                 score = float(result.strip())
-                return max(0.0, min(10.0, score))  # Clamp to 0-10
+                return max(0.0, min(10.0, score))
             except ValueError:
-                logger.warning(f"Failed to parse score: {result}")
+                # Fall back to extracting number from text
+                import re
+                # Look for "Score: X" or just a number followed by .
+                match = re.search(r'(?:Score:|^|\s)(\d+(?:\.\d+)?)\s*(?:\.)?$', result.strip(), re.MULTILINE)
+                if match:
+                    try:
+                        score = float(match.group(1))
+                        return max(0.0, min(10.0, score))
+                    except ValueError:
+                        pass
+
+                # Last resort: look for any number 0-10
+                match = re.search(r'\b([0-9]+(?:\.[0-9]+)?)\b', result)
+                if match:
+                    try:
+                        score = float(match.group(1))
+                        if 0 <= score <= 10:
+                            return score
+                    except ValueError:
+                        pass
+
+                logger.warning(f"Failed to parse score from: {result[:100]}")
                 return None
 
         return None

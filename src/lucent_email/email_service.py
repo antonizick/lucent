@@ -57,6 +57,7 @@ class EmailService:
         self.imap_backend = IMAPBackend(config.imap)
         self.db = EmailDatabase(config.database.path)
         self.db.initialize_schema()
+        self.db.migrate_remove_message_id_unique()
         self.backends = [self.pst_backend, self.imap_backend]
         self._ollama_client: Optional[OllamaClient] = None
         self._pst_indexing_status = {"completed": False, "total": 0, "indexed": 0}
@@ -125,7 +126,7 @@ class EmailService:
             logger.error(f"Error fetching email: {e}")
             return None
 
-    def list_emails(self, folder: str = "Inbox", limit: int = 50) -> List[EmailMetadata]:
+    def list_emails(self, folder: str = None, limit: int = 50) -> List[EmailMetadata]:
         """
         List recent emails in folder.
 
@@ -245,6 +246,20 @@ class EmailService:
                     self.db.sync_emails(imap_emails)
                     result.imap_new = len(imap_emails)
                     logger.info(f"IMAP sync: {len(imap_emails)} emails")
+
+                    # Clean up deleted emails: group by folder and remove emails no longer on server
+                    from collections import defaultdict
+                    emails_by_folder = defaultdict(list)
+                    for email in imap_emails:
+                        emails_by_folder[email.folder].append(email.id)
+
+                    total_cleaned = 0
+                    for folder, email_ids in emails_by_folder.items():
+                        cleaned = self.db.cleanup_deleted_emails(email_ids, folder)
+                        total_cleaned += cleaned
+
+                    if total_cleaned > 0:
+                        logger.info(f"Cleaned up {total_cleaned} deleted emails from IMAP")
                 else:
                     result.errors.append("IMAP authentication failed")
             except Exception as e:
@@ -350,11 +365,14 @@ class EmailService:
 
             scores = PriorityDetector.score_emails(emails, ollama_client)
 
-            # Persist scores to database
+            # Persist scores to both email record and sender priority
             for email_id, score in scores.items():
                 email = next((e for e in emails if e.id == email_id), None)
                 if email:
+                    # Update sender priority (for sender-level analysis)
                     self.db.update_sender_priority(email.from_addr, score)
+                    # Update email's priority score directly
+                    self.db.update_email_priority(email_id, score)
 
             logger.info(f"Scored {len(scores)} emails")
             return scores
@@ -376,15 +394,21 @@ class EmailService:
         Returns:
             List of EmailMetadata objects from the last N days.
         """
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
 
-        cutoff_date = datetime.now() - timedelta(days=days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
         all_emails = self.list_emails(limit=limit * 2)  # Fetch more to filter
 
-        recent = [
-            e for e in all_emails
-            if e.timestamp and e.timestamp > cutoff_date
-        ]
+        recent = []
+        for e in all_emails:
+            if not e.timestamp:
+                continue
+            # Handle both naive and aware datetimes
+            ts = e.timestamp
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            if ts > cutoff_date:
+                recent.append(e)
 
         return recent[:limit]
 

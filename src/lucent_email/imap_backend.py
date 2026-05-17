@@ -461,7 +461,7 @@ class IMAPBackend(EmailBackend):
                 except:
                     snippet = msg.get_payload()[:200]
 
-            email_id = f"imap_{uid}"
+            email_id = f"imap_{folder}_{uid}"
 
             return EmailMetadata(
                 id=email_id,
