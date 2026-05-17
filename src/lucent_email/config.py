@@ -104,8 +104,13 @@ def load_config(config_path: str = None) -> EmailConfig:
     with open(config_path, "r") as f:
         data = json.load(f)
 
-    # Extract email section
-    email_data = data.get("email", {})
+    # Handle both nested and flat config formats
+    # Flat format: {imap: {...}, database: {...}, ...}
+    # Nested format: {email: {imap: {...}, database: {...}, ...}}
+    if "email" in data:
+        email_data = data["email"]
+    else:
+        email_data = data
 
     # Build IMAP config
     imap_data = email_data.get("imap", {})
@@ -175,7 +180,7 @@ def get_api_key(config: EmailConfig) -> str:
 
 def get_imap_password(config: EmailConfig) -> str:
     """
-    Get IMAP password from keyring.
+    Get IMAP password from environment variable, keyring, or config.
 
     Args:
         config: EmailConfig instance.
@@ -186,15 +191,22 @@ def get_imap_password(config: EmailConfig) -> str:
     Raises:
         ValueError: If password not found.
     """
+    # Check environment variable first (LUCENT_EMAIL_PASSWORD)
+    password = os.environ.get("LUCENT_EMAIL_PASSWORD")
+    if password:
+        return password
+
+    # Fall back to keyring
     try:
         import keyring
-    except ImportError:
-        raise ImportError("keyring library required. Install: pip install python-keyring")
+        password = keyring.get_password("lucent-email", "imap")
+        if password:
+            return password
+    except Exception as e:
+        logger.debug(f"Keyring access failed: {e}")
 
-    password = keyring.get_password("lucent-email", "imap")
-    if not password:
-        raise ValueError(
-            "IMAP password not found in keyring. "
-            "Set with: keyring set_password('lucent-email', 'imap', 'your-password')"
-        )
-    return password
+    # If neither worked, raise error
+    raise ValueError(
+        "IMAP password not found. Set LUCENT_EMAIL_PASSWORD environment variable "
+        "or configure keyring: keyring set_password('lucent-email', 'imap', 'your-password')"
+    )
