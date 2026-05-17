@@ -21,6 +21,7 @@ from .composer import DraftComposer
 from .config import EmailConfig, get_api_key
 from .db import EmailDatabase
 from .imap_backend import IMAPBackend
+from .learner import PriorityLearner
 from .models import Draft, EmailMetadata, FullEmail, SyncResult
 from .priority import PriorityDetector
 from .pst_backend import PSTBackend
@@ -249,15 +250,36 @@ class EmailService:
         """
         Compute priority score for sender.
 
-        Phase 2: Uses Claude Haiku for analysis.
+        Phase 5: Blends Claude Haiku content scores with behavioral history.
+        Cold start (no interactions): pure Haiku score.
+        With history: blends 60% Haiku + 40% behavioral after 10+ interactions.
 
         Args:
             from_addr: Sender email address.
 
         Returns:
-            Priority score (0-10 scale).
+            Blended priority score (0-10 scale).
         """
-        return self.db.get_sender_priority(from_addr)
+        # Get sender's interaction history
+        history = self.db.get_sender_history(from_addr)
+
+        # Last Haiku content-based score (stored in priority_score column)
+        haiku_score = history["priority_score"]
+
+        # Behavioral score from response time and interaction frequency
+        behavioral_score = PriorityLearner.score_from_history(
+            history["interaction_count"],
+            history["response_time_avg"],
+        )
+
+        # Blend scores based on interaction maturity
+        blended = PriorityLearner.blend(
+            haiku_score,
+            behavioral_score,
+            history["interaction_count"],
+        )
+
+        return blended
 
     def score_new_emails(self, emails: List[EmailMetadata]) -> dict:
         """
@@ -585,12 +607,60 @@ class EmailService:
             # Confirm via voice box
             self._confirm_send(draft)
 
+            # Phase 5: Record interaction for adaptive learning
+            self._record_reply(draft_id)
+
             logger.info(f"Sent draft {draft_id}")
             return True
 
         except Exception as e:
             logger.error(f"Error sending draft: {e}")
             return False
+
+    def _record_reply(self, draft_id: str) -> None:
+        """
+        Record interaction for reply (Phase 5 learning).
+
+        If draft is a reply to another email, updates sender interaction history:
+        - Increments interaction count
+        - Updates running average response time
+        - Recomputes and persists blended priority score
+
+        Args:
+            draft_id: ID of draft that was just sent.
+        """
+        try:
+            # Load the sent draft
+            draft = self.get_draft(draft_id)
+            if not draft or not draft.responding_to_id:
+                return
+
+            # Load the original email we're replying to
+            original = self.db.get_email_by_id(draft.responding_to_id)
+            if not original or not original.from_addr:
+                return
+
+            # Compute response time
+            if draft.sent_at and original.timestamp:
+                response_time_seconds = (
+                    draft.sent_at - original.timestamp
+                ).total_seconds()
+
+                # Record interaction for original email's sender
+                self.db.update_sender_interaction(
+                    original.from_addr,
+                    response_time_seconds,
+                )
+
+                # Recompute and persist blended priority score
+                self.compute_sender_priority(original.from_addr)
+
+                logger.info(
+                    f"Recorded reply to {original.from_addr}: {response_time_seconds:.0f}s response time"
+                )
+
+        except Exception as e:
+            logger.error(f"Error recording reply: {e}")
 
     def _track_sent_email(self, draft: Draft) -> None:
         """

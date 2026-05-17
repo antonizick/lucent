@@ -233,6 +233,73 @@ class EmailDatabase:
         row = cursor.fetchone()
         return row[0] if row else 0.0
 
+    def update_sender_interaction(self, from_addr: str, response_time_seconds: float) -> None:
+        """Update sender interaction history with response time.
+
+        Increments interaction count and updates running average response time.
+        Formula: new_avg = (old_avg * old_count + response_time) / (old_count + 1)
+        """
+        cursor = self.connection.cursor()
+
+        # Get current history (including priority_score to preserve it)
+        cursor.execute("""
+            SELECT interaction_count, response_time_avg, priority_score FROM sender_priority WHERE from_addr = ?
+        """, (from_addr,))
+
+        row = cursor.fetchone()
+        if row:
+            old_count = row[0]
+            old_avg = row[1]
+            priority_score = row[2]
+        else:
+            old_count = 0
+            old_avg = 0.0
+            priority_score = 0.0
+
+        # Calculate new running average
+        new_count = old_count + 1
+        new_avg = (old_avg * old_count + response_time_seconds) / new_count
+
+        # Update sender_priority with new interaction data (preserve priority_score)
+        cursor.execute("""
+            INSERT OR REPLACE INTO sender_priority (
+                from_addr, interaction_count, response_time_avg, priority_score, last_updated
+            ) VALUES (?, ?, ?, ?, ?)
+        """, (from_addr, new_count, new_avg, priority_score, datetime.now().isoformat()))
+
+        self.connection.commit()
+        logger.info(f"Updated sender {from_addr}: {new_count} interactions, avg response time {new_avg:.1f}s")
+
+    def get_sender_history(self, from_addr: str) -> dict:
+        """Get full sender interaction history.
+
+        Returns:
+            Dict with from_addr, interaction_count, response_time_avg, priority_score.
+            Returns zero-default dict if sender not found.
+        """
+        cursor = self.connection.cursor()
+
+        cursor.execute("""
+            SELECT from_addr, interaction_count, response_time_avg, priority_score
+            FROM sender_priority WHERE from_addr = ?
+        """, (from_addr,))
+
+        row = cursor.fetchone()
+        if row:
+            return {
+                "from_addr": row[0],
+                "interaction_count": row[1],
+                "response_time_avg": row[2],
+                "priority_score": row[3],
+            }
+        else:
+            return {
+                "from_addr": from_addr,
+                "interaction_count": 0,
+                "response_time_avg": 0.0,
+                "priority_score": 0.0,
+            }
+
     def create_draft(self, draft: Draft) -> str:
         """Create new draft, return draft ID."""
         cursor = self.connection.cursor()
