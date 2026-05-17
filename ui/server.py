@@ -523,7 +523,7 @@ async def get_memory_log():
 
 @app.get("/log/email")
 async def get_email_log():
-    """Get priority emails from the email system."""
+    """Get priority emails from the email system. Shows priority emails first, then fallback to recent emails."""
     try:
         import sys
         # Add parent directory to path so we can import src
@@ -539,28 +539,87 @@ async def get_email_log():
         service = EmailService(config)
 
         # Get emails with priority score >= 7.0
-        priority_emails = service.db.search("", limit=100)
-        priority_emails = [e for e in priority_emails if e.priority_score >= 7.0]
+        all_emails = service.db.search("", limit=100)
+        priority_emails = [e for e in all_emails if e.priority_score >= 7.0]
 
-        # Format for display
-        if not priority_emails:
-            content = "No priority emails requiring attention."
-        else:
-            lines = ["PRIORITY EMAILS — HIGH-ATTENTION ITEMS\n"]
+        lines = []
+
+        # Helper function to format priority indicator with color
+        def get_priority_indicator(score):
+            """Return colored priority indicator based on score."""
+            if score is None or score == 0:
+                return "○"  # Empty circle = no priority (no color)
+            elif score >= 7.0:
+                return "\033[31m★\033[0m"  # Red star = high priority
+            elif score >= 5.0:
+                return "\033[38;5;208m◆\033[0m"  # Orange diamond = medium priority
+            else:
+                return "\033[33m◇\033[0m"  # Yellow diamond = low priority
+
+        # Display priority emails if any exist
+        if priority_emails:
+            lines.append("PRIORITY EMAILS — HIGH-ATTENTION ITEMS\n")
             lines.append(f"Found {len(priority_emails)} high-priority email(s)\n")
             lines.append("=" * 70 + "\n")
 
             for email in priority_emails[:20]:  # Show top 20
                 timestamp = email.timestamp.strftime("%Y-%m-%d %H:%M") if email.timestamp else "Unknown"
                 score = f"{email.priority_score:.1f}" if email.priority_score else "—"
-                lines.append(f"\n[{timestamp}] Score: {score}/10")
+                indicator = get_priority_indicator(email.priority_score)
+                lines.append(f"\n{indicator} [{timestamp}] Score: {score}/10")
                 lines.append(f"From: {email.from_addr or '(unknown)'}")
                 lines.append(f"Subject: {email.subject or '(no subject)'}")
                 lines.append(f"Preview: {email.snippet[:100] if email.snippet else '(no preview)'}")
                 lines.append("-" * 70)
+        else:
+            # No priority emails: show last 50 received emails (exclude sent folder) with priority scores
+            import sqlite3
+            try:
+                conn = sqlite3.connect(config.database.path)
+                cursor = conn.cursor()
 
-            content = "\n".join(lines)
+                # Get emails excluding Sent folder, ordered by timestamp descending
+                cursor.execute(
+                    """SELECT id, from_addr, subject, timestamp, sender_priority_score
+                       FROM emails
+                       WHERE folder != 'INBOX.Sent'
+                       ORDER BY timestamp DESC
+                       LIMIT 50"""
+                )
+                rows = cursor.fetchall()
+                conn.close()
 
+                if not rows:
+                    lines.append("No emails to display.")
+                else:
+                    lines.append("RECENT EMAILS\n")
+                    lines.append(f"Last {len(rows)} received email(s)\n")
+                    lines.append("=" * 70 + "\n")
+
+                    for email_id, from_addr, subject, timestamp_str, sender_priority_score in rows:
+                        # Parse timestamp
+                        if timestamp_str:
+                            try:
+                                from datetime import datetime
+                                ts = datetime.fromisoformat(timestamp_str)
+                                timestamp = ts.strftime("%Y-%m-%d %H:%M")
+                            except:
+                                timestamp = "Unknown"
+                        else:
+                            timestamp = "Unknown"
+
+                        # Format score display
+                        score_display = f"{sender_priority_score:.1f}" if sender_priority_score and sender_priority_score > 0 else "—"
+                        indicator = get_priority_indicator(sender_priority_score)
+
+                        lines.append(f"\n{indicator} [{timestamp}] Score: {score_display}/10")
+                        lines.append(f"From: {from_addr or '(unknown)'}")
+                        lines.append(f"Subject: {subject or '(no subject)'}")
+                        lines.append("-" * 70)
+            except Exception as db_error:
+                lines.append(f"Error loading emails: {str(db_error)}")
+
+        content = "\n".join(lines)
         return {"content": content}
     except Exception as e:
         logger.error(f"Error loading emails: {e}")
