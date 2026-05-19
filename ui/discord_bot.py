@@ -287,7 +287,7 @@ async def broadcast_log(text: str, level: str = "info"):
 
 def run_flask():
     """Run Flask webhook server in background thread."""
-    flask_app.run(host="127.0.0.1", port=8003, debug=False, use_reloader=False)
+    flask_app.run(host="0.0.0.0", port=8003, debug=False, use_reloader=False)
 
 def run_bot():
     """Start the Discord bot."""
@@ -298,7 +298,7 @@ def run_bot():
     # Start Flask webhook in background thread
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
-    print("[INFO] Flask webhook started on http://127.0.0.1:8003")
+    print("[INFO] Flask webhook started on http://0.0.0.0:8003")
 
     try:
         bot.run(DISCORD_BOT_TOKEN)

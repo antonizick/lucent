@@ -440,7 +440,7 @@ body {
     box-shadow: var(--neon-glow-cyan);
     border-radius: 8px;
     overflow: hidden;
-    min-height: 300px;
+    min-height: 1200px;
 }
 
 .log-header {
@@ -574,7 +574,7 @@ body {
     padding: 20px;
     margin: 0;
     flex: 1;
-    align-items: start;
+    align-items: stretch;
     min-height: 0;
 }
 
@@ -584,6 +584,7 @@ body {
     gap: 20px;
     flex: 1;
     min-height: 0;
+    overflow: auto;
 }
 
 .right-column {
@@ -997,7 +998,7 @@ body {
     padding: 12px;
     background: var(--bg-secondary);
     border-radius: 4px;
-    flex: 1;
+    flex: 0 1 auto;
     overflow: hidden;
 }
 
@@ -1059,9 +1060,10 @@ body {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    flex: 1;
+    flex: 0 1 auto;
     min-height: 0;
     overflow: hidden;
+    max-height: 450px;
 }
 
 .email-monitor-header {
@@ -1083,6 +1085,7 @@ body {
 #emailMonitorContent {
     flex: 1;
     min-height: 0;
+    max-height: 400px;
     overflow-y: auto;
     overflow-x: hidden;
 }
@@ -1092,6 +1095,27 @@ body {
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
+}
+
+.email-section-divider {
+    height: 8px;
+    background: linear-gradient(to bottom, transparent, var(--neon-cyan), transparent);
+    cursor: row-resize;
+    user-select: none;
+    flex-shrink: 0;
+    transition: background 0.2s ease;
+    border-top: 1px solid rgba(0, 229, 255, 0.2);
+    border-bottom: 1px solid rgba(0, 229, 255, 0.2);
+}
+
+.email-section-divider:hover {
+    background: linear-gradient(to bottom, transparent, var(--neon-cyan), transparent);
+    box-shadow: 0 0 8px rgba(0, 229, 255, 0.4);
+}
+
+.email-section-divider.dragging {
+    background: var(--neon-cyan);
+    box-shadow: 0 0 15px rgba(0, 229, 255, 0.6);
 }
 
 .status-text {

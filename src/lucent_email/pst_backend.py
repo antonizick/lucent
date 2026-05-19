@@ -24,14 +24,16 @@ class PSTBackend(EmailBackend):
     Uses python-pst library for cross-platform PST reading.
     """
 
-    def __init__(self, pst_file_path: str):
+    def __init__(self, pst_file_path: str, sync_folders: List[str] = None):
         """
         Initialize PST backend.
 
         Args:
             pst_file_path: Absolute path to PST file.
+            sync_folders: List of folder names to sync. If None, syncs all folders.
         """
         self.pst_file_path = Path(pst_file_path)
+        self.sync_folders = sync_folders
         self.pst = None
         self.email_cache: Dict[str, tuple] = {}  # Cache for full emails
         self._last_sync_time = None
@@ -284,10 +286,10 @@ class PSTBackend(EmailBackend):
 
     def sync_metadata(self) -> List[EmailMetadata]:
         """
-        Sync metadata from all PST folders.
+        Sync metadata from PST folders.
 
         Returns:
-            List of all EmailMetadata objects in PST.
+            List of all EmailMetadata objects in PST (filtered by sync_folders if configured).
         """
         if not self.pst:
             logger.warning("PST not connected.")
@@ -298,8 +300,12 @@ class PSTBackend(EmailBackend):
             root = self.pst.root_folder
 
             def traverse_and_extract(folder):
-                """Recursively extract emails from all folders."""
+                """Recursively extract emails from folders, respecting sync_folders filter."""
                 try:
+                    # Check if this folder should be synced
+                    if self.sync_folders and folder.display_name not in self.sync_folders:
+                        return  # Skip this folder and its subfolders
+
                     for email in folder.messages:
                         try:
                             metadata = self._message_to_metadata(email, folder.display_name)
@@ -316,7 +322,11 @@ class PSTBackend(EmailBackend):
 
             traverse_and_extract(root)
             self._last_sync_time = datetime.now()
-            logger.info(f"Synced {len(all_emails)} emails from PST")
+
+            if self.sync_folders:
+                logger.info(f"Synced {len(all_emails)} emails from PST folders: {self.sync_folders}")
+            else:
+                logger.info(f"Synced {len(all_emails)} emails from all PST folders")
             return all_emails
 
         except Exception as e:

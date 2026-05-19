@@ -658,11 +658,15 @@ async def root(request: Request):
 @app.get("/static/{path:path}")
 async def serve_static(path: str, request: Request):
     """Proxy static files."""
+    # Try to get token from cookies (standard auth flow)
     token = request.cookies.get("auth_token")
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
 
-    response = await proxy_request("GET", f"/static/{path}", token)
+    # If no token, proxy directly (auth already validated at page level or by Tailscale)
+    if not token:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(f"{get_voice_box_url()}/static/{path}")
+    else:
+        response = await proxy_request("GET", f"/static/{path}", token)
 
     if path.endswith(".css"):
         return StreamingResponse(iter([response.content]), media_type="text/css")

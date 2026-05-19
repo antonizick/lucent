@@ -767,7 +767,6 @@ function setupLogListener() {
                         content += `[${timestamp}] Score: ${score}\n`;
                         content += `From: ${email.from_addr || '(unknown)'}\n`;
                         content += `Subject: ${email.subject || '(no subject)'}\n`;
-                        content += `Preview: ${email.snippet ? email.snippet.substring(0, 200) : '(no preview)'}\n`;
                         content += '-' + '-'.repeat(69) + '\n\n';
                     });
 
@@ -788,6 +787,41 @@ function setupLogListener() {
             }
         });
     }
+}
+
+// Email sync button
+const emailSyncBtn = document.getElementById('emailSyncBtn');
+const emailSyncStatus = document.getElementById('emailSyncStatus');
+
+if (emailSyncBtn) {
+    emailSyncBtn.addEventListener('click', async () => {
+        emailSyncBtn.disabled = true;
+        emailSyncBtn.textContent = 'Syncing...';
+        emailSyncStatus.style.display = 'none';
+
+        try {
+            const resp = await fetch('/email/sync', { method: 'POST' });
+            const data = await resp.json();
+
+            if (data.status === 'ok') {
+                const msg = `+${data.total_new} new (${data.duration_seconds}s)`;
+                emailSyncStatus.textContent = msg;
+                emailSyncStatus.style.display = 'inline';
+                setTimeout(() => { emailSyncStatus.style.display = 'none'; }, 5000);
+            } else {
+                emailSyncStatus.textContent = 'Sync failed';
+                emailSyncStatus.style.display = 'inline';
+                setTimeout(() => { emailSyncStatus.style.display = 'none'; }, 5000);
+            }
+        } catch (err) {
+            emailSyncStatus.textContent = 'Error';
+            emailSyncStatus.style.display = 'inline';
+            setTimeout(() => { emailSyncStatus.style.display = 'none'; }, 5000);
+        } finally {
+            emailSyncBtn.disabled = false;
+            emailSyncBtn.textContent = 'Sync';
+        }
+    });
 }
 
 // Load and display high-priority emails (email monitor)
@@ -1495,4 +1529,67 @@ if (avatarSelect) {
     avatarSelect.addEventListener('change', function() {
         setTimeout(updateLogPanelHeight, 300);
     });
+}
+
+// Initialize draggable email section divider
+const emailDivider = document.getElementById('emailDivider');
+const emailMonitorSection = document.querySelector('.email-monitor-section');
+const emailSearchPanel = document.getElementById('emailSearchPanel');
+
+let isDragging = false;
+let startY = 0;
+let startMonitorHeight = 0;
+
+// Load saved heights from localStorage
+function loadEmailSectionHeights() {
+    const saved = localStorage.getItem('emailSectionHeights');
+    if (saved) {
+        const { monitorHeight } = JSON.parse(saved);
+        if (emailMonitorSection && monitorHeight) {
+            emailMonitorSection.style.maxHeight = monitorHeight + 'px';
+        }
+    }
+}
+
+// Save heights to localStorage
+function saveEmailSectionHeights() {
+    const monitorHeight = emailMonitorSection?.offsetHeight || 450;
+    localStorage.setItem('emailSectionHeights', JSON.stringify({
+        monitorHeight: monitorHeight
+    }));
+}
+
+if (emailDivider) {
+    emailDivider.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        startY = e.clientY;
+        startMonitorHeight = emailMonitorSection.offsetHeight;
+        emailDivider.classList.add('dragging');
+        document.body.style.cursor = 'row-resize';
+        document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+
+        const deltaY = e.clientY - startY;
+        const newHeight = Math.max(150, startMonitorHeight + deltaY);
+
+        emailMonitorSection.style.maxHeight = newHeight + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            emailDivider.classList.remove('dragging');
+            document.body.style.cursor = 'auto';
+            document.body.style.userSelect = 'auto';
+            saveEmailSectionHeights();
+        }
+    });
+}
+
+// Load saved heights on init
+if (emailMonitorSection) {
+    loadEmailSectionHeights();
 }

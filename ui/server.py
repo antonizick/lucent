@@ -538,9 +538,23 @@ async def get_email_log():
         config = load_config()
         service = EmailService(config)
 
-        # Get emails with priority score >= 7.0
+        # Get baseline cutoff (emails older than this are hidden)
+        from datetime import datetime
+        baseline_cutoff = None
+        if config.baseline_cutoff:
+            baseline_cutoff = datetime.fromisoformat(config.baseline_cutoff)
+
+        # Get all emails and filter by baseline cutoff
         all_emails = service.db.search("", limit=100)
-        priority_emails = [e for e in all_emails if e.priority_score >= 7.0]
+
+        # Filter: only show emails AFTER the baseline cutoff (newer emails)
+        if baseline_cutoff:
+            filtered_emails = [e for e in all_emails if e.timestamp and e.timestamp > baseline_cutoff]
+        else:
+            filtered_emails = all_emails
+
+        # Get priority emails from filtered list
+        priority_emails = [e for e in filtered_emails if e.priority_score >= 7.0]
 
         lines = []
 
@@ -569,7 +583,6 @@ async def get_email_log():
                 lines.append(f"\n{indicator} [{timestamp}] Score: {score}/10")
                 lines.append(f"From: {email.from_addr or '(unknown)'}")
                 lines.append(f"Subject: {email.subject or '(no subject)'}")
-                lines.append(f"Preview: {email.snippet[:100] if email.snippet else '(no preview)'}")
                 lines.append("-" * 70)
         else:
             # No priority emails: show last 50 received emails (exclude sent folder) with priority scores
@@ -578,14 +591,26 @@ async def get_email_log():
                 conn = sqlite3.connect(config.database.path)
                 cursor = conn.cursor()
 
-                # Get emails excluding Sent folder, ordered by timestamp descending
-                cursor.execute(
-                    """SELECT id, from_addr, subject, timestamp, sender_priority_score
-                       FROM emails
-                       WHERE folder != 'INBOX.Sent'
-                       ORDER BY timestamp DESC
-                       LIMIT 50"""
-                )
+                # Get emails after baseline cutoff, excluding Sent folder, ordered by timestamp descending
+                if baseline_cutoff:
+                    cutoff_str = baseline_cutoff.isoformat()
+                    cursor.execute(
+                        """SELECT id, from_addr, subject, timestamp, sender_priority_score
+                           FROM emails
+                           WHERE folder != 'INBOX.Sent'
+                           AND timestamp > ?
+                           ORDER BY timestamp DESC
+                           LIMIT 50""",
+                        (cutoff_str,)
+                    )
+                else:
+                    cursor.execute(
+                        """SELECT id, from_addr, subject, timestamp, sender_priority_score
+                           FROM emails
+                           WHERE folder != 'INBOX.Sent'
+                           ORDER BY timestamp DESC
+                           LIMIT 50"""
+                    )
                 rows = cursor.fetchall()
                 conn.close()
 
@@ -673,6 +698,53 @@ async def search_emails(q: str = ""):
             "error": f"Search error: {str(e)}",
             "query": q
         }
+
+@app.post("/email/sync")
+async def trigger_email_sync():
+    """Manually trigger an out-of-cycle email sync across all backends."""
+    try:
+        import sys
+        parent_dir = str(Path(__file__).parent.parent)
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+
+        from src.lucent_email.config import load_config
+        from src.lucent_email.email_service import EmailService
+        import asyncio
+        import json
+        from datetime import datetime
+
+        config = load_config()
+        service = EmailService(config)
+
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, service.sync_all)
+
+        # Set baseline cutoff on first sync
+        if config.baseline_cutoff is None:
+            baseline_cutoff = datetime.now().isoformat()
+            # Update config file
+            config_path = Path.home() / "dev" / "lucent" / "memory" / "email" / "email.config.json"
+            with open(config_path, 'r') as f:
+                config_data = json.load(f)
+            config_data['baseline_cutoff'] = baseline_cutoff
+            with open(config_path, 'w') as f:
+                json.dump(config_data, f, indent=2)
+            logger.info(f"Baseline cutoff set to {baseline_cutoff}")
+
+        return {
+            "status": "ok",
+            "pst_new": result.pst_new,
+            "imap_new": result.imap_new,
+            "total_new": result.total_new(),
+            "errors": result.errors,
+            "duration_seconds": round(result.duration_seconds, 1),
+            "baseline_cutoff_set": config.baseline_cutoff is None
+        }
+
+    except Exception as e:
+        logger.error(f"Error syncing email: {e}")
+        return {"status": "error", "error": str(e)}
 
 @app.post("/pst/index")
 async def index_pst():

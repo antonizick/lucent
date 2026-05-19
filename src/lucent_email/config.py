@@ -51,6 +51,8 @@ class EmailConfig:
     imap: IMAPConfig
     database: DatabaseConfig = None
     sync_interval_minutes: int = 30
+    sync_folders: list = None  # Folders to sync (e.g., ["INBOX", "Inbox"]. None = all folders
+    baseline_cutoff: str = None  # ISO timestamp for filtering old emails from display
     logging: LoggingConfig = None
     claude: ClaudeConfig = None
 
@@ -150,6 +152,7 @@ def load_config(config_path: str = None) -> EmailConfig:
         imap=imap_config,
         database=db_config,
         sync_interval_minutes=email_data.get("sync_interval_minutes", 30),
+        baseline_cutoff=email_data.get("baseline_cutoff"),
         logging=log_config,
         claude=claude_config,
     )

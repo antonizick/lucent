@@ -66,12 +66,15 @@
                     <div class="email-monitor-header">
                         <div class="email-monitor-label">PRIORITY EMAILS</div>
                         <div class="font-controls">
+                            <button id="emailSyncBtn" class="font-btn" title="Trigger email sync" style="font-weight: bold;">↻ Sync</button>
+                            <span id="emailSyncStatus" class="refresh-timer" style="display:none;"></span>
                             <button id="emailMonitorFontDown" class="font-btn" title="Decrease font size">−</button>
                             <button id="emailMonitorFontUp" class="font-btn" title="Increase font size">+</button>
                         </div>
                     </div>
                     <pre id="emailMonitorContent" class="log-content"></pre>
                 </div>
+                <div id="emailDivider" class="email-section-divider" title="Drag to resize"></div>
                 <div id="pstIndexStatus" class="pst-index-status hidden">
                     <div class="status-text" id="pstStatusText">Indexing PST file...</div>
                     <div class="progress-bar">

@@ -53,8 +53,8 @@ class EmailService:
             config: EmailConfig with all settings.
         """
         self.config = config
-        self.pst_backend = PSTBackend(config.pst_file_path)
-        self.imap_backend = IMAPBackend(config.imap)
+        self.pst_backend = PSTBackend(config.pst_file_path, sync_folders=config.sync_folders)
+        self.imap_backend = IMAPBackend(config.imap, sync_folders=config.sync_folders)
         self.db = EmailDatabase(config.database.path)
         self.db.initialize_schema()
         self.db.migrate_remove_message_id_unique()

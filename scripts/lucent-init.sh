@@ -76,9 +76,11 @@ if [[ -n "$MARKER_FILE" ]]; then
   echo ""
 
   # Execute acknowledgment at hook level (truly automatic — no Claude compliance needed)
-  TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S")
   curl -s -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d "{\"text\":\"Startup complete. All systems ready. Standing by.\"}" 2>/dev/null || true
-  echo "[$TIMESTAMP] Startup readiness acknowledged (auto via UserPromptSubmit hook)" >> "$NOTE"
+
+  # Log to activity log (not daily note)
+  python3 "$LUCENT_DIR/scripts/log_startup_readiness.py" 2>/dev/null || true
+
   rm -f "$MARKER_FILE"
 else
   # No marker found: normal flow (startup ran earlier or this is a continuation message)

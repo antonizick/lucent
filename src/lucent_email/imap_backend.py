@@ -28,14 +28,16 @@ class IMAPBackend(EmailBackend):
     Bidirectional sync with server.
     """
 
-    def __init__(self, config: IMAPConfig):
+    def __init__(self, config: IMAPConfig, sync_folders: List[str] = None):
         """
         Initialize IMAP backend.
 
         Args:
             config: IMAPConfig with email, host, port settings.
+            sync_folders: List of folder names to sync. If None, syncs all folders.
         """
         self.config = config
+        self.sync_folders = sync_folders
         self.imap = None
         self.smtp = None
         self.last_sync_uids: Dict[str, set] = {}
@@ -397,6 +399,13 @@ class IMAPBackend(EmailBackend):
         try:
             all_emails = []
             folders = self.list_folders()
+
+            # Filter folders if sync_folders is configured
+            if self.sync_folders:
+                folders = [f for f in folders if f in self.sync_folders]
+                logger.info(f"Syncing IMAP folders: {folders}")
+            else:
+                logger.info(f"Syncing all IMAP folders: {folders}")
 
             for folder in folders:
                 try:

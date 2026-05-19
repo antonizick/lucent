@@ -21,6 +21,19 @@ from pathlib import Path
 from datetime import datetime, date
 import sys
 
+def log_to_activity(message: str) -> None:
+    """Append timestamped message to activity log."""
+    lucent_root = Path(__file__).parent.parent
+    today = date.today().strftime("%Y-%m-%d")
+    log_path = lucent_root / "memory" / "logs" / f"activity_{today}.log"
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "a") as f:
+            f.write(f"[{timestamp}] [session] {message}\n")
+    except Exception:
+        pass  # Fail silently
+
 def initialize_session_log(lucent_root, topic=""):
     """
     Initialize a session log entry in today's daily note.
@@ -44,15 +57,14 @@ def initialize_session_log(lucent_root, topic=""):
     session_start = datetime.now()
     timestamp = session_start.strftime("%H:%M:%S")
 
-    # Append session start marker
-    marker = f"\n## [{timestamp}] Session start"
-    if topic:
-        marker += f" — {topic}"
-    marker += "\n"
+    # Log to activity log instead of daily note
+    topic_str = f" — {topic}" if topic else ""
+    log_to_activity(f"Session started: [{timestamp}]{topic_str}")
 
-    # Append to file (create if doesn't exist)
-    with open(note_path, "a") as f:
-        f.write(marker)
+    # Ensure note file exists (create if doesn't exist)
+    if not note_path.exists():
+        with open(note_path, "a") as f:
+            f.write("")  # Create empty file so it exists
 
     # Check for due reminders (idempotent)
     try:
