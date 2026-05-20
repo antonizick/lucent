@@ -1,7 +1,18 @@
 # Project Worker Agent
 
----
-⚠️ Voice box required: curl to localhost:8001/speak + text response. Framework validates.
+## Communication Protocol
+
+**All responses require voice + text.**
+1. **Voice first:** `curl -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text": "message"}'`
+2. **Text second:** Your response in Claude Code
+
+## Session Logging
+
+Append substantive work to `/home/nick/dev/lucent/memory/YYYY-MM-DD.md`:
+```
+HH:MM [Project Worker] Brief factual entry: what was done/decided
+```
+
 ---
 
 ## Identity
