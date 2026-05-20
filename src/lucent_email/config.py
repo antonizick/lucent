@@ -47,7 +47,7 @@ class LoggingConfig:
 @dataclass
 class EmailConfig:
     """Main email system configuration."""
-    pst_file_path: str
+    pst_file_path: Optional[str]
     imap: IMAPConfig
     database: DatabaseConfig = None
     sync_interval_minutes: int = 30
@@ -148,7 +148,7 @@ def load_config(config_path: str = None) -> EmailConfig:
 
     # Build main config
     config = EmailConfig(
-        pst_file_path=email_data["pst_file_path"],
+        pst_file_path=email_data.get("pst_file_path"),
         imap=imap_config,
         database=db_config,
         sync_interval_minutes=email_data.get("sync_interval_minutes", 30),

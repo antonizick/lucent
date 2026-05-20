@@ -53,12 +53,16 @@ class EmailService:
             config: EmailConfig with all settings.
         """
         self.config = config
-        self.pst_backend = PSTBackend(config.pst_file_path, sync_folders=config.sync_folders)
+        self.pst_backend = (
+            PSTBackend(config.pst_file_path, sync_folders=config.sync_folders)
+            if config.pst_file_path
+            else None
+        )
         self.imap_backend = IMAPBackend(config.imap, sync_folders=config.sync_folders)
         self.db = EmailDatabase(config.database.path)
         self.db.initialize_schema()
         self.db.migrate_remove_message_id_unique()
-        self.backends = [self.pst_backend, self.imap_backend]
+        self.backends = [b for b in [self.pst_backend, self.imap_backend] if b is not None]
         self._ollama_client: Optional[OllamaClient] = None
         self._pst_indexing_status = {"completed": False, "total": 0, "indexed": 0}
 
@@ -109,6 +113,9 @@ class EmailService:
         try:
             # Determine backend from ID prefix
             if email_id.startswith("pst_"):
+                if not self.pst_backend:
+                    logger.warning("PST backend not configured")
+                    return None
                 if not self.pst_backend.authenticate():
                     logger.warning("PST not authenticated")
                     return None
@@ -173,6 +180,10 @@ class EmailService:
         Updates self._pst_indexing_status.
         """
         try:
+            if not self.pst_backend:
+                logger.info("PST backend not configured, skipping indexing")
+                self._pst_indexing_status["completed"] = True
+                return
             if not self.pst_backend.authenticate():
                 logger.warning("PST authentication failed, skipping indexing")
                 self._pst_indexing_status["completed"] = True
@@ -226,18 +237,19 @@ class EmailService:
             start_time = time.time()
             result = SyncResult()
 
-            # Sync PST backend
-            try:
-                if self.pst_backend.authenticate():
-                    pst_emails = self.pst_backend.sync_metadata()
-                    self.db.sync_emails(pst_emails)
-                    result.pst_new = len(pst_emails)
-                    logger.info(f"PST sync: {len(pst_emails)} emails")
-                else:
-                    result.errors.append("PST authentication failed")
-            except Exception as e:
-                result.errors.append(f"PST sync error: {e}")
-                logger.error(f"PST sync error: {e}")
+            # Sync PST backend (skipped if not configured)
+            if self.pst_backend:
+                try:
+                    if self.pst_backend.authenticate():
+                        pst_emails = self.pst_backend.sync_metadata()
+                        self.db.sync_emails(pst_emails)
+                        result.pst_new = len(pst_emails)
+                        logger.info(f"PST sync: {len(pst_emails)} emails")
+                    else:
+                        result.errors.append("PST authentication failed")
+                except Exception as e:
+                    result.errors.append(f"PST sync error: {e}")
+                    logger.error(f"PST sync error: {e}")
 
             # Sync IMAP backend
             try:
