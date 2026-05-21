@@ -1186,35 +1186,19 @@ body.facetime-mode #characterFrame {
 }
 
 body.facetime-mode .voice-panel {
-    flex: 1;
-    padding: 20px 40px;
-    gap: 15px;
-    overflow: hidden;
+    display: none;
 }
 
 body.facetime-mode .scanner-container {
-    width: 200px;
-    height: 40px;
-}
-
-body.facetime-mode .scanner-dot {
-    width: 10px;
-    height: 10px;
+    display: none;
 }
 
 body.facetime-mode .speaking-animation {
-    height: 60px;
-    width: 85%;
-}
-
-body.facetime-mode .speaking-bar {
-    width: 4px;
+    display: none;
 }
 
 body.facetime-mode .current-text {
-    font-size: 14px;
-    max-width: 90%;
-    padding-bottom: 12px;
+    display: none;
 }
 
 /* Responsive */
