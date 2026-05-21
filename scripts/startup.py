@@ -230,29 +230,17 @@ def check_context_files() -> CheckResult:
     return CheckResult(False, f"Missing context files: {', '.join(missing)}")
 
 
-def init_session_logger(timeout: float = 5.0) -> CheckResult:
-    """Initialize session logger with /tmp fallback."""
+def init_session_logger() -> CheckResult:
+    """Initialize session logger by direct import (no subprocess, no /tmp fallback)."""
     try:
-        result = subprocess.run(
-            [sys.executable, str(LUCENT_ROOT / "scripts" / "session_logger.py"), "init"],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        if result.returncode == 0:
-            return CheckResult(True, "Session logger initialized")
-        raise RuntimeError(result.stderr.strip() or f"session_logger.py exited {result.returncode}")
-    except (subprocess.TimeoutExpired, Exception) as e:
-        fallback_log = Path(f"/tmp/lucent_session_{date.today().strftime('%Y%m%d')}.log")
-        try:
-            with open(fallback_log, "a") as f:
-                ts = datetime.now().strftime("%H:%M:%S")
-                f.write(f"[{ts}] Session started (fallback log — primary logger failed)\n")
-            msg = f"Logger failed, using /tmp fallback: {fallback_log}"
-            log_to_activity(f"WARNING: {msg}")
-            return CheckResult(False, msg, fallback_used=True)
-        except Exception as e2:
-            return CheckResult(False, f"Logger and /tmp fallback both failed: {e2}")
+        sys.path.insert(0, str(LUCENT_ROOT / "scripts"))
+        from session_logger import initialize_session_log, check_session_log_checkpoint
+        initialize_session_log(str(LUCENT_ROOT), topic="Claude Code session")
+        check_session_log_checkpoint(str(LUCENT_ROOT))
+        return CheckResult(True, "Session logger initialized")
+    except Exception as e:
+        log_to_activity(f"WARNING: Session logger failed: {e}")
+        return CheckResult(False, f"Session logger failed: {e}")
 
 
 def trigger_compression(timeout: float = 10.0) -> CheckResult:
@@ -397,8 +385,6 @@ def run(json_mode: bool = False) -> dict:
 
     if vb_result.fallback_used:
         fallbacks_used.append("voice_box_restart")
-    if logger_result.fallback_used:
-        fallbacks_used.append("session_logger_tmp")
     if compression_result.fallback_used:
         fallbacks_used.append("compression_timeout")
 
@@ -419,12 +405,10 @@ def run(json_mode: bool = False) -> dict:
         else:
             log_to_activity(f"Compression: {compression_result.reason}")
 
-    if not logger_result.ok and not logger_result.fallback_used:
+    if not logger_result.ok:
         failures.append(f"Logger: {logger_result.reason}")
         log_to_activity(f"FAILURE: {logger_result.reason}")
         log_to_daily_note(f"STARTUP FAILURE: {logger_result.reason}")
-    elif logger_result.fallback_used:
-        log_to_activity(f"FALLBACK: {logger_result.reason}")
         log_to_daily_note(f"STARTUP FALLBACK: {logger_result.reason}")
 
     if "need" in unsummarized_result.reason.lower():

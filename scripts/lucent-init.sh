@@ -57,9 +57,10 @@ fi
 echo ""
 echo "[Lucent] === ENFORCE UNSUMMARIZED SESSIONS (STEP 4.5) ==="
 
-# Enforce STEP 4.5: Automatically process unsummarized sessions
-# This eliminates the manual discipline check requirement
-python3 "$LUCENT_DIR/scripts/enforce_unsummarized_sessions.py"
+# Enforce STEP 4.5: Only runs when marker file exists (avoids subprocess on every message)
+if [[ -f "$LUCENT_DIR/memory/.unsummarized_sessions.json" ]]; then
+  python3 "$LUCENT_DIR/scripts/enforce_unsummarized_sessions.py"
+fi
 
 echo "[Lucent] ✓ STEP 4.5 enforcement complete"
 echo ""
