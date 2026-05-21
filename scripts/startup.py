@@ -332,6 +332,24 @@ def write_readiness_marker() -> None:
         log_to_activity(f"Failed to write readiness marker: {e}")
 
 
+def fire_daily_announcements() -> CheckResult:
+    """Run twice-daily bundled reminders + priority email announcements."""
+    try:
+        sys.path.insert(0, str(LUCENT_ROOT / "scripts"))
+        import daily_reminders
+        result = daily_reminders.run()
+        if result.get("fired"):
+            msg = (
+                f"Daily announcements: {result['window']} slot — "
+                f"{result['reminder_count']} reminder(s), {result['email_count']} email(s)"
+            )
+            log_to_activity(msg)
+            return CheckResult(True, msg)
+        return CheckResult(True, f"Daily announcements skipped: {result.get('reason', 'n/a')}")
+    except Exception as e:
+        return CheckResult(True, f"Daily announcements error: {e}")
+
+
 def run(json_mode: bool = False) -> dict:
     """Main orchestrator. Returns dict with status, checks, and diagnostics."""
     if is_already_complete():
@@ -377,11 +395,17 @@ def run(json_mode: bool = False) -> dict:
 
     speak_thread.join(timeout=6)
 
+    # Fire twice-daily bundled announcements (reminders + priority emails) if voice box is up
+    announcements_result = CheckResult(True, "Daily announcements skipped: voice box offline")
+    if vb_result.ok:
+        announcements_result = fire_daily_announcements()
+
     checks["voice_box"] = {"ok": vb_result.ok, "reason": vb_result.reason}
     checks["context_files"] = {"ok": context_result.ok, "reason": context_result.reason}
     checks["compression"] = {"ok": compression_result.ok, "reason": compression_result.reason}
     checks["session_logger"] = {"ok": logger_result.ok, "reason": logger_result.reason}
     checks["unsummarized_sessions"] = {"ok": unsummarized_result.ok, "reason": unsummarized_result.reason}
+    checks["daily_announcements"] = {"ok": announcements_result.ok, "reason": announcements_result.reason}
 
     if vb_result.fallback_used:
         fallbacks_used.append("voice_box_restart")
