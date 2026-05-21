@@ -163,7 +163,7 @@ class CharacterAnimator {
 
     const frame = this.avatarManager.getRandomImage(this.currentStateImages);
     if (frame) {
-      this.img.src = frame;
+      this._setImageWithRandomFlip(frame);
     }
 
     const delay = ANIMATION_TIMING.speak.min +
@@ -177,7 +177,7 @@ class CharacterAnimator {
     // Immediately show a frame
     const frame = this.avatarManager.getRandomImage(this.currentStateImages);
     if (frame) {
-      this.img.src = frame;
+      this._setImageWithRandomFlip(frame);
     }
 
     const isBored = this.currentState === AVATAR_STATES.BORED;
@@ -222,7 +222,7 @@ class CharacterAnimator {
 
       const frame = this.avatarManager.getRandomImage(this.currentStateImages);
       if (frame) {
-        this.img.src = frame;
+        this._setImageWithRandomFlip(frame);
       }
 
       flickerIndex++;
@@ -238,6 +238,15 @@ class CharacterAnimator {
     this.currentStateImages = [];
     clearTimeout(this.speakTimer);
     clearTimeout(this.idleTimer);
+  }
+
+  _setImageWithRandomFlip(imageSrc) {
+    this.img.src = imageSrc;
+    if (Math.random() > 0.5) {
+      this.img.style.transform = 'scaleX(-1)';
+    } else {
+      this.img.style.transform = 'scaleX(1)';
+    }
   }
 }
 
