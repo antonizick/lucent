@@ -73,12 +73,19 @@ def get_archive_preview(date_str: str):
         return None
 
 def check_unsummarized():
-    """Find sessions without summaries in LTMemory."""
+    """Find sessions without summaries in LTMemory. Excludes today and notes older than 10 days."""
+    today = date.today()
+    cutoff = today - timedelta(days=10)
     summarized = get_summarized_sessions()
     daily_notes = get_daily_notes()
 
     unsummarized = []
     for date_str in daily_notes:
+        note_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        if note_date == today:
+            continue  # Today's session is still active — never unsummarized
+        if note_date < cutoff:
+            continue  # Beyond lookback window
         if date_str not in summarized:
             preview = get_archive_preview(date_str)
             unsummarized.append({

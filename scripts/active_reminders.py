@@ -91,8 +91,8 @@ def is_pattern_active(trigger, today, today_name):
     date_match = re.match(r"(\d{4}-\d{2}-\d{2})", trigger)
     if date_match:
         reminder_date = datetime.strptime(date_match.group(1), "%Y-%m-%d").date()
-        # Show only on the specific date (not before, not after)
-        return today == reminder_date
+        # Show on the date AND any day after (overdue until manually archived)
+        return today >= reminder_date
 
     # Every session starting: "Every session starting 2026-05-20"
     if "Every session starting" in trigger:

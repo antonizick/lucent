@@ -61,10 +61,11 @@ def initialize_session_log(lucent_root, topic=""):
     topic_str = f" — {topic}" if topic else ""
     log_to_activity(f"Session started: [{timestamp}]{topic_str}")
 
-    # Ensure note file exists (create if doesn't exist)
-    if not note_path.exists():
-        with open(note_path, "a") as f:
-            f.write("")  # Create empty file so it exists
+    # Ensure note file exists and write session start marker
+    with open(note_path, "a") as f:
+        if not note_path.exists():
+            f.write("")
+        f.write(f"\n## [{timestamp}] Session start{' — ' + topic if topic else ''}\n")
 
     # Check for due reminders (idempotent)
     try:

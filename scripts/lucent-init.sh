@@ -30,9 +30,9 @@ echo ""
 echo "[Lucent] === PRIORITY EMAIL ALERT ==="
 python3 "$LUCENT_DIR/scripts/priority_email_check.py"
 echo ""
-echo "[Lucent] === TODAY'S SESSION LOG ==="
+echo "[Lucent] === TODAY'S SESSION LOG (last 50 lines) ==="
 if [[ -f "$NOTE" ]]; then
-  cat "$NOTE"
+  tail -n 50 "$NOTE"
 else
   echo "[Lucent] (No session activity yet)"
 fi

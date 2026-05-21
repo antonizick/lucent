@@ -245,7 +245,7 @@ def insert_summary_into_ltmemory(date_str: str, summary: str):
         # Find insertion point: right after "## Recent Sessions" header
         parts = content.split("## Recent Sessions")
         before = parts[0] + "## Recent Sessions"
-        after = "## Recent Sessions" + parts[1] if len(parts) > 1 else ""
+        after = parts[1] if len(parts) > 1 else ""
 
         # Find the first existing "### Session" entry to insert before it
         after_lines = after.split('\n')
