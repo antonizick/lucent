@@ -208,7 +208,7 @@ body {
     color: var(--text-primary);
 }
 
-.activity-log-btn {
+.activity-log-btn, .facetime-btn {
     padding: 6px 10px;
     background-color: transparent;
     color: var(--text-secondary);
@@ -220,11 +220,17 @@ body {
     opacity: 0.7;
 }
 
-.activity-log-btn:hover {
+.activity-log-btn:hover, .facetime-btn:hover {
     opacity: 1;
     border-color: var(--neon-cyan);
     color: var(--neon-cyan);
     box-shadow: 0 0 8px rgba(0, 229, 255, 0.2);
+}
+
+.facetime-btn {
+    font-size: 14px;
+    font-weight: 600;
+    padding: 8px 12px;
 }
 
 .theme-toggle {
@@ -1147,6 +1153,68 @@ body {
     color: var(--text-secondary);
     font-size: 11px;
     text-align: center;
+}
+
+/* FaceTime Mode */
+body.facetime-mode .left-column {
+    display: none;
+}
+
+body.facetime-mode .main-grid {
+    grid-template-columns: 1fr;
+}
+
+body.facetime-mode .right-column {
+    gap: 20px;
+    max-height: calc(100vh - 150px);
+    min-height: 0;
+}
+
+body.facetime-mode .character-panel {
+    flex: 3;
+    min-height: 0;
+    max-height: calc(100vh - 180px);
+}
+
+body.facetime-mode .character-viewport {
+    height: 100%;
+    width: 100%;
+}
+
+body.facetime-mode #characterFrame {
+    object-fit: contain;
+}
+
+body.facetime-mode .voice-panel {
+    flex: 1;
+    padding: 20px 40px;
+    gap: 15px;
+    overflow: hidden;
+}
+
+body.facetime-mode .scanner-container {
+    width: 200px;
+    height: 40px;
+}
+
+body.facetime-mode .scanner-dot {
+    width: 10px;
+    height: 10px;
+}
+
+body.facetime-mode .speaking-animation {
+    height: 60px;
+    width: 85%;
+}
+
+body.facetime-mode .speaking-bar {
+    width: 4px;
+}
+
+body.facetime-mode .current-text {
+    font-size: 14px;
+    max-width: 90%;
+    padding-bottom: 12px;
 }
 
 /* Responsive */

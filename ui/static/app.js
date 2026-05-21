@@ -1593,3 +1593,30 @@ if (emailDivider) {
 if (emailMonitorSection) {
     loadEmailSectionHeights();
 }
+
+// FaceTime toggle
+const facetimeToggle = document.getElementById('facetimeToggle');
+let isFacetimeMode = false;
+
+function toggleFacetimeMode() {
+    isFacetimeMode = !isFacetimeMode;
+    if (isFacetimeMode) {
+        document.body.classList.add('facetime-mode');
+        facetimeToggle.textContent = 'FaceTime On';
+    } else {
+        document.body.classList.remove('facetime-mode');
+        facetimeToggle.textContent = 'FaceTime Off';
+    }
+}
+
+if (facetimeToggle) {
+    facetimeToggle.addEventListener('click', toggleFacetimeMode);
+}
+
+// Keyboard shortcut: Ctrl+Shift+F
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') {
+        e.preventDefault();
+        toggleFacetimeMode();
+    }
+});
