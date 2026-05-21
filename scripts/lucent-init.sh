@@ -25,11 +25,10 @@ echo "[Lucent] === LONG-TERM MEMORY ==="
 cat "$LUCENT_DIR/memory/LTMemory.md"
 echo ""
 echo "[Lucent] === ACTIVE REMINDERS ==="
-if [[ -f "$LUCENT_DIR/memory/REMINDERS.md" ]]; then
-  cat "$LUCENT_DIR/memory/REMINDERS.md"
-else
-  echo "[Lucent] No reminders file found."
-fi
+python3 "$LUCENT_DIR/scripts/active_reminders.py"
+echo ""
+echo "[Lucent] === PRIORITY EMAIL ALERT ==="
+python3 "$LUCENT_DIR/scripts/priority_email_check.py"
 echo ""
 echo "[Lucent] === TODAY'S SESSION LOG ==="
 if [[ -f "$NOTE" ]]; then
@@ -55,6 +54,14 @@ else
   echo "[Lucent] Run: python3 /home/nick/dev/lucent/scripts/startup.py"
   echo "[Lucent] This must complete before you respond to Nick."
 fi
+echo ""
+echo "[Lucent] === ENFORCE UNSUMMARIZED SESSIONS (STEP 4.5) ==="
+
+# Enforce STEP 4.5: Automatically process unsummarized sessions
+# This eliminates the manual discipline check requirement
+python3 "$LUCENT_DIR/scripts/enforce_unsummarized_sessions.py"
+
+echo "[Lucent] ✓ STEP 4.5 enforcement complete"
 echo ""
 echo "[Lucent] === STARTUP READINESS MARKER CHECK ==="
 

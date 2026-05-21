@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /home/nick/dev/lucent/scripts/startup.py && python3 /home/nick/dev/lucent/scripts/acknowledge_startup.py",
+            "command": "python3 /home/nick/dev/lucent/scripts/startup.py; python3 /home/nick/dev/lucent/scripts/acknowledge_startup.py",
             "timeout": 60
           }
         ]
@@ -23,13 +23,24 @@
         ]
       }
     ],
+    "Stop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/nick/dev/lucent/scripts/log_turn_end.py"
+          }
+        ]
+      }
+    ],
     "SessionEnd": [
       {
         "matcher": ".*",
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s -X POST http://localhost:8001/speak -H 'Content-Type: application/json' -d '{\"text\":\"Session complete.\",\"source\":\"sessionend\"}' 2>/dev/null || true"
+            "command": "python3 /home/nick/dev/lucent/scripts/log_session_end.py && curl -s -X POST http://localhost:8001/speak -H 'Content-Type: application/json' -d '{\"text\":\"Session complete.\",\"source\":\"sessionend\"}' 2>/dev/null || true"
           }
         ]
       }
