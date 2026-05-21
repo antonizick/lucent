@@ -521,6 +521,170 @@ async def get_memory_log():
     else:
         return {"content": "No long-term memory file found."}
 
+@app.get("/log/reminders")
+async def get_reminders_log():
+    """Parse REMINDERS.md and return sorted reminder list as formatted text."""
+    import re
+    from datetime import date, timedelta
+
+    lucent_root = Path(__file__).parent.parent
+    reminders_file = lucent_root / "memory" / "REMINDERS.md"
+
+    if not reminders_file.exists():
+        return {"content": "No REMINDERS.md found."}
+
+    try:
+        content = reminders_file.read_text()
+        archive_idx = content.find("## Archive")
+        if archive_idx != -1:
+            content = content[:archive_idx]
+
+        today = date.today()
+        tomorrow = today + timedelta(days=1)
+        today_weekday = today.strftime("%A").lower()
+
+        overdue, due_today, due_tomorrow, ongoing, future, recurring = [], [], [], [], [], []
+
+        for line in content.splitlines():
+            line = line.strip()
+            if not line.startswith("- **"):
+                continue
+
+            # Specific date
+            m = re.match(r'- \*\*(\d{4}-\d{2}-\d{2})(?:\s+at\s+(\d{1,2}:\d{2}))?\*\*:\s*(.+)', line)
+            if m:
+                try:
+                    reminder_date = date.fromisoformat(m.group(1))
+                    time_str = m.group(2) or ""
+                    text = m.group(3).strip()
+                    if reminder_date < today:
+                        days = (today - reminder_date).days
+                        overdue.append((reminder_date, days, text))
+                    elif reminder_date == today:
+                        due_today.append((time_str, text))
+                    elif reminder_date == tomorrow:
+                        due_tomorrow.append((time_str, text))
+                    else:
+                        future.append((reminder_date, time_str, text))
+                except ValueError:
+                    pass
+                continue
+
+            # Every session starting DATE
+            m = re.match(r'- \*\*Every session starting (\d{4}-\d{2}-\d{2})\*\*:\s*(.+)', line)
+            if m:
+                try:
+                    start = date.fromisoformat(m.group(1))
+                    text = m.group(2).strip()
+                    if today >= start:
+                        ongoing.append(text)
+                except ValueError:
+                    pass
+                continue
+
+            # Every DAY [at HH:MM]
+            m = re.match(r'- \*\*Every (\w+)(?:\s+at\s+(\d{1,2}:\d{2}))?\*\*:\s*(.+)', line)
+            if m:
+                day = m.group(1)
+                time_str = m.group(2) or ""
+                text = m.group(3).strip()
+                is_today = day.lower() == today_weekday
+                recurring.append((day, time_str, text, is_today))
+                continue
+
+        # Sort overdue: most overdue (oldest) at top
+        overdue.sort(key=lambda x: x[0])
+        # Sort future: soonest first
+        future.sort(key=lambda x: x[0])
+
+        lines = []
+        today_str = today.strftime("%A, %B %-d, %Y")
+        lines.append(f"REMINDERS — {today_str}")
+        lines.append("=" * 60)
+
+        if overdue:
+            lines.append("")
+            lines.append("⚠  OVERDUE")
+            lines.append("-" * 40)
+            for (d, days, text) in overdue:
+                label = f"{days} day{'s' if days != 1 else ''} ago ({d})"
+                lines.append(f"  {label}")
+                lines.append(f"  → {text}")
+                lines.append("")
+
+        if due_today:
+            lines.append("")
+            lines.append("◆  DUE TODAY")
+            lines.append("-" * 40)
+            for (t, text) in due_today:
+                label = f"at {t}" if t else "today"
+                lines.append(f"  {label}")
+                lines.append(f"  → {text}")
+                lines.append("")
+
+        if due_tomorrow:
+            lines.append("")
+            lines.append("◇  DUE TOMORROW")
+            lines.append("-" * 40)
+            for (t, text) in due_tomorrow:
+                label = f"at {t}" if t else "tomorrow"
+                lines.append(f"  {label}")
+                lines.append(f"  → {text}")
+                lines.append("")
+
+        if ongoing:
+            lines.append("")
+            lines.append("↻  ONGOING (EVERY SESSION)")
+            lines.append("-" * 40)
+            for text in ongoing:
+                lines.append(f"  → {text}")
+                lines.append("")
+
+        # Recurring: today's first, then rest
+        today_recurring = [(d, t, txt) for (d, t, txt, is_today) in recurring if is_today]
+        other_recurring = [(d, t, txt) for (d, t, txt, is_today) in recurring if not is_today]
+
+        if today_recurring:
+            lines.append("")
+            lines.append(f"★  RECURRING — TODAY ({today.strftime('%A').upper()})")
+            lines.append("-" * 40)
+            for (day, t, text) in today_recurring:
+                label = f"Every {day}" + (f" at {t}" if t else "")
+                lines.append(f"  {label}")
+                lines.append(f"  → {text}")
+                lines.append("")
+
+        if future:
+            lines.append("")
+            lines.append("◻  UPCOMING")
+            lines.append("-" * 40)
+            for (d, t, text) in future:
+                days_away = (d - today).days
+                label = d.strftime("%A, %B %-d") + (f" at {t}" if t else "") + f"  ({days_away}d)"
+                lines.append(f"  {label}")
+                lines.append(f"  → {text}")
+                lines.append("")
+
+        if other_recurring:
+            lines.append("")
+            lines.append("○  RECURRING SCHEDULE")
+            lines.append("-" * 40)
+            for (day, t, text) in other_recurring:
+                label = f"Every {day}" + (f" at {t}" if t else "")
+                lines.append(f"  {label}")
+                lines.append(f"  → {text}")
+                lines.append("")
+
+        if not any([overdue, due_today, due_tomorrow, ongoing, future, recurring]):
+            lines.append("")
+            lines.append("  No active reminders.")
+
+        return {"content": "\n".join(lines)}
+
+    except Exception as e:
+        logger.error(f"Error reading reminders: {e}")
+        return {"content": f"Error reading reminders: {str(e)}"}
+
 @app.get("/log/email")
 async def get_email_log():
     """Get priority emails from the email system. Shows priority emails first, then fallback to recent emails."""

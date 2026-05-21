@@ -21,9 +21,10 @@ let lastLogContent = '';
 let fadeTimeout = null;
 let speechEnabled = false;
 let currentAgent = null;  // null = Lucent mode, string = named agent
-let currentLogTab = 'daily';  // 'daily', 'weekly', 'memory', 'security', or 'email'
+let currentLogTab = 'daily';  // 'daily', 'weekly', 'memory', 'reminders', 'security', or 'email'
 let lastWeeklyContent = '';
 let lastMemoryContent = '';
+let lastRemindersContent = '';
 let lastSecurityContent = '';
 let lastEmailContent = '';
 let refreshCountdown = 30;
@@ -585,6 +586,14 @@ async function pollForLog() {
                 lastMemoryContent = data.content;
                 logContent.scrollTop = logContent.scrollHeight;
             }
+        } else if (currentLogTab === 'reminders') {
+            const response = await fetch('/log/reminders');
+            const data = await response.json();
+            if (data.content && data.content !== lastRemindersContent) {
+                logContent.textContent = data.content;
+                lastRemindersContent = data.content;
+                logContent.scrollTop = 0;
+            }
         } else if (currentLogTab === 'security') {
             const response = await fetch('/security/report');
             const data = await response.json();
@@ -650,6 +659,8 @@ function switchLogTab(tab) {
         lastWeeklyContent = '';
     } else if (tab === 'memory') {
         lastMemoryContent = '';
+    } else if (tab === 'reminders') {
+        lastRemindersContent = '';
     } else if (tab === 'security') {
         lastSecurityContent = '';
     } else if (tab === 'email-search') {
@@ -669,6 +680,7 @@ function switchLogTab(tab) {
     document.getElementById('logLabelDaily').classList.toggle('hidden', tab !== 'daily');
     document.getElementById('logLabelWeekly').classList.toggle('hidden', tab !== 'weekly');
     document.getElementById('logLabelMemory').classList.toggle('hidden', tab !== 'memory');
+    document.getElementById('logLabelReminders').classList.toggle('hidden', tab !== 'reminders');
     document.getElementById('logLabelSecurity').classList.toggle('hidden', tab !== 'security');
     document.getElementById('logLabelEmailSearch').classList.toggle('hidden', tab !== 'email-search');
 
