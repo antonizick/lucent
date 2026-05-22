@@ -75,6 +75,15 @@ As of 2026-05-14, the Voice Box uses **Piper TTS** for server-side neural speech
   - **Daily Tab:** Live view of today's session notes (`memory/YYYY-MM-DD.md`)
 - **Font Controls:** Adjust daily log text size with +/− buttons
 
+### FaceTime Mode
+FaceTime mode optimizes the Voice Box for mobile and video conferencing use. Press **Ctrl+Shift+F** (or click the FaceTime button) to toggle.
+
+**Features:**
+- **Full-Screen Avatar:** Hides the log panel and side controls, displaying only the avatar character in the center
+- **Mobile Responsive:** On phones (≤600px width), the header collapses to show only the FaceTime toggle button, maximizing screen real estate
+- **Portrait & Landscape Support:** Avatar scales properly on both orientations; in portrait mode, the avatar expands to fill all available vertical space
+- **Always Visible Toggle:** The FaceTime on/off button remains accessible even in the minimal header on narrow screens
+
 ### Backup Status Monitoring
 The Voice Box popup includes real-time backup health monitoring. When you mouseover the voice panel, a popup displays the last push times for both your Lucent codebase and memory repository with visual status indicators.
 

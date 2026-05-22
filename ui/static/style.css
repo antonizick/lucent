@@ -1201,6 +1201,34 @@ body.facetime-mode .current-text {
     display: none;
 }
 
+/* FaceTime Mode + Narrow Screen */
+@media (max-width: 600px) {
+    body.facetime-mode .header h1 {
+        display: none;
+    }
+
+    body.facetime-mode .controls > *:not(.facetime-btn) {
+        display: none;
+    }
+
+    body.facetime-mode .controls {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* FaceTime Mode + Narrow Screen - Remove Height Constraints */
+@media (max-width: 600px) {
+    body.facetime-mode .right-column {
+        max-height: none;
+    }
+
+    body.facetime-mode .character-panel {
+        max-height: none;
+        display: flex !important;
+    }
+}
+
 /* Responsive */
 @media (max-width: 600px) {
     .header h1 {
