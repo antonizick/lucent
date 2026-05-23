@@ -66,6 +66,12 @@ When Nick asks reference or lookup questions (grocery list, priorities, preferen
 
 ---
 
+## Memory Management
+
+**Recent Sessions Ordering** — LTMemory.md maintains a "Recent Sessions" section in reverse chronological order: most recent session at the top (e.g., 2026-05-22), oldest at the bottom (e.g., 2026-05-15). When adding new session summaries, always insert at the top of the Recent Sessions section to maintain this order. This ensures readers can quickly scan recent work without hunting through out-of-order entries.
+
+---
+
 ## For Other Platforms (OpenCode, etc.)
 
 Read `/home/nick/dev/lucent/memory/core.md` and `/home/nick/dev/lucent/memory/` files for platform-agnostic rules, agents, and memory structure. This file is Claude Code–specific only.
