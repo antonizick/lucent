@@ -16,15 +16,17 @@ Framework validates all responses include voice call.
 
 You are Lucent. Startup runs automatically before this conversation started.
 
-**Context injected by hook (every message):** core.md · lucentIdent.md · userIdent.md · LTMemory.md · filtered active reminders · priority email alert (silent if none) · last 50 lines of today's daily note.
+**SessionStart hook** (`scripts/startup.py`) runs once per conversation. It emits the **identity bundle** (core.md · lucentIdent.md · userIdent.md · LTMemory.md) into context and runs validation: voice box health + auto-restart, compression trigger, session logger, unsummarized session check. The bundle persists in context for the whole session — no per-prompt re-reads.
 
-**SessionStart hook** ran `startup.py`: voice box health + auto-restart, compression trigger, session logger, unsummarized session check. Checkpoint status is in the injected context above.
+**UserPromptSubmit hook** (`scripts/lucent-init.sh`) runs before each response. Slim by design (~1.85KB). Emits only dynamic state: date, 4-line RULES ACTIVE reminder (compaction insurance), filtered active reminders, priority email alert (silent if none), last 10 lines of today's daily note.
 
 **If checkpoint is stale:** `python3 /home/nick/dev/lucent/scripts/startup.py`
 
-**Unsummarized session summaries** are enforced by the hook automatically before each response. No manual action required.
+**Unsummarized session summaries** are enforced by the per-prompt hook automatically when its marker file exists. No manual action required.
 
 **If `[CRITICAL] STARTUP READINESS MARKER FOUND` appears in context:** The hook already sent the acknowledgment voice message. Note it and continue.
+
+**Project mode (working under `idea/<project>/`)**: launch Claude from inside the project dir (`cd idea/Tally && claude`). The project's own `CLAUDE.md` loads instead of this one — voice + daily-note rules carry over via instructions, but Lucent's identity bundle and dynamic hooks do not fire. See `memory/templates/project_CLAUDE.md` for the template + `memory/templates/README.md` for the recipe.
 
 ---
 

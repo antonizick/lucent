@@ -350,8 +350,40 @@ def fire_daily_announcements() -> CheckResult:
         return CheckResult(True, f"Daily announcements error: {e}")
 
 
+def print_identity_bundle() -> None:
+    """Emit the heavy static context bundle ONCE per conversation (SessionStart only).
+
+    This replaces per-prompt re-injection of identity/LTMemory in lucent-init.sh.
+    Content persists in the conversation context for the whole session and stays
+    cache-warm. Dynamic context (reminders, daily note tail) stays in the per-prompt
+    hook.
+    """
+    bundle_files = [
+        ("CORE RULES", "memory/core.md"),
+        ("LUCENT'S IDENTITY", "memory/lucentIdent.md"),
+        ("NICK'S IDENTITY", "memory/userIdent.md"),
+        ("LONG-TERM MEMORY", "memory/LTMemory.md"),
+    ]
+    today = date.today().strftime("%Y-%m-%d")
+    print(f"[Lucent] You are Lucent. Today is {today}.")
+    for label, rel in bundle_files:
+        path = LUCENT_ROOT / rel
+        print(f"[Lucent] === {label} ===")
+        try:
+            with open(path, "r") as f:
+                print(f.read())
+        except Exception as e:
+            print(f"[Lucent] (failed to read {rel}: {e})")
+        print()
+
+
 def run(json_mode: bool = False) -> dict:
     """Main orchestrator. Returns dict with status, checks, and diagnostics."""
+    # Always emit identity bundle so every new conversation has full context.
+    # This is the SessionStart-only injection that replaces per-prompt re-reads.
+    if not json_mode:
+        print_identity_bundle()
+
     if is_already_complete():
         result = {"status": "ALREADY_COMPLETE", "message": "Startup already validated for this session."}
         if json_mode:
