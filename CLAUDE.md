@@ -16,7 +16,7 @@ Framework validates all responses include voice call.
 
 You are Lucent. Startup runs automatically before this conversation started.
 
-**SessionStart hook** (`scripts/startup.py`) runs once per conversation. It emits the **identity bundle** (core.md · lucentIdent.md · userIdent.md · LTMemory.md) into context and runs validation: voice box health + auto-restart, compression trigger, session logger, unsummarized session check. The bundle persists in context for the whole session — no per-prompt re-reads.
+**SessionStart hook** (`scripts/startup.py`) runs once per conversation. It emits the **identity bundle** (core.md · lucentIdent.md · userIdent.md · LTMemory.md) into context and runs validation: voice box health + auto-restart, compression trigger, session logger, unsummarized session check, **LTMemory completeness check**. The bundle persists in context for the whole session — no per-prompt re-reads.
 
 **UserPromptSubmit hook** (`scripts/lucent-init.sh`) runs before each response. Slim by design (~1.85KB). Emits only dynamic state: date, 4-line RULES ACTIVE reminder (compaction insurance), filtered active reminders, priority email alert (silent if none), last 10 lines of today's daily note.
 
@@ -70,7 +70,62 @@ When Nick asks reference or lookup questions (grocery list, priorities, preferen
 
 ## Memory Management
 
-**Recent Sessions Ordering** — LTMemory.md maintains a "Recent Sessions" section in reverse chronological order: most recent session at the top (e.g., 2026-05-22), oldest at the bottom (e.g., 2026-05-15). When adding new session summaries, always insert at the top of the Recent Sessions section to maintain this order. This ensures readers can quickly scan recent work without hunting through out-of-order entries.
+### Three-Tier Memory System
+
+**Tier 1: Daily Notes** (`memory/YYYY-MM-DD.md`)
+- Live working log, accumulates throughout the day
+- Updated during work with progress, decisions, context
+- At day boundary, auto-archived to `memory/archive/YYYY-MM-DD.md` (full detail preserved)
+- Daily note replaced with placeholder referencing archive
+
+**Tier 2: Archives** (`memory/archive/YYYY-MM-DD.md`)
+- Complete permanent record of daily work
+- Automatically updated hourly via `backup_memory.py`
+- Never deleted, only read for curation
+- Source of truth for extracting comprehensive summaries
+
+**Tier 3: LTMemory** (`memory/LTMemory.md`)
+- Curated "Recent Sessions" section (reverse chronological: newest first)
+- Comprehensive summaries extracted from archives by Curator agent
+- Read at startup and in context for every session
+- Must contain **substantive** summaries (≥3 bullet points per session, no stubs)
+
+### Curator Agent Workflow (Weekly)
+
+**Automated check at startup:**
+- `check_ltmemory_completeness()` validates that all Recent Sessions contain real summaries
+- Detects stub markers ("UNSUMMARIZED", "to be filled in", <3 bullets)
+- **Blocks startup** if stubs found with clear remedy command
+
+**Manual promotion workflow:**
+```bash
+# Review past 7 days and promote to LTMemory
+python3 scripts/curator.py --days 7
+
+# Review 14 days (deeper curation)
+python3 scripts/curator.py --days 14
+
+# Verify current LTMemory completeness
+python3 scripts/curator.py --check
+```
+
+**What Curator extracts from archives:**
+- Checkmarked items (✅) — features, fixes, implementations
+- Commits and tags
+- Database/infrastructure changes
+- Key decisions and blockers
+- Lessons learned
+- Formats as 20-30 bullet points per session
+
+**Prevention mechanism:**
+1. Auto-compression writes placeholder (not stub) to daily note
+2. Placeholder references archive + signals need for Curator
+3. Curator reads archives, writes comprehensive summaries to LTMemory
+4. At startup, validation blocks if stubs remain
+5. Enforces real curation before Claude continues work
+
+### Recent Sessions Ordering
+LTMemory.md maintains "Recent Sessions" section in **reverse chronological order**: most recent session at the top (e.g., 2026-05-27), oldest at the bottom. When updating via Curator, always insert at the top to maintain this order. Ensures readers scan recent work first without hunting through entries.
 
 ---
 

@@ -292,6 +292,68 @@ def check_unsummarized_sessions() -> CheckResult:
         return CheckResult(True, f"Unsummarized check: {str(e)}")
 
 
+def check_ltmemory_completeness() -> CheckResult:
+    """
+    Verify LTMemory.md Recent Sessions contains comprehensive (not stub) summaries.
+
+    Returns CheckResult with:
+    - ok=True if all summaries are complete
+    - ok=False if stubs detected (requires Curator review)
+    """
+    ltmemory = LUCENT_ROOT / "memory" / "LTMemory.md"
+
+    if not ltmemory.exists():
+        return CheckResult(True, "LTMemory.md not yet created")
+
+    try:
+        with open(ltmemory, 'r') as f:
+            content = f.read()
+
+        # Check for stub markers that indicate incomplete curation
+        stub_markers = [
+            "UNSUMMARIZED",
+            "to be filled in",
+            "See full details in",
+            "Summary to be filled",
+            "await.*curator",  # regex
+        ]
+
+        import re
+        for marker in stub_markers:
+            if re.search(marker, content, re.IGNORECASE):
+                return CheckResult(
+                    False,
+                    f"LTMemory has incomplete summaries (found '{marker}'). Curator review required.",
+                    fallback_used=False
+                )
+
+        # Check for extremely brief sessions (< 3 bullet points = stub)
+        import re
+        session_pattern = r'### Session \d{4}-\d{2}-\d{2}\n(.*?)(?=### Session|\Z)'
+        sessions = re.findall(session_pattern, content, re.DOTALL)
+
+        incomplete_sessions = []
+        for i, session_content in enumerate(sessions):
+            bullet_count = session_content.count('\n-') + session_content.count('\n*')
+            if bullet_count < 3 and len(session_content.strip()) < 100:
+                # Find the session date
+                match = re.search(r'### Session (\d{4}-\d{2}-\d{2})', content[max(0, content.rfind('\n\n', 0, content.find(session_content))):])
+                if match:
+                    incomplete_sessions.append(match.group(1))
+
+        if incomplete_sessions:
+            return CheckResult(
+                False,
+                f"LTMemory has {len(incomplete_sessions)} stub session(s): {', '.join(incomplete_sessions[:3])}. Curator review required.",
+                fallback_used=False
+            )
+
+        return CheckResult(True, "LTMemory Recent Sessions are comprehensive")
+
+    except Exception as e:
+        return CheckResult(True, f"LTMemory check error (non-fatal): {e}")
+
+
 def is_already_complete() -> bool:
     """Return True if today's startup checkpoint is still valid."""
     try:
@@ -424,6 +486,7 @@ def run(json_mode: bool = False) -> dict:
 
     logger_result = init_session_logger()
     unsummarized_result = check_unsummarized_sessions()
+    ltmemory_result = check_ltmemory_completeness()
 
     speak_thread.join(timeout=6)
 
@@ -437,6 +500,7 @@ def run(json_mode: bool = False) -> dict:
     checks["compression"] = {"ok": compression_result.ok, "reason": compression_result.reason}
     checks["session_logger"] = {"ok": logger_result.ok, "reason": logger_result.reason}
     checks["unsummarized_sessions"] = {"ok": unsummarized_result.ok, "reason": unsummarized_result.reason}
+    checks["ltmemory_completeness"] = {"ok": ltmemory_result.ok, "reason": ltmemory_result.reason}
     checks["daily_announcements"] = {"ok": announcements_result.ok, "reason": announcements_result.reason}
 
     if vb_result.fallback_used:
@@ -469,6 +533,12 @@ def run(json_mode: bool = False) -> dict:
 
     if "need" in unsummarized_result.reason.lower():
         log_to_activity(f"NOTICE: {unsummarized_result.reason}")
+
+    if not ltmemory_result.ok:
+        failures.append(f"LTMemory: {ltmemory_result.reason}")
+        log_to_activity(f"FAILURE: {ltmemory_result.reason}")
+        log_to_daily_note(f"STARTUP FAILURE: {ltmemory_result.reason}")
+        log_to_daily_note(f"→ Run: python3 scripts/curator.py --days 14")
 
     degraded = bool(failures or warnings or fallbacks_used)
     status = "STARTUP_DEGRADED" if degraded else "STARTUP_OK"

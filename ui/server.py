@@ -235,41 +235,7 @@ async def speak(request: SpeakRequest):
         logger.info(f"[/speak] Suppressed SessionEnd 'Session complete.' message")
         return {"status": "suppressed", "reason": "sessionend_filtered"}
 
-    # ===== DETAILED DIAGNOSTIC LOGGING =====
-    import traceback
-    import inspect
-
     timestamp = datetime.now().isoformat()
-    source_tag = request.source or "unknown"
-    text_preview = request.text[:100] if len(request.text) > 100 else request.text
-
-    # Check if this contains problematic content
-    has_session_complete = "session complete" in request.text.lower()
-
-    # Get stack trace to identify caller
-    stack = traceback.extract_stack()
-    # Find the first frame outside this file
-    caller_info = "unknown"
-    for frame in reversed(stack[:-1]):
-        if "server.py" not in frame.filename:
-            caller_info = f"{frame.filename.split('/')[-1]}:{frame.name}:{frame.lineno}"
-            break
-
-    # Log comprehensive details
-    log_level = "WARNING" if has_session_complete else "INFO"
-    logger.log(
-        logging.WARNING if has_session_complete else logging.INFO,
-        f"[/speak] {log_level} | source={source_tag} | caller={caller_info} | "
-        f"has_session_complete={has_session_complete} | text_len={len(request.text)} | "
-        f"preview='{text_preview}'"
-    )
-
-    # If it contains session complete, also log the full stack for debugging
-    if has_session_complete:
-        logger.warning(f"[/speak] FULL STACK for 'session complete' detection:")
-        for frame in stack[-5:]:
-            logger.warning(f"  {frame.filename}:{frame.name}:{frame.lineno}: {frame.line}")
-    # ===== END DIAGNOSTIC LOGGING =====
 
     item: dict = {"text": request.text, "timestamp": timestamp}
     if request.source:

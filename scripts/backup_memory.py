@@ -111,11 +111,12 @@ def compress_yesterday_if_needed() -> None:
             shutil.copy2(daily_note, archive_path)
             log_to_daily_note(f"[Compression] Re-archived {yesterday}: {note_lines} lines")
 
-        # Create placeholder summary with archive reference
+        # Create placeholder that references archive (no manual summary needed)
         summary = f"""## Session {yesterday}
 
-*Summary to be filled in. See full details in memory/archive/{yesterday}.md*
+**⚠️ UNSUMMARIZED** — See full details in `memory/archive/{yesterday}.md`
 
+Curator agent must review archive and write comprehensive summary to LTMemory.md Recent Sessions.
 **Archive validation:** ✓ Complete ({archive_lines} lines preserved)
 """
 
@@ -123,8 +124,8 @@ def compress_yesterday_if_needed() -> None:
         with open(daily_note, 'w') as f:
             f.write(summary)
 
-        # Log completion
-        log_to_daily_note(f"[Compression] Auto-compressed {yesterday}: {note_lines} → {sum(1 for line in summary.split(chr(10)))} lines. Archive preserved.")
+        # Log to activity log (not daily note, to avoid recursive growth)
+        log_to_activity(f"Compression: Auto-compressed {yesterday}: {note_lines} → {sum(1 for line in summary.split(chr(10)))} lines. Archive preserved. Awaiting Curator review.")
 
     except Exception as e:
         log_to_daily_note(f"[Compression] WARNING: Failed to auto-compress {yesterday}: {e}")
