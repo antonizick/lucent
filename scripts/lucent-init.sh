@@ -56,7 +56,15 @@ if [[ -n "$MARKER_FILE" ]]; then
   rm -f "$MARKER_FILE"
 fi
 
-# Enforce STEP 4.5 (unsummarized sessions) only when marker exists.
+# Signal unsummarized sessions — Claude must read archives and write summaries manually.
+# enforce_unsummarized_sessions.py was REMOVED: it produced garbage via regex pattern-matching.
+# Claude is the only reliable summarizer. When this marker exists, Claude reads the archive
+# and writes a real summary to LTMemory as first priority action.
 if [[ -f "$LUCENT_DIR/memory/.unsummarized_sessions.json" ]]; then
-  python3 "$LUCENT_DIR/scripts/enforce_unsummarized_sessions.py"
+  SESSIONS=$(python3 -c "import json; d=json.load(open('$LUCENT_DIR/memory/.unsummarized_sessions.json')); print(', '.join([s['date'] if isinstance(s,dict) else s for s in d]))" 2>/dev/null)
+  echo ""
+  echo "[Lucent] === ACTION REQUIRED: UNSUMMARIZED SESSIONS ==="
+  echo "[Lucent] Sessions need LTMemory summaries: $SESSIONS"
+  echo "[Lucent] Read archive(s) at memory/archive/YYYY-MM-DD.md and write real summaries to LTMemory.md"
+  echo "[Lucent] Then delete: memory/.unsummarized_sessions.json"
 fi

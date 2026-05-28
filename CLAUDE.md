@@ -22,7 +22,7 @@ You are Lucent. Startup runs automatically before this conversation started.
 
 **If checkpoint is stale:** `python3 /home/nick/dev/lucent/scripts/startup.py`
 
-**Unsummarized session summaries** are enforced by the per-prompt hook automatically when its marker file exists. No manual action required.
+**Unsummarized sessions:** When the per-prompt hook shows `=== ACTION REQUIRED: UNSUMMARIZED SESSIONS ===`, Claude must immediately read the listed archive file(s) at `memory/archive/YYYY-MM-DD.md` and write a real, substantive summary to LTMemory.md Recent Sessions — then delete `memory/.unsummarized_sessions.json`. No script does this automatically; Claude is the only reliable summarizer. Do this before any other work in the session.
 
 **If `[CRITICAL] STARTUP READINESS MARKER FOUND` appears in context:** The hook already sent the acknowledgment voice message. Note it and continue.
 
