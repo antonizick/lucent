@@ -109,12 +109,27 @@ def _skill_stats() -> dict:
              for slug, u in usage.items() if u.get("use_count", 0) > 0],
             key=lambda x: x[1], reverse=True
         )[:5]
+        # Build full skills list with usage data
+        protected_set = set(protected) if isinstance(protected, list) else protected
+        skills_list = []
+        for skill in all_skills:
+            u = usage.get(skill["slug"], {})
+            skills_list.append({
+                "slug": skill["slug"],
+                "name": skill.get("name", skill["slug"]),
+                "description": skill.get("description", ""),
+                "state": skill.get("state", ""),
+                "protected": skill["slug"] in protected_set,
+                "use_count": u.get("use_count", 0),
+                "last_used": u.get("last_used", ""),
+            })
         return {
             "total_live": len(all_skills),
             "by_state": by_state,
             "archived": archive_count,
             "protected_count": len(protected),
             "top_used": [{"slug": s, "uses": u, "last": l[:10] if l else ""} for s, u, l in top_used],
+            "all_skills": sorted(skills_list, key=lambda s: (-s["use_count"], s["slug"])),
         }
     except Exception as e:
         return {"error": str(e)}

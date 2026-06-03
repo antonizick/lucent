@@ -740,6 +740,20 @@ function renderInsights(data) {
         ]);
     }
 
+    // Skills Listing
+    if (skills.all_skills && skills.all_skills.length > 0) {
+        const skillsRows = [];
+        skillsRows.push(`<div class="skills-list">`);
+        skills.all_skills.forEach(skill => {
+            const protectedBadge = skill.protected ? ' 🔒' : '';
+            const uses = skill.use_count > 0 ? ` · ${skill.use_count} uses` : '';
+            const lastUsed = skill.last_used ? ` · last: ${skill.last_used.substring(0, 10)}` : '';
+            skillsRows.push(`<div class="skill-item"><span class="skill-name">${skill.slug}</span><span class="skill-meta">${skill.state}${protectedBadge}${uses}${lastUsed}</span></div>`);
+        });
+        skillsRows.push(`</div>`);
+        h += insightsSection('SKILLS LISTING', skillsRows);
+    }
+
     h += `</div>`;
     return h;
 }

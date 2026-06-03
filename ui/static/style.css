@@ -1324,3 +1324,32 @@ body.facetime-mode .current-text {
 .insights-ok   { color: #4caf50; }
 .insights-warn { color: #ff9800; }
 .insights-err  { color: #f44336; margin: 4px 0; }
+
+.skills-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.skill-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 2px 0;
+    border-bottom: 1px solid rgba(0, 229, 255, 0.03);
+    font-size: 10px;
+}
+
+.skill-name {
+    color: var(--text-primary);
+    font-weight: 500;
+    flex: 0 0 auto;
+}
+
+.skill-meta {
+    color: var(--text-secondary, #b0b0b0);
+    font-size: 9px;
+    text-align: right;
+    flex: 1 1 auto;
+}
