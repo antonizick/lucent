@@ -440,11 +440,11 @@ class IMAPBackend(EmailBackend):
             parser = BytesParser()
             msg = parser.parsebytes(msg_bytes)
 
-            from_addr = msg.get("From", "")
-            to_addrs = [msg.get("To", "")] if msg.get("To") else []
-            subject = msg.get("Subject", "")
-            message_id = msg.get("Message-ID", "")
-            in_reply_to = msg.get("In-Reply-To")
+            from_addr = str(msg.get("From", ""))
+            to_addrs = [str(msg.get("To", ""))] if msg.get("To") else []
+            subject = str(msg.get("Subject", ""))
+            message_id = str(msg.get("Message-ID", ""))
+            in_reply_to = str(msg.get("In-Reply-To")) if msg.get("In-Reply-To") else None
 
             # Parse timestamp
             date_str = msg.get("Date", "")
