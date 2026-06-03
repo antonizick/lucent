@@ -132,7 +132,10 @@ All core memory files are consolidated in the `memory/` directory:
 | `memory/core.md` | Operating manual — startup ritual, rules, safety guidelines |
 | `memory/lucentIdent.md` | Lucent's identity — personality, behaviors, habits |
 | `memory/userIdent.md` | Nick's identity — facts, preferences, working style |
-| `memory/LTMemory.md` | Long-term memory — distilled from daily notes into lasting knowledge |
+| `memory/LTMemory.md` | Long-term memory — distilled from daily notes into lasting knowledge (newest 10 sessions; older → `LTMemory.archive.md`) |
+| `memory/skills/` | NERO skill library — procedural knowledge packages with lifecycle management |
+| `memory/.nero/` | NERO runtime state — config, proposals, curator reports, worker log |
+| `memory/.recall_index.json` | NERO semantic recall index (Ollama `nomic-embed-text` embeddings, 392+ chunks) |
 
 ## Directory Structure
 
@@ -155,6 +158,15 @@ lucent/
 │   ├── AGENTS.md          Top-level instructions
 │   ├── AGENT_ASSIGNMENTS.md Agent task ownership
 │   ├── YYYY-MM-DD.md      Daily episodic notes
+│   ├── LTMemory.archive.md Older LTMemory sessions (capped at 10 live; still recall-indexed)
+│   ├── skills/            NERO skill library (procedural knowledge packages)
+│   │   ├── .protected     Slugs the curator never archives
+│   │   ├── .usage.json    Per-skill use counters
+│   │   ├── .archive/      Archived skills (recoverable)
+│   │   └── <slug>/SKILL.md+ references/ templates/ scripts/
+│   ├── .nero/             NERO runtime state (config, proposals, curator reports, worker log)
+│   ├── .recall_index.json Semantic recall index (Ollama nomic-embed-text embeddings)
+│   ├── nero_inbox.md      Pending self-improvement proposals (propose mode)
 │   ├── logs/              Voice activity logs (backed up hourly)
 │   ├── scripts/           Backup scripts (redundant copies for recovery)
 │   └── archive/           Historical notes + compressed logs (never deleted)
@@ -167,7 +179,14 @@ lucent/
 │   ├── backup_memory.py   Main backup executor (retry + health check)
 │   ├── verify_backup_health.py Health check (GitHub connectivity)
 │   ├── session_logger.py  Session logging initialization
-│   └── rotate_voice_logs.py Voice log archival (monthly gzip)
+│   ├── rotate_voice_logs.py Voice log archival (monthly gzip)
+│   ├── memory_index.py    NERO: semantic recall index (build/query/status)
+│   ├── memory_recall.py   NERO: UserPromptSubmit hook entry (embeds prompt, injects recall)
+│   ├── reflect.py         NERO: per-turn reflection loop (Stop hook + worker + proposal inbox)
+│   ├── skills.py          NERO: skill library management (list/view/bump/lifecycle)
+│   ├── skill_curator.py   NERO: weekly curator (lifecycle + consolidation + memory hygiene)
+│   ├── pre_compact.py     NERO: PreCompact hook (injects must-keep context before compaction)
+│   └── insights.py        NERO: self-improvement health dashboard
 ├── ui/                    Voice Box web UI & Discord integration
 │   ├── server.py          FastAPI server (voice, Piper TTS, Discord, backup status)
 │   ├── piper_manager.py   Piper TTS wrapper (thread-safe synthesis, voice switching)
@@ -685,6 +704,97 @@ Lucent maintains a three-layer backup strategy ensuring zero data loss:
 - Failure notifications: All issues logged to daily note with timestamps
 - Automated backup trigger: When backup status enters warning state (>2 hours old), system automatically runs backup + voice notification
 
+### NERO — Self-Improvement System (2026-06-03)
+
+Lucent now learns continuously from conversations. Project **NERO** added five interlocked capabilities inspired by the [Hermes Agent](https://github.com/oborounov/hermes-agent) framework, adapted to run inside Claude Code via hooks and the Anthropic API.
+
+#### 1. Semantic Memory Recall (Phase 1)
+Before every turn, the `UserPromptSubmit` hook embeds the incoming message with local Ollama `nomic-embed-text` and injects the top-5 most relevant memory chunks as a fenced `<memory-context>` block — fully local, zero API cost, 100% reliable (graceful no-op if Ollama is unavailable).
+
+```bash
+python3 scripts/memory_index.py build        # rebuild index (auto on changes)
+python3 scripts/memory_index.py query "text" # test a query
+python3 scripts/memory_index.py status       # show chunk counts by source
+```
+
+**Sources indexed:** `memory/LTMemory.md`, `~/.claude/.../memory/*.md` (auto-memory), last 7 daily notes, all `memory/skills/**/*.md`, plus their archives.
+
+#### 2. Skill Library (Phase 2)
+Procedural knowledge packages in `memory/skills/` — *how to do a class of task for Nick*. Distinct from `agents/` (personas) and `memory/` (facts). Four core seed skills are shipped and protected; the reflection loop adds more over time.
+
+```
+memory/skills/
+├── .protected              # slugs the curator never touches
+├── .usage.json             # per-skill use counters + last_used
+├── .archive/               # archived skills (recoverable, never deleted)
+├── voice-protocol/         # mandatory dual-channel communication
+├── daily-note-protocol/    # what/how to log
+├── memory-reference-lookup/# read source files before answering lookups
+└── project-creation/       # scaffold workflow + CLAUDE.md template
+```
+
+Each skill: `SKILL.md` (description, triggers, instructions, pitfalls) + optional `references/`, `templates/`, `scripts/` subdirectories.
+
+```bash
+python3 scripts/skills.py list            # list all skills
+python3 scripts/skills.py view <name>     # read a skill (bumps use counter)
+python3 scripts/skills.py status          # usage stats
+```
+
+Skills are listed in the `SessionStart` identity bundle (progressive disclosure — names and descriptions only; bodies load on demand).
+
+#### 3. Per-Turn Reflection Loop (Phase 3)
+After every turn, the `Stop` hook spawns a **detached background worker** in ~25ms (zero turn latency). The worker runs:
+
+1. **Stage 0 — trivial filter:** exchanges under 200 chars → skip (no API cost)
+2. **Stage 1 — Haiku gate:** "is there anything worth durably saving here?" YES/NO
+3. **Stage 2 — Sonnet writer:** decides exactly what to save, emits structured JSON actions
+
+Ported from Hermes' `background_review.py` — including the critical **anti-pattern list**: never capture environment-dependent failures, negative tool claims ("X is broken"), transient errors, or one-off narratives.
+
+Starts in **propose mode**: suggestions land in `memory/nero_inbox.md` for review before anything is written. Switch to `auto` once trusted.
+
+```bash
+python3 scripts/reflect.py status              # state + pending count
+python3 scripts/reflect.py review              # read pending proposals
+python3 scripts/reflect.py apply <id>          # apply a proposal
+python3 scripts/reflect.py reject <id>         # reject a proposal
+python3 scripts/reflect.py mode propose|auto   # switch mode
+python3 scripts/reflect.py enable|disable      # toggle the loop
+```
+
+Config lives in `memory/.nero/config.json`.
+
+#### 4. Curator (Phase 4)
+Weekly skill lifecycle management + memory hygiene. Dry-run by default; `--live` applies changes with a pre-run snapshot. **Archive-only** — never deletes.
+
+**4a — Skill curation:**
+- Lifecycle transitions: `active → stale (30d) → archived (90d)`, reactivates on use. Protected/pinned skills exempt.
+- LLM umbrella-building pass (Sonnet): clusters narrow reflection-created skills and merges them into broad class-level umbrellas.
+
+**4b — Memory hygiene:**
+- `LTMemory.md` Recent Sessions capped at 10 — older sessions moved to `memory/LTMemory.archive.md` (still recall-indexed).
+- Auto-memory stale archive: completed project files untouched for 90+ days → `archive/`.
+
+```bash
+python3 scripts/skill_curator.py run             # dry-run (report only)
+python3 scripts/skill_curator.py run --live      # apply (with snapshot)
+python3 scripts/skill_curator.py memory-hygiene --live
+python3 scripts/skill_curator.py snapshot        # manual snapshot
+python3 scripts/skill_curator.py report          # print last report
+```
+
+Report written to `memory/.nero/curator_report.md`.
+
+#### 5. Compaction Guard + Insights (Phase 5)
+- **`PreCompact` hook:** before Claude Code compacts the transcript, injects current priorities, NERO state, skills listing, and today's daily note tail into the compaction context — so compaction never silently drops durable knowledge.
+- **Insights dashboard:** one-command view of the entire self-improvement loop.
+
+```bash
+python3 scripts/insights.py         # full report
+python3 scripts/insights.py --brief # one-page summary
+```
+
 ### Sub-Agents
 
 Create focused sub-agents in `agents/{name}-agent.md`. Each has its own identity and is loaded with `core.md` for context. Use for:
@@ -1075,6 +1185,44 @@ Each project under `/home/nick/dev/` gets its own `.lucentrc` pointing to the sh
 
 ```
 Lucent = memory files + daily notes + agent config + GitHub sync
+       + NERO self-improvement loop
+
+                    ┌─────────────────────────────────────────┐
+                    │  Claude Code session                    │
+                    │                                         │
+  UserPromptSubmit  │  ┌──────────────┐   ┌───────────────┐  │
+  ──────────────── ►│  │ Recall hook  │   │  SessionStart │  │
+  (user message)    │  │ (semantic    │   │  identity     │  │
+                    │  │  embed+fetch)│   │  bundle       │  │
+                    │  └──────┬───────┘   └───────────────┘  │
+                    │         │ <memory-context>              │
+                    │         ▼                               │
+                    │  ┌──────────────────────────────────┐  │
+                    │  │  Claude (Opus / Sonnet / Haiku)  │  │
+                    │  └──────────────────┬───────────────┘  │
+                    │                     │ response          │
+  Stop hook         │  ◄──────────────────┘                  │
+  ────────────────► │  ┌──────────────┐                      │
+  (detached)        │  │ reflect.py   │  Haiku gate           │
+                    │  │ worker       │→ Sonnet writer        │
+                    │  └──────┬───────┘→ proposals inbox     │
+                    │         │                               │
+                    └─────────┼───────────────────────────── ┘
+                              │ writes (propose-mode: inbox first)
+                              ▼
+              ┌───────────────────────────────────────────┐
+              │  memory/  (three-tier + skill library)    │
+              │  ├── LTMemory.md    (live, capped at 10)  │
+              │  ├── LTMemory.archive.md  (older sessions)│
+              │  ├── YYYY-MM-DD.md  (daily notes)         │
+              │  ├── archive/       (compressed notes)    │
+              │  ├── skills/        (NERO skill library)  │
+              │  └── .recall_index.json  (embeddings)     │
+              └───────────────────────────────────────────┘
+                              │
+                    Monday curator (skill_curator.py)
+                    lifecycle + umbrella consolidation
+                    + LTMemory hygiene  (dry-run → live)
 
 Everything lives in lucent/ root and syncs to GitHub via lucent-sync.sh.
 Per-project .lucentrc files wire any dev session into the system.

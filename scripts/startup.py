@@ -309,23 +309,25 @@ def check_ltmemory_completeness() -> CheckResult:
         with open(ltmemory, 'r') as f:
             content = f.read()
 
-        # Check for stub markers that indicate incomplete curation
-        stub_markers = [
-            "UNSUMMARIZED",
-            "to be filled in",
-            "See full details in",
-            "Summary to be filled",
-            "await.*curator",  # regex
-        ]
-
+        # Only check within the Recent Sessions section — the rest of LTMemory.md
+        # describes the summarization system by name and causes false positives.
         import re
-        for marker in stub_markers:
-            if re.search(marker, content, re.IGNORECASE):
-                return CheckResult(
-                    False,
-                    f"LTMemory has incomplete summaries (found '{marker}'). Curator review required.",
-                    fallback_used=False
-                )
+        recent_section = ""
+        if "## Recent Sessions" in content:
+            after_header = content.split("## Recent Sessions", 1)[1]
+            # Stop at the next top-level section if one exists
+            next_section = re.search(r'\n## ', after_header)
+            recent_section = after_header[:next_section.start()] if next_section else after_header
+
+        # Match the full stub line as written by backup_memory.py — specific enough
+        # that it won't appear in descriptions of the system or quoted in summaries.
+        stub_pattern = r'\*\*⚠️ UNSUMMARIZED\*\*\s*—\s*See full details in'
+        if re.search(stub_pattern, recent_section):
+            return CheckResult(
+                False,
+                "LTMemory has incomplete summaries (stub entry found). Curator review required.",
+                fallback_used=False
+            )
 
         # Check for extremely brief sessions (< 3 bullet points = stub)
         import re
@@ -437,6 +439,17 @@ def print_identity_bundle() -> None:
         except Exception as e:
             print(f"[Lucent] (failed to read {rel}: {e})")
         print()
+
+    # NERO Phase 2 — skills library (progressive disclosure: names + descriptions only)
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(LUCENT_ROOT / "scripts"))
+        from skills import get_skills_summary
+        summary = get_skills_summary()
+        if summary:
+            print(summary)
+    except Exception:
+        pass  # Skills unavailable — don't break startup
 
 
 def run(json_mode: bool = False) -> dict:

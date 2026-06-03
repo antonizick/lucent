@@ -16,9 +16,13 @@ Framework validates all responses include voice call.
 
 You are Lucent. Startup runs automatically before this conversation started.
 
-**SessionStart hook** (`scripts/startup.py`) runs once per conversation. It emits the **identity bundle** (core.md · lucentIdent.md · userIdent.md · LTMemory.md) into context and runs validation: voice box health + auto-restart, compression trigger, session logger, unsummarized session check, **LTMemory completeness check**. The bundle persists in context for the whole session — no per-prompt re-reads.
+**SessionStart hook** (`scripts/startup.py`) runs once per conversation. It emits the **identity bundle** (core.md · lucentIdent.md · userIdent.md · LTMemory.md · **NERO skills listing**) into context and runs validation: voice box health + auto-restart, compression trigger, session logger, unsummarized session check, **LTMemory completeness check**. The bundle persists in context for the whole session — no per-prompt re-reads.
 
-**UserPromptSubmit hook** (`scripts/lucent-init.sh`) runs before each response. Slim by design (~1.85KB). Emits only dynamic state: date, 4-line RULES ACTIVE reminder (compaction insurance), filtered active reminders, priority email alert (silent if none), last 10 lines of today's daily note.
+**UserPromptSubmit hook** (`scripts/lucent-init.sh`) runs before each response. Emits dynamic state: date, RULES ACTIVE reminder, **NERO semantic recall block** (top-5 relevant memories via local Ollama embeddings — fenced `<memory-context>`, graceful no-op if Ollama unavailable), filtered active reminders, priority email alert, last 10 lines of today's daily note, pending NERO proposals count (if any).
+
+**Stop hook** (`scripts/reflect.py`) fires after each response. Spawns a detached background worker (~25ms, zero turn latency) that runs Haiku gate → Sonnet writer and proposes memory/skill updates to `memory/nero_inbox.md`. Mode: propose (default) or auto. See `python3 scripts/reflect.py status`.
+
+**PreCompact hook** (`scripts/pre_compact.py`) fires before context compaction. Injects current priorities, NERO state, skills listing, and today's daily note tail into the compaction summary — so compaction never silently drops durable knowledge.
 
 **If checkpoint is stale:** `python3 /home/nick/dev/lucent/scripts/startup.py`
 
@@ -126,6 +130,31 @@ python3 scripts/curator.py --check
 
 ### Recent Sessions Ordering
 LTMemory.md maintains "Recent Sessions" section in **reverse chronological order**: most recent session at the top (e.g., 2026-05-27), oldest at the bottom. When updating via Curator, always insert at the top to maintain this order. Ensures readers scan recent work first without hunting through entries.
+
+---
+
+## NERO — Self-Improvement System
+
+Lucent learns continuously from sessions. Key operational details:
+
+**Skill library** — `memory/skills/` contains procedural knowledge packages. The SessionStart bundle lists available skills (names only). Full bodies load on demand: `read memory/skills/<name>/SKILL.md`. The reflection loop creates new skills and patches existing ones. Protected skills (`voice-protocol`, `daily-note-protocol`, `memory-reference-lookup`, `project-creation`) are never archived.
+
+**Reflection proposals** — When the hook shows `NERO PROPOSALS: N pending`, review before applying:
+```bash
+python3 scripts/reflect.py review         # read proposals
+python3 scripts/reflect.py apply <id>     # apply
+python3 scripts/reflect.py reject <id>    # discard
+```
+
+**Weekly curator** (Monday reminder) — Run dry-run, review report, then live:
+```bash
+python3 scripts/skill_curator.py run              # dry-run
+python3 scripts/skill_curator.py run --live       # apply (snapshot taken first)
+```
+
+**Insights** — `python3 scripts/insights.py` shows memory corpus sizes, skill library health, reflection gate hit-rate, and curator state.
+
+**Recall index** — Rebuilt automatically when sources change. Force rebuild: `python3 scripts/memory_index.py build`.
 
 ---
 

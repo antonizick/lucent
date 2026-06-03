@@ -6,6 +6,7 @@
 # startup.py (see print_identity_bundle). This per-prompt hook handles only
 # dynamic state that changes between turns:
 #   - Date + active rules reminder (compaction insurance)
+#   - NERO Phase 1: semantic recall (relevant memories injected as fenced block)
 #   - Active reminders (filtered)
 #   - Priority email alert
 #   - Last 10 lines of today's daily note
@@ -14,6 +15,10 @@
 LUCENT_DIR="/home/nick/dev/lucent"
 TODAY=$(date +%Y-%m-%d)
 NOTE="$LUCENT_DIR/memory/$TODAY.md"
+
+# Read hook stdin ONCE — contains Claude Code UserPromptSubmit JSON payload
+# (has the user's message; passed to recall script below)
+HOOK_STDIN=$(cat)
 
 if [[ ! -f "$NOTE" ]]; then
   printf "# %s\n\nSession started.\n" "$TODAY" > "$NOTE"
@@ -28,6 +33,16 @@ cat <<EOF
 [Lucent] 3. Text — respond in Claude Code.
 [Lucent] Non-negotiable. Framework validates.
 EOF
+
+# NERO Phase 1 — semantic recall: inject relevant memories as a fenced block.
+# Runs with a 15s wall-clock timeout so a slow/unavailable Ollama never stalls.
+# Any failure (Ollama down, index missing, script error) produces empty output —
+# the hook continues normally. 100% reliability: this is purely additive.
+RECALL=$(echo "$HOOK_STDIN" | timeout 15 python3 "$LUCENT_DIR/scripts/memory_recall.py" 2>/dev/null)
+if [[ -n "$RECALL" ]]; then
+  echo ""
+  echo "$RECALL"
+fi
 
 echo ""
 echo "[Lucent] === ACTIVE REMINDERS ==="
@@ -44,6 +59,14 @@ echo ""
 echo "[Lucent] === TODAY'S SESSION LOG (last 10 lines) ==="
 tail -n 10 "$NOTE"
 echo ""
+
+# NERO Phase 3 — surface pending self-improvement proposals (silent if none).
+NERO_PENDING=$(python3 "$LUCENT_DIR/scripts/reflect.py" status 2>/dev/null | grep -oP 'pending : \K[0-9]+' || echo 0)
+if [[ "$NERO_PENDING" =~ ^[0-9]+$ ]] && [[ "$NERO_PENDING" -gt 0 ]]; then
+  echo "[Lucent] === NERO PROPOSALS: $NERO_PENDING pending ==="
+  echo "[Lucent] Reflection suggested $NERO_PENDING memory/skill update(s). Review: memory/nero_inbox.md (or reflect.py review)"
+  echo ""
+fi
 
 # Startup readiness marker — one-shot acknowledgment after SessionStart finishes.
 MARKER_FILE=$(ls -1 "$LUCENT_DIR/memory/.startup_ready_"*.txt 2>/dev/null | head -1)

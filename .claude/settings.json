@@ -30,6 +30,21 @@
           {
             "type": "command",
             "command": "python3 /home/nick/dev/lucent/scripts/log_turn_end.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 /home/nick/dev/lucent/scripts/reflect.py"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/nick/dev/lucent/scripts/pre_compact.py"
           }
         ]
       }
