@@ -21,11 +21,12 @@ let lastLogContent = '';
 let fadeTimeout = null;
 let speechEnabled = false;
 let currentAgent = null;  // null = Lucent mode, string = named agent
-let currentLogTab = 'daily';  // 'daily', 'weekly', 'memory', 'reminders', 'security', or 'email'
+let currentLogTab = 'daily';  // 'daily', 'weekly', 'memory', 'reminders', 'insights', or 'email'
 let lastWeeklyContent = '';
 let lastMemoryContent = '';
 let lastRemindersContent = '';
-let lastSecurityContent = '';
+let lastInsightsData = null;
+let insightsInterval = null;
 let lastEmailContent = '';
 let refreshCountdown = 30;
 let refreshTimerInterval = null;
@@ -594,14 +595,6 @@ async function pollForLog() {
                 lastRemindersContent = data.content;
                 logContent.scrollTop = 0;
             }
-        } else if (currentLogTab === 'security') {
-            const response = await fetch('/security/report');
-            const data = await response.json();
-            if (data.content && data.content !== lastSecurityContent) {
-                logContent.textContent = data.content;
-                lastSecurityContent = data.content;
-                logContent.scrollTop = logContent.scrollHeight;
-            }
         } else if (currentLogTab === 'email-search') {
             const response = await fetch('/log/email');
             const data = await response.json();
@@ -648,8 +641,119 @@ function ansiToHtml(text) {
     return html;
 }
 
+// Insights polling — independent 5-minute interval
+async function pollInsights() {
+    try {
+        const response = await fetch('/log/insights');
+        const data = await response.json();
+        const sig = JSON.stringify(data);
+        if (sig !== JSON.stringify(lastInsightsData)) {
+            lastInsightsData = data;
+            logContent.innerHTML = renderInsights(data);
+        }
+    } catch (error) {
+        console.error('Error polling insights:', error);
+    }
+}
+
+// ── NERO Insights rendering ──────────────────────────────────
+
+function insightsRow(label, value) {
+    return `<div class="insights-row"><span class="insights-label">${label}</span><span class="insights-value">${value}</span></div>`;
+}
+
+function insightsSection(title, rows) {
+    return `<div class="insights-section"><div class="insights-sechdr">${title}</div>${rows.join('')}</div>`;
+}
+
+function renderInsights(data) {
+    if (data.error) {
+        return `<div class="insights-panel"><div class="insights-err">Error: ${data.error}</div></div>`;
+    }
+    const { corpus, skills, reflection, curator } = data;
+    const now = new Date().toLocaleTimeString();
+    let h = `<div class="insights-panel">`;
+    h += `<div class="insights-ts">NERO SELF-IMPROVEMENT INSIGHTS — ${now}</div>`;
+
+    // Memory Corpus
+    h += insightsSection('MEMORY CORPUS', [
+        insightsRow('LTMemory.md',       `${corpus.ltmemory.lines} lines · ${corpus.ltmemory.size_kb} KB`),
+        insightsRow('LTMemory.archive',  `${corpus.ltmemory_archive.lines} lines · ${corpus.ltmemory_archive.size_kb} KB`),
+        insightsRow('Auto-memory',       `${corpus.auto_memory_files} files · ${corpus.auto_memory_lines} lines`),
+        insightsRow('Daily notes (7d)',  `${corpus.daily_notes_7d} files · ${corpus.daily_lines_7d} lines`),
+        insightsRow('Recall index',      `${corpus.recall_index_chunks} chunks`),
+    ]);
+
+    // Skill Library
+    if (skills.error) {
+        h += insightsSection('SKILL LIBRARY', [`<div class="insights-err">Error: ${skills.error}</div>`]);
+    } else {
+        const rows = [
+            insightsRow('Live skills',  `<span class="insights-hi">${skills.total_live}</span>`),
+            insightsRow('Protected',    skills.protected_count),
+            insightsRow('Archived',     skills.archived),
+        ];
+        if (skills.by_state && Object.keys(skills.by_state).length) {
+            const s = Object.entries(skills.by_state).map(([k,v]) => `${k}: ${v}`).join('  ');
+            rows.push(insightsRow('By state', s));
+        }
+        if (skills.top_used && skills.top_used.length) {
+            rows.push(`<div class="insights-subhdr">Top Used</div>`);
+            skills.top_used.forEach(s => rows.push(insightsRow(`&nbsp;&nbsp;${s.slug}`, `${s.uses} uses · ${s.last || '—'}`)));
+        }
+        h += insightsSection('SKILL LIBRARY', rows);
+    }
+
+    // Reflection Loop
+    if (reflection.error) {
+        h += insightsSection('REFLECTION LOOP', [`<div class="insights-err">Error: ${reflection.error}</div>`]);
+    } else {
+        const pending = (reflection.by_status || {}).pending || 0;
+        const rows = [
+            insightsRow('Status',      `<span class="${reflection.enabled ? 'insights-ok' : 'insights-warn'}">${reflection.enabled ? '✓ enabled' : '✗ disabled'} &nbsp;(${reflection.mode} mode)</span>`),
+            insightsRow('Last run',    reflection.last_run),
+            insightsRow('Gate',        `${reflection.gate_hit_rate} &nbsp;(${reflection.gate_yes} yes / ${reflection.gate_no} no)`),
+            insightsRow('Proposals',   reflection.proposals_total),
+        ];
+        if (pending > 0) {
+            rows.push(insightsRow('Pending review', `<span class="insights-warn">⚡ ${pending} — reflect.py review</span>`));
+        }
+        if (reflection.by_status && Object.keys(reflection.by_status).length) {
+            const s = Object.entries(reflection.by_status).map(([k,v]) => `${k}: ${v}`).join('  ');
+            rows.push(insightsRow('By status', s));
+        }
+        if (reflection.by_type && Object.keys(reflection.by_type).length) {
+            const s = Object.entries(reflection.by_type).map(([k,v]) => `${k}: ${v}`).join('  ');
+            rows.push(insightsRow('By type', s));
+        }
+        h += insightsSection('REFLECTION LOOP', rows);
+    }
+
+    // Curator
+    if (curator.error) {
+        h += insightsSection('CURATOR', [`<div class="insights-err">Error: ${curator.error}</div>`]);
+    } else {
+        h += insightsSection('CURATOR', [
+            insightsRow('Last run',          curator.last_run),
+            insightsRow('Live sessions',     curator.ltmemory_live_sessions),
+            insightsRow('Archived sessions', curator.ltmemory_archive_sessions),
+        ]);
+    }
+
+    h += `</div>`;
+    return h;
+}
+
 // Switch log tab
 function switchLogTab(tab) {
+    // Stop insights interval when leaving that tab
+    if (currentLogTab === 'insights' && tab !== 'insights') {
+        if (insightsInterval) {
+            clearInterval(insightsInterval);
+            insightsInterval = null;
+        }
+    }
+
     currentLogTab = tab;
 
     // Clear cache for this tab to force a fresh fetch
@@ -661,8 +765,8 @@ function switchLogTab(tab) {
         lastMemoryContent = '';
     } else if (tab === 'reminders') {
         lastRemindersContent = '';
-    } else if (tab === 'security') {
-        lastSecurityContent = '';
+    } else if (tab === 'insights') {
+        lastInsightsData = null;
     } else if (tab === 'email-search') {
         // Clear cache and load priority emails (email monitor) and poll PST status
         lastEmailContent = '';
@@ -681,7 +785,7 @@ function switchLogTab(tab) {
     document.getElementById('logLabelWeekly').classList.toggle('hidden', tab !== 'weekly');
     document.getElementById('logLabelMemory').classList.toggle('hidden', tab !== 'memory');
     document.getElementById('logLabelReminders').classList.toggle('hidden', tab !== 'reminders');
-    document.getElementById('logLabelSecurity').classList.toggle('hidden', tab !== 'security');
+    document.getElementById('logLabelInsights').classList.toggle('hidden', tab !== 'insights');
     document.getElementById('logLabelEmailSearch').classList.toggle('hidden', tab !== 'email-search');
 
     // Show/hide appropriate panels
@@ -702,8 +806,15 @@ function switchLogTab(tab) {
         if (emailSearchPanel) emailSearchPanel.classList.add('hidden');
     }
 
-    // Clear content and poll immediately (but not for email-search which is manual)
-    if (tab !== 'email-search') {
+    // Clear content and poll immediately
+    if (tab === 'email-search') {
+        // email-search is manual — no auto-poll
+    } else if (tab === 'insights') {
+        logContent.innerHTML = '<div class="insights-panel"><div class="insights-ts">Loading...</div></div>';
+        lastInsightsData = null;
+        pollInsights();
+        insightsInterval = setInterval(pollInsights, 300000); // 5 minutes
+    } else {
         logContent.textContent = 'Loading...';
         pollForLog();
     }

@@ -1034,6 +1034,32 @@ async def services_health():
 
     return {"services": services}
 
+@app.get("/log/insights")
+async def get_insights():
+    """Run insights.py --json and return NERO self-improvement data."""
+    lucent_root = Path(__file__).parent.parent
+    insights_script = lucent_root / "scripts" / "insights.py"
+    if not insights_script.exists():
+        return {"error": "insights.py not found"}
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: subprocess.run(
+                ["python3", str(insights_script), "--json"],
+                capture_output=True, text=True, timeout=15,
+                cwd=str(lucent_root)
+            )
+        )
+        if result.returncode != 0:
+            return {"error": result.stderr[:500] or "insights.py failed"}
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        return {"error": f"JSON parse error: {e}"}
+    except Exception as e:
+        logger.error(f"Error running insights: {e}")
+        return {"error": str(e)}
+
 @app.get("/security/report")
 async def security_report():
     """Get the latest security audit report as text."""
