@@ -801,6 +801,7 @@ function renderProposals(data) {
             const typeClass = `ptype-${p.type.replace(/_/g, '-')}`;
             const preview = p.content.length > 300 ? p.content.substring(0, 300) + '…' : p.content;
             const escaped = preview.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            const contentEscaped = p.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
             h += `<div class="proposal-card" data-id="${p.id}">`;
             h += `<div class="proposal-header">`;
             h += `  <span class="proposal-type ${typeClass}">${p.type}</span>`;
@@ -808,10 +809,20 @@ function renderProposals(data) {
             h += `  <span class="proposal-id">#${p.id}</span>`;
             h += `</div>`;
             h += `<div class="proposal-reason">${p.reason.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
-            h += `<pre class="proposal-content">${escaped}</pre>`;
+            h += `<div id="pcontent-${p.id}" class="proposal-content-container">`;
+            h += `  <pre class="proposal-content">${escaped}</pre>`;
+            h += `</div>`;
             h += `<div class="proposal-actions">`;
+            h += `  <button class="proposal-btn refine-btn" onclick="toggleRefineMode('${p.id}', ${JSON.stringify(contentEscaped)})">Refine</button>`;
             h += `  <button class="proposal-btn apply-btn" onclick="proposalAction('apply','${p.id}')">Apply</button>`;
             h += `  <button class="proposal-btn reject-btn" onclick="proposalAction('reject','${p.id}')">Reject</button>`;
+            h += `</div>`;
+            h += `<div id="refine-editor-${p.id}" class="refine-editor" style="display:none;">`;
+            h += `  <textarea id="refine-textarea-${p.id}" class="refine-textarea">${contentEscaped}</textarea>`;
+            h += `  <div class="refine-actions">`;
+            h += `    <button class="proposal-btn save-btn" onclick="saveRefinement('${p.id}')">Save</button>`;
+            h += `    <button class="proposal-btn cancel-btn" onclick="toggleRefineMode('${p.id}')">Cancel</button>`;
+            h += `  </div>`;
             h += `</div>`;
             h += `<div class="proposal-msg" id="pmsg-${p.id}"></div>`;
             h += `</div>`;
@@ -842,6 +853,61 @@ async function proposalAction(action, id) {
         }
     } catch (e) {
         if (msgEl) { msgEl.textContent = e.message; msgEl.className = 'proposal-msg proposal-err'; }
+    }
+}
+
+function toggleRefineMode(id, currentContent) {
+    const contentDiv = document.getElementById(`pcontent-${id}`);
+    const editorDiv = document.getElementById(`refine-editor-${id}`);
+    const actionsDiv = document.querySelector(`.proposal-card[data-id="${id}"] .proposal-actions`);
+
+    if (editorDiv.style.display === 'none') {
+        contentDiv.style.display = 'none';
+        editorDiv.style.display = 'block';
+        actionsDiv.style.opacity = '0.5';
+        actionsDiv.style.pointerEvents = 'none';
+        const textarea = document.getElementById(`refine-textarea-${id}`);
+        textarea.focus();
+    } else {
+        contentDiv.style.display = 'block';
+        editorDiv.style.display = 'none';
+        actionsDiv.style.opacity = '1';
+        actionsDiv.style.pointerEvents = 'auto';
+    }
+}
+
+async function saveRefinement(id) {
+    const textarea = document.getElementById(`refine-textarea-${id}`);
+    const newContent = textarea.value.trim();
+    const msgEl = document.getElementById(`pmsg-${id}`);
+
+    if (!newContent) {
+        if (msgEl) { msgEl.textContent = 'Content cannot be empty'; msgEl.className = 'proposal-msg proposal-err'; }
+        return;
+    }
+
+    if (msgEl) { msgEl.textContent = 'Saving refinement…'; msgEl.className = 'proposal-msg'; }
+
+    try {
+        const res = await fetch(`/reflect/refine/${id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: newContent })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            toggleRefineMode(id);
+            if (msgEl) { msgEl.textContent = 'Refinement saved'; msgEl.className = 'proposal-msg proposal-ok'; }
+            // Update the preview
+            const contentDiv = document.getElementById(`pcontent-${id}`);
+            const preview = newContent.length > 300 ? newContent.substring(0, 300) + '…' : newContent;
+            const escaped = preview.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            contentDiv.innerHTML = `<pre class="proposal-content">${escaped}</pre>`;
+        } else {
+            if (msgEl) { msgEl.textContent = data.msg || 'Failed to save'; msgEl.className = 'proposal-msg proposal-err'; }
+        }
+    } catch (e) {
+        if (msgEl) { msgEl.textContent = 'Error: ' + e.message; msgEl.className = 'proposal-msg proposal-err'; }
     }
 }
 

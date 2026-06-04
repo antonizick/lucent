@@ -754,6 +754,15 @@ Ported from Hermes' `background_review.py` — including the critical **anti-pat
 
 Starts in **propose mode**: suggestions land in `memory/nero_inbox.md` for review before anything is written. Switch to `auto` once trusted.
 
+**UI Integration (Insights Tab):**
+All pending proposals automatically surface in the **PROPOSALS** section of the Insights tab with:
+- **Color-coded type badges** (memory_note, skill_patch, skill_create, skill_support_file)
+- **Proposal details** (target, ID, reason, content preview)
+- **Inline actions**: Refine · Apply · Reject
+- **Refine mode** — edit proposal content in a textarea before applying
+- **Auto-refresh** when Insights tab is active (no manual polling needed)
+
+**CLI (still available):**
 ```bash
 python3 scripts/reflect.py status              # state + pending count
 python3 scripts/reflect.py review              # read pending proposals

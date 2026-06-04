@@ -214,6 +214,10 @@ class AgentSwitchRequest(BaseModel):
     """Request to switch the current active agent."""
     agent: str
 
+class RefineRequest(BaseModel):
+    """Request to refine a proposal's content."""
+    content: str
+
 @app.get("/")
 async def root():
     """Serve index.html"""
@@ -1132,6 +1136,46 @@ async def reject_reflect_proposal(proposal_id: str):
         )
         ok = result.returncode == 0
         return {"ok": ok, "msg": (result.stdout or result.stderr).strip()}
+    except Exception as e:
+        return {"ok": False, "msg": str(e)}
+
+
+@app.post("/reflect/refine/{proposal_id}")
+async def refine_reflect_proposal(proposal_id: str, req: RefineRequest):
+    """Update a pending proposal's content before applying."""
+    lucent_root = Path(__file__).parent.parent
+    proposals_path = lucent_root / "memory" / ".nero" / "proposals.jsonl"
+
+    if not proposals_path.exists():
+        return {"ok": False, "msg": "No proposals found"}
+
+    new_content = req.content.strip()
+    if not new_content:
+        return {"ok": False, "msg": "Content cannot be empty"}
+
+    try:
+        records = []
+        found = False
+        for line in proposals_path.read_text().splitlines():
+            if not line.strip():
+                continue
+            try:
+                r = json.loads(line)
+                if r.get("id") == proposal_id and r.get("status") == "pending":
+                    r["action"]["content"] = new_content
+                    found = True
+                records.append(r)
+            except Exception:
+                continue
+
+        if not found:
+            return {"ok": False, "msg": f"Proposal {proposal_id} not found or not pending"}
+
+        with open(proposals_path, "w") as f:
+            for r in records:
+                f.write(json.dumps(r) + "\n")
+
+        return {"ok": True, "msg": f"Refined proposal {proposal_id}"}
     except Exception as e:
         return {"ok": False, "msg": str(e)}
 
