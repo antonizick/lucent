@@ -356,6 +356,26 @@ def check_ltmemory_completeness() -> CheckResult:
         return CheckResult(True, f"LTMemory check error (non-fatal): {e}")
 
 
+def check_ltmemory_size() -> CheckResult:
+    """Non-blocking size warning — fires when LTMemory.md grows past threshold."""
+    ltmemory = LUCENT_ROOT / "memory" / "LTMemory.md"
+    if not ltmemory.exists():
+        return CheckResult(True, "LTMemory.md not found")
+    try:
+        size_bytes = ltmemory.stat().st_size
+        line_count = ltmemory.read_text().count('\n')
+        # Target: ~5 tight sessions + durable knowledge ≈ 12-15KB. Warn past 25KB/300 lines.
+        if size_bytes > 25_000 or line_count > 300:
+            return CheckResult(
+                False,
+                f"LTMemory.md is large ({size_bytes // 1000}KB, {line_count} lines). "
+                "Run: python3 scripts/curator.py --prune"
+            )
+        return CheckResult(True, f"LTMemory.md OK ({size_bytes // 1000}KB, {line_count} lines)")
+    except Exception as e:
+        return CheckResult(True, f"LTMemory size check skipped: {e}")
+
+
 def is_already_complete() -> bool:
     """Return True if today's startup checkpoint is still valid."""
     try:
@@ -500,6 +520,7 @@ def run(json_mode: bool = False) -> dict:
     logger_result = init_session_logger()
     unsummarized_result = check_unsummarized_sessions()
     ltmemory_result = check_ltmemory_completeness()
+    ltmemory_size_result = check_ltmemory_size()
 
     speak_thread.join(timeout=6)
 
@@ -514,6 +535,7 @@ def run(json_mode: bool = False) -> dict:
     checks["session_logger"] = {"ok": logger_result.ok, "reason": logger_result.reason}
     checks["unsummarized_sessions"] = {"ok": unsummarized_result.ok, "reason": unsummarized_result.reason}
     checks["ltmemory_completeness"] = {"ok": ltmemory_result.ok, "reason": ltmemory_result.reason}
+    checks["ltmemory_size"] = {"ok": ltmemory_size_result.ok, "reason": ltmemory_size_result.reason}
     checks["daily_announcements"] = {"ok": announcements_result.ok, "reason": announcements_result.reason}
 
     if vb_result.fallback_used:
@@ -552,6 +574,10 @@ def run(json_mode: bool = False) -> dict:
         log_to_activity(f"FAILURE: {ltmemory_result.reason}")
         log_to_daily_note(f"STARTUP FAILURE: {ltmemory_result.reason}")
         log_to_daily_note(f"→ Run: python3 scripts/curator.py --days 14")
+
+    if not ltmemory_size_result.ok:
+        warnings.append(f"LTMemory size: {ltmemory_size_result.reason}")
+        log_to_activity(f"WARNING: {ltmemory_size_result.reason}")
 
     degraded = bool(failures or warnings or fallbacks_used)
     status = "STARTUP_DEGRADED" if degraded else "STARTUP_OK"

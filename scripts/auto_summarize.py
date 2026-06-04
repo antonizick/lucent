@@ -29,15 +29,21 @@ MAX_ARCHIVE_CHARS = 60_000  # ~15K tokens — well within Haiku's context
 
 SUMMARY_PROMPT = """You are summarizing a day's work log for Nick's personal productivity system (Lucent).
 
-Read the archive below and write a concise, comprehensive summary for LTMemory.md.
+This summary is loaded into Lucent's context at the START of every future conversation,
+so it must be SHORT and carry only what stays relevant beyond today. Fine-grained detail
+(specific bug fixes, commit hashes, line numbers) is already preserved in the daily archive
+and is retrievable on demand via semantic recall — do NOT duplicate it here.
+
+Read the archive below and write a TIGHT summary for LTMemory.md.
 
 FORMAT RULES:
-- Group items by project using **Project Name:** headers
-- Each item is a bullet: - ✅ Brief description of what was built, fixed, or decided
-- 15-30 bullets total (more for busy days, fewer for quiet ones)
-- Focus on: features shipped, bugs fixed, architecture decisions, key lessons
-- Include commit hashes when mentioned (e.g. commit abc1234)
-- SKIP: raw log lines ([turn-end], session start/end markers, backup lines)
+- Group items by project using **Project Name:** headers (only projects with real progress)
+- Each item is a bullet: - ✅ One durable outcome — what shipped, what was decided, what was learned
+- 5-8 bullets TOTAL across all projects (hard cap — fewer for quiet days)
+- Altitude test for each bullet: "Will this still matter to a future session a week from now?"
+  If it's a one-off fix with no lasting lesson, OMIT it — recall will surface it if needed.
+- Prefer: features shipped, architecture/design decisions, lasting lessons, project status changes
+- OMIT: routine bug fixes, commit hashes, file/line references, raw log lines, blow-by-blow detail
 - Do NOT include "### Session YYYY-MM-DD" — just the grouped bullet content
 
 ARCHIVE:
@@ -97,7 +103,7 @@ def call_haiku(archive_content: str, api_key: str) -> str | None:
         client = anthropic.Anthropic(api_key=api_key)
         response = client.messages.create(
             model=HAIKU_MODEL,
-            max_tokens=2048,
+            max_tokens=700,  # ~5-8 tight bullets; hard ceiling reinforcing the prompt's brevity rule
             messages=[{
                 "role": "user",
                 "content": SUMMARY_PROMPT.format(archive_content=archive_content)
