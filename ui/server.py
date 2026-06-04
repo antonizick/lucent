@@ -1060,6 +1060,82 @@ async def get_insights():
         logger.error(f"Error running insights: {e}")
         return {"error": str(e)}
 
+@app.get("/reflect/proposals")
+async def get_reflect_proposals():
+    """Return all pending NERO reflection proposals."""
+    lucent_root = Path(__file__).parent.parent
+    proposals_path = lucent_root / "memory" / ".nero" / "proposals.jsonl"
+    if not proposals_path.exists():
+        return {"proposals": [], "counts": {"pending": 0, "applied": 0, "rejected": 0}}
+    proposals = []
+    counts = {"pending": 0, "applied": 0, "rejected": 0, "failed": 0}
+    for line in proposals_path.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            r = json.loads(line)
+            status = r.get("status", "pending")
+            counts[status] = counts.get(status, 0) + 1
+            if status == "pending":
+                a = r.get("action", {})
+                proposals.append({
+                    "id": r.get("id"),
+                    "ts": r.get("ts", ""),
+                    "type": a.get("type", "?"),
+                    "reason": a.get("reason", ""),
+                    "target": a.get("skill") or a.get("slug") or a.get("path") or "—",
+                    "content": a.get("content", ""),
+                    "name": a.get("name", ""),
+                    "description": a.get("description", ""),
+                })
+        except Exception:
+            pass
+    return {"proposals": proposals, "counts": counts}
+
+
+@app.post("/reflect/apply/{proposal_id}")
+async def apply_reflect_proposal(proposal_id: str):
+    """Apply a pending NERO proposal by id."""
+    lucent_root = Path(__file__).parent.parent
+    reflect_script = lucent_root / "scripts" / "reflect.py"
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: subprocess.run(
+                ["python3", str(reflect_script), "apply", proposal_id],
+                capture_output=True, text=True, timeout=30,
+                cwd=str(lucent_root)
+            )
+        )
+        ok = result.returncode == 0
+        return {"ok": ok, "msg": (result.stdout or result.stderr).strip()}
+    except Exception as e:
+        return {"ok": False, "msg": str(e)}
+
+
+@app.post("/reflect/reject/{proposal_id}")
+async def reject_reflect_proposal(proposal_id: str):
+    """Reject a pending NERO proposal by id."""
+    lucent_root = Path(__file__).parent.parent
+    reflect_script = lucent_root / "scripts" / "reflect.py"
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: subprocess.run(
+                ["python3", str(reflect_script), "reject", proposal_id],
+                capture_output=True, text=True, timeout=15,
+                cwd=str(lucent_root)
+            )
+        )
+        ok = result.returncode == 0
+        return {"ok": ok, "msg": (result.stdout or result.stderr).strip()}
+    except Exception as e:
+        return {"ok": False, "msg": str(e)}
+
+
 @app.get("/security/report")
 async def security_report():
     """Get the latest security audit report as text."""

@@ -27,6 +27,7 @@ let lastMemoryContent = '';
 let lastRemindersContent = '';
 let lastInsightsData = null;
 let insightsInterval = null;
+let lastProposalsData = null;
 let lastEmailContent = '';
 let refreshCountdown = 30;
 let refreshTimerInterval = null;
@@ -651,6 +652,7 @@ async function pollInsights() {
             lastInsightsData = data;
             logContent.innerHTML = renderInsights(data);
         }
+        await loadProposals();
     } catch (error) {
         console.error('Error polling insights:', error);
     }
@@ -740,6 +742,9 @@ function renderInsights(data) {
         ]);
     }
 
+    // Proposals panel (loaded separately via loadProposals())
+    h += `<div id="proposalsPanel" class="proposals-panel-placeholder"></div>`;
+
     // Skills Listing
     if (skills.all_skills && skills.all_skills.length > 0) {
         const skillsRows = [];
@@ -756,6 +761,88 @@ function renderInsights(data) {
 
     h += `</div>`;
     return h;
+}
+
+// ── NERO Proposals panel ──────────────────────────────────────
+
+async function loadProposals() {
+    const panel = document.getElementById('proposalsPanel');
+    if (!panel) return;
+    try {
+        const res = await fetch('/reflect/proposals');
+        const data = await res.json();
+        if (JSON.stringify(data) === JSON.stringify(lastProposalsData)) return;
+        lastProposalsData = data;
+        panel.outerHTML = renderProposals(data);
+    } catch (e) {
+        const p = document.getElementById('proposalsPanel');
+        if (p) p.innerHTML = `<div class="insights-err">Failed to load proposals: ${e.message}</div>`;
+    }
+}
+
+function renderProposals(data) {
+    const { proposals, counts } = data;
+    const pending = counts.pending || 0;
+    const badge = pending > 0 ? `<span class="proposals-badge">${pending}</span>` : '';
+    let h = `<div id="proposalsPanel" class="insights-section proposals-section">`;
+    h += `<div class="insights-sechdr">PROPOSALS ${badge}</div>`;
+
+    // Counts row
+    const parts = [];
+    if (counts.pending)  parts.push(`<span class="insights-warn">${counts.pending} pending</span>`);
+    if (counts.applied)  parts.push(`<span class="insights-ok">${counts.applied} applied</span>`);
+    if (counts.rejected) parts.push(`<span style="color:#888">${counts.rejected} rejected</span>`);
+    if (parts.length) h += `<div class="proposals-counts">${parts.join(' &nbsp;·&nbsp; ')}</div>`;
+
+    if (!proposals.length) {
+        h += `<div class="proposals-empty">No pending proposals.</div>`;
+    } else {
+        proposals.forEach(p => {
+            const typeClass = `ptype-${p.type.replace(/_/g, '-')}`;
+            const preview = p.content.length > 300 ? p.content.substring(0, 300) + '…' : p.content;
+            const escaped = preview.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            h += `<div class="proposal-card" data-id="${p.id}">`;
+            h += `<div class="proposal-header">`;
+            h += `  <span class="proposal-type ${typeClass}">${p.type}</span>`;
+            h += `  <span class="proposal-target">${p.target}</span>`;
+            h += `  <span class="proposal-id">#${p.id}</span>`;
+            h += `</div>`;
+            h += `<div class="proposal-reason">${p.reason.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
+            h += `<pre class="proposal-content">${escaped}</pre>`;
+            h += `<div class="proposal-actions">`;
+            h += `  <button class="proposal-btn apply-btn" onclick="proposalAction('apply','${p.id}')">Apply</button>`;
+            h += `  <button class="proposal-btn reject-btn" onclick="proposalAction('reject','${p.id}')">Reject</button>`;
+            h += `</div>`;
+            h += `<div class="proposal-msg" id="pmsg-${p.id}"></div>`;
+            h += `</div>`;
+        });
+    }
+    h += `</div>`;
+    return h;
+}
+
+async function proposalAction(action, id) {
+    const msgEl = document.getElementById(`pmsg-${id}`);
+    const card = document.querySelector(`.proposal-card[data-id="${id}"]`);
+    if (msgEl) { msgEl.textContent = action === 'apply' ? 'Applying…' : 'Rejecting…'; msgEl.className = 'proposal-msg'; }
+    try {
+        const res = await fetch(`/reflect/${action}/${id}`, { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+            if (card) {
+                card.classList.add('proposal-done');
+                card.querySelector('.proposal-actions').innerHTML =
+                    `<span class="${action === 'apply' ? 'insights-ok' : ''}" style="color:${action==='apply'?'#4caf50':'#888'}">${action === 'apply' ? '✓ Applied' : '✗ Rejected'}</span>`;
+            }
+            if (msgEl) { msgEl.textContent = data.msg; msgEl.className = 'proposal-msg proposal-ok'; }
+            // Refresh after short delay
+            setTimeout(() => { lastProposalsData = null; loadProposals(); }, 800);
+        } else {
+            if (msgEl) { msgEl.textContent = data.msg || 'Failed'; msgEl.className = 'proposal-msg proposal-err'; }
+        }
+    } catch (e) {
+        if (msgEl) { msgEl.textContent = e.message; msgEl.className = 'proposal-msg proposal-err'; }
+    }
 }
 
 // Switch log tab
