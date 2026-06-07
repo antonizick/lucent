@@ -938,6 +938,7 @@ function switchLogTab(tab) {
         // Clear cache and load priority emails (email monitor) and poll PST status
         lastEmailContent = '';
         loadEmailMonitor();
+        loadEmailFeedback();
         pollPSTStatus();
     }
 
@@ -1114,6 +1115,12 @@ if (emailSyncBtn) {
     });
 }
 
+// Email feedback refresh button
+const emailFeedbackRefreshBtn = document.getElementById('emailFeedbackRefreshBtn');
+if (emailFeedbackRefreshBtn) {
+    emailFeedbackRefreshBtn.addEventListener('click', () => loadEmailFeedback());
+}
+
 // Load and display high-priority emails (email monitor)
 async function loadEmailMonitor() {
     try {
@@ -1140,6 +1147,146 @@ async function loadEmailMonitor() {
         }
     } catch (error) {
         console.error('Error loading email monitor:', error);
+    }
+}
+
+// ── Email priority feedback / rating review ─────────────────────
+
+function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function loadEmailFeedback() {
+    const list = document.getElementById('emailFeedbackList');
+    if (!list) return;
+    list.innerHTML = '<div class="proposals-empty">Loading…</div>';
+    try {
+        const res = await fetch('/email/feedback/sample?limit=20');
+        const data = await res.json();
+        renderEmailFeedback(data.emails || []);
+    } catch (e) {
+        list.innerHTML = `<div class="insights-err">Failed to load: ${e.message}</div>`;
+    }
+}
+
+function renderEmailFeedback(emails) {
+    const list = document.getElementById('emailFeedbackList');
+    if (!list) return;
+    if (!emails.length) {
+        list.innerHTML = '<div class="proposals-empty">No scored emails to review yet.</div>';
+        return;
+    }
+    let h = '';
+    emails.forEach(e => {
+        const score = (e.score != null) ? Number(e.score).toFixed(1) : '—';
+        h += `<div class="proposal-card email-feedback-card" data-id="${escapeHtml(e.id)}" data-score="${e.score}">`;
+        h += `<div class="proposal-header">`;
+        h += `  <span class="proposal-type ptype-email-score">Score: ${score}/10</span>`;
+        h += `  <span class="proposal-target">${escapeHtml(e.timestamp || 'Unknown')}</span>`;
+        h += `</div>`;
+        h += `<div class="proposal-reason">From: ${escapeHtml(e.from_addr || '(unknown)')}</div>`;
+        h += `<div class="email-feedback-subject">${escapeHtml(e.subject || '(no subject)')}</div>`;
+        h += `<div class="proposal-actions">`;
+        h += `  <button class="proposal-btn apply-btn" onclick="emailFeedbackAction('approve','${escapeHtml(e.id)}')">Approve Rating</button>`;
+        h += `  <button class="proposal-btn refine-btn" onclick="toggleAdjustForm('${escapeHtml(e.id)}')">Adjust Rating</button>`;
+        h += `</div>`;
+        h += `<div id="adjust-editor-${escapeHtml(e.id)}" class="refine-editor" style="display:none;">`;
+        h += `  <div class="adjust-score-row">`;
+        h += `    <label for="adjust-score-${escapeHtml(e.id)}">Correct score (0-10):</label>`;
+        h += `    <input type="number" min="0" max="10" step="0.5" id="adjust-score-${escapeHtml(e.id)}" class="adjust-score-input" value="${score !== '—' ? score : 5.0}">`;
+        h += `  </div>`;
+        h += `  <textarea id="adjust-explain-${escapeHtml(e.id)}" class="refine-textarea" placeholder="Why should this score change? (used to refine the priority guidelines)"></textarea>`;
+        h += `  <div class="refine-actions">`;
+        h += `    <button class="proposal-btn save-btn" onclick="submitAdjustment('${escapeHtml(e.id)}')">Submit</button>`;
+        h += `    <button class="proposal-btn cancel-btn" onclick="toggleAdjustForm('${escapeHtml(e.id)}')">Cancel</button>`;
+        h += `  </div>`;
+        h += `</div>`;
+        h += `<div class="proposal-msg" id="efmsg-${escapeHtml(e.id)}"></div>`;
+        h += `</div>`;
+    });
+    list.innerHTML = h;
+}
+
+function toggleAdjustForm(id) {
+    const editor = document.getElementById(`adjust-editor-${id}`);
+    const card = document.querySelector(`.email-feedback-card[data-id="${id}"]`);
+    const actions = card ? card.querySelector('.proposal-actions') : null;
+    if (!editor) return;
+    const showing = editor.style.display !== 'none';
+    editor.style.display = showing ? 'none' : 'block';
+    if (actions) {
+        actions.style.opacity = showing ? '1' : '0.5';
+        actions.style.pointerEvents = showing ? 'auto' : 'none';
+    }
+    if (!showing) {
+        const textarea = document.getElementById(`adjust-explain-${id}`);
+        if (textarea) textarea.focus();
+    }
+}
+
+function _markFeedbackDone(id, label, color) {
+    const card = document.querySelector(`.email-feedback-card[data-id="${id}"]`);
+    if (!card) return;
+    card.classList.add('proposal-done');
+    const editor = document.getElementById(`adjust-editor-${id}`);
+    if (editor) editor.style.display = 'none';
+    const actions = card.querySelector('.proposal-actions');
+    if (actions) actions.innerHTML = `<span style="color:${color}">${label}</span>`;
+}
+
+async function emailFeedbackAction(action, id) {
+    const msgEl = document.getElementById(`efmsg-${id}`);
+    if (msgEl) { msgEl.textContent = 'Submitting…'; msgEl.className = 'proposal-msg'; }
+    try {
+        const res = await fetch(`/email/feedback/${id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            _markFeedbackDone(id, '✓ Reinforced', '#4caf50');
+            if (msgEl) { msgEl.textContent = data.msg; msgEl.className = 'proposal-msg proposal-ok'; }
+        } else if (msgEl) {
+            msgEl.textContent = data.msg || 'Failed'; msgEl.className = 'proposal-msg proposal-err';
+        }
+    } catch (e) {
+        if (msgEl) { msgEl.textContent = e.message; msgEl.className = 'proposal-msg proposal-err'; }
+    }
+}
+
+async function submitAdjustment(id) {
+    const scoreInput = document.getElementById(`adjust-score-${id}`);
+    const explainInput = document.getElementById(`adjust-explain-${id}`);
+    const msgEl = document.getElementById(`efmsg-${id}`);
+    const corrected_score = parseFloat(scoreInput.value);
+    const explanation = explainInput.value.trim();
+
+    if (isNaN(corrected_score) || corrected_score < 0 || corrected_score > 10) {
+        if (msgEl) { msgEl.textContent = 'Score must be between 0 and 10'; msgEl.className = 'proposal-msg proposal-err'; }
+        return;
+    }
+    if (!explanation) {
+        if (msgEl) { msgEl.textContent = 'Please explain why the rating should change'; msgEl.className = 'proposal-msg proposal-err'; }
+        return;
+    }
+
+    if (msgEl) { msgEl.textContent = 'Submitting…'; msgEl.className = 'proposal-msg'; }
+    try {
+        const res = await fetch(`/email/feedback/${id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'adjust', corrected_score, explanation })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            _markFeedbackDone(id, '✓ Correction submitted', '#00bcd4');
+            if (msgEl) { msgEl.textContent = data.msg; msgEl.className = 'proposal-msg proposal-ok'; }
+        } else if (msgEl) {
+            msgEl.textContent = data.msg || 'Failed'; msgEl.className = 'proposal-msg proposal-err';
+        }
+    } catch (e) {
+        if (msgEl) { msgEl.textContent = e.message; msgEl.className = 'proposal-msg proposal-err'; }
     }
 }
 

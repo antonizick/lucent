@@ -7,7 +7,7 @@ Manages schema, CRUD operations, and full-text search.
 import json
 import logging
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 from uuid import uuid4
@@ -96,6 +96,19 @@ class EmailDatabase:
             )
         """)
 
+        # User feedback on priority scoring (approve/adjust + explanation)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS email_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email_id TEXT NOT NULL,
+                original_score REAL,
+                feedback_type TEXT NOT NULL,
+                corrected_score REAL,
+                explanation TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         # Full-text search index
         cursor.execute("""
             CREATE VIRTUAL TABLE IF NOT EXISTS emails_fts USING fts5(
@@ -109,6 +122,7 @@ class EmailDatabase:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_emails_timestamp ON emails(timestamp)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_emails_from ON emails(from_addr)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_drafts_status ON drafts(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_email_feedback_email ON email_feedback(email_id)")
 
         self.connection.commit()
         logger.info("Database schema initialized")
@@ -299,6 +313,42 @@ class EmailDatabase:
             UPDATE emails SET sender_priority_score = ?
             WHERE id = ?
         """, (score, email_id))
+
+        self.connection.commit()
+
+    def get_recent_scored_emails(self, limit: int = 20) -> List[dict]:
+        """Most recently scored emails for the feedback review UI."""
+        cursor = self.connection.cursor()
+
+        cursor.execute("""
+            SELECT id, from_addr, subject, timestamp, sender_priority_score
+            FROM emails
+            WHERE sender_priority_score IS NOT NULL
+            ORDER BY timestamp DESC
+            LIMIT ?
+        """, (limit,))
+
+        return [
+            {
+                "id": row["id"],
+                "from_addr": row["from_addr"],
+                "subject": row["subject"],
+                "timestamp": row["timestamp"],
+                "score": row["sender_priority_score"],
+            }
+            for row in cursor.fetchall()
+        ]
+
+    def record_email_feedback(self, email_id: str, original_score: float,
+                              feedback_type: str, corrected_score: float = None,
+                              explanation: str = None) -> None:
+        """Record approve/adjust feedback on an email's priority score."""
+        cursor = self.connection.cursor()
+
+        cursor.execute("""
+            INSERT INTO email_feedback (email_id, original_score, feedback_type, corrected_score, explanation)
+            VALUES (?, ?, ?, ?, ?)
+        """, (email_id, original_score, feedback_type, corrected_score, explanation))
 
         self.connection.commit()
 
@@ -525,13 +575,17 @@ class EmailDatabase:
         """Convert database row to EmailMetadata."""
         to_addrs = json.loads(row["to_addrs"]) if row["to_addrs"] else []
 
+        def _parse_ts(s):
+            ts = datetime.fromisoformat(s)
+            return ts if ts.tzinfo is not None else ts.replace(tzinfo=timezone.utc)
+
         return EmailMetadata(
             id=row["id"],
             backend=row["backend"],
             from_addr=row["from_addr"],
             to_addrs=to_addrs,
             subject=row["subject"],
-            timestamp=datetime.fromisoformat(row["timestamp"]),
+            timestamp=_parse_ts(row["timestamp"]),
             snippet=row["snippet"],
             read=bool(row["read"]),
             flagged=bool(row["flagged"]),

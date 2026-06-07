@@ -404,6 +404,8 @@ def apply_action(action: dict) -> tuple[bool, str]:
             return _apply_skill_support_file(action)
         if atype == "skill_create":
             return _apply_skill_create(action)
+        if atype == "email_rule_update":
+            return _apply_email_rule_update(action)
         return False, f"unknown action type: {atype}"
     except Exception as e:
         return False, f"apply failed: {e}"
@@ -485,6 +487,20 @@ def _apply_skill_create(a: dict) -> tuple[bool, str]:
         body = header + body
     (skill_dir / "SKILL.md").write_text(body + "\n")
     return True, f"created skill {slug}"
+
+
+def _apply_email_rule_update(a: dict) -> tuple[bool, str]:
+    """Append a feedback-derived correction note to priority_guidelines.md."""
+    guidelines = MEMORY_DIR / "email" / "priority_guidelines.md"
+    if not guidelines.exists():
+        return False, "priority_guidelines.md not found"
+    content = a.get("content", "").strip()
+    if not content:
+        return False, "missing content"
+    block = f"\n\n### Feedback Correction — {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n{content}\n"
+    with open(guidelines, "a") as f:
+        f.write(block)
+    return True, "appended correction to priority_guidelines.md"
 
 
 # ===========================================================================

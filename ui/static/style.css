@@ -1051,6 +1051,45 @@ body {
     background-color: var(--accent-light);
 }
 
+.email-feedback-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto;
+    max-height: 360px;
+}
+
+.email-feedback-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.email-feedback-subject {
+    font-size: 11px;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+    opacity: 0.9;
+}
+
+.adjust-score-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 10px;
+}
+
+.adjust-score-input {
+    width: 64px;
+    padding: 4px 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+}
+
 .pst-index-status {
     padding: 12px;
     background: var(--bg-primary);
@@ -1417,6 +1456,7 @@ body.facetime-mode .current-text {
 .ptype-skill-patch  { background: rgba(0,150,136,0.25);  color: #80cbc4; }
 .ptype-skill-create { background: rgba(33,150,243,0.25); color: #90caf9; }
 .ptype-skill-support-file { background: rgba(255,152,0,0.2); color: #ffcc80; }
+.ptype-email-score { background: rgba(0, 229, 255, 0.18); color: var(--neon-cyan); }
 
 .proposal-target {
     color: var(--neon-cyan);

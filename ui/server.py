@@ -8,9 +8,10 @@ import subprocess
 import tarfile
 import shutil
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from pathlib import Path
 from collections import deque
 from fastapi import FastAPI, HTTPException, Response
@@ -217,6 +218,12 @@ class AgentSwitchRequest(BaseModel):
 class RefineRequest(BaseModel):
     """Request to refine a proposal's content."""
     content: str
+
+class EmailFeedbackRequest(BaseModel):
+    """Request to submit feedback on an email's priority score."""
+    action: str  # "approve" | "adjust"
+    corrected_score: float | None = None
+    explanation: str | None = None
 
 @app.get("/")
 async def root():
@@ -832,6 +839,103 @@ async def search_emails(q: str = ""):
             "error": f"Search error: {str(e)}",
             "query": q
         }
+
+@app.get("/email/feedback/sample")
+async def email_feedback_sample(limit: int = 20):
+    """Return the most recently scored emails for the priority feedback review UI."""
+    try:
+        import sys
+        parent_dir = str(Path(__file__).parent.parent)
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+
+        from src.lucent_email.config import load_config
+        from src.lucent_email.email_service import EmailService
+
+        config = load_config()
+        service = EmailService(config)
+
+        emails = service.db.get_recent_scored_emails(limit=limit)
+        return {"emails": emails, "total": len(emails)}
+    except Exception as e:
+        logger.error(f"Error loading email feedback sample: {e}")
+        return {"emails": [], "error": str(e)}
+
+
+@app.post("/email/feedback/{email_id}")
+async def submit_email_feedback(email_id: str, req: EmailFeedbackRequest):
+    """Record approve/adjust feedback on an email's priority score.
+
+    Approve reinforces the existing rating. Adjust records a correction and
+    drafts a NERO-style proposal to update the priority guidelines, surfaced
+    in the Insights proposal queue for review (Apply/Reject/Refine).
+    """
+    if req.action not in ("approve", "adjust"):
+        return {"ok": False, "msg": "action must be 'approve' or 'adjust'"}
+
+    try:
+        import sys
+        parent_dir = str(Path(__file__).parent.parent)
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+
+        from src.lucent_email.config import load_config
+        from src.lucent_email.email_service import EmailService
+
+        config = load_config()
+        service = EmailService(config)
+
+        email = service.db.get_email_by_id(email_id)
+        if not email:
+            return {"ok": False, "msg": f"Email {email_id} not found"}
+
+        original_score = email.priority_score
+
+        if req.action == "approve":
+            service.db.record_email_feedback(email_id, original_score, "approve")
+            return {"ok": True, "msg": "Feedback recorded — rating reinforced"}
+
+        # adjust
+        if req.corrected_score is None:
+            return {"ok": False, "msg": "corrected_score is required to adjust a rating"}
+        explanation = (req.explanation or "").strip()
+        if not explanation:
+            return {"ok": False, "msg": "Please explain why the rating should change"}
+
+        service.db.record_email_feedback(
+            email_id, original_score, "adjust",
+            corrected_score=req.corrected_score, explanation=explanation
+        )
+
+        # Draft a proposal to update the priority guidelines from this correction
+        sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+        import reflect
+
+        content = (
+            f"- **From**: {email.from_addr or '(unknown)'}\n"
+            f"- **Subject**: \"{email.subject or '(no subject)'}\"\n"
+            f"- **Was scored**: {original_score:.1f}/10 → **Should be**: {req.corrected_score:.1f}/10\n"
+            f"- **Why**: {explanation}"
+        )
+        reflect._append_proposal({
+            "id": uuid.uuid4().hex[:8],
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "status": "pending",
+            "action": {
+                "type": "email_rule_update",
+                "reason": f"Nick adjusted the score for an email from {email.from_addr or 'unknown sender'} "
+                          f"({original_score:.1f} → {req.corrected_score:.1f})",
+                "path": "memory/email/priority_guidelines.md",
+                "content": content,
+            },
+            "gate_reason": "user-submitted email priority correction",
+        })
+
+        return {"ok": True, "msg": "Correction recorded — drafted a guideline update for your review in Insights"}
+    except Exception as e:
+        logger.error(f"Error recording email feedback: {e}")
+        return {"ok": False, "msg": str(e)}
+
 
 @app.post("/email/sync")
 async def trigger_email_sync():
