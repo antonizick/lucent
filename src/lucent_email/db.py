@@ -317,13 +317,18 @@ class EmailDatabase:
         self.connection.commit()
 
     def get_recent_scored_emails(self, limit: int = 20) -> List[dict]:
-        """Most recently scored emails for the feedback review UI."""
+        """Most recently scored emails for the feedback review UI.
+
+        Excludes emails Nick has already given feedback on — once rated,
+        an email never resurfaces for review.
+        """
         cursor = self.connection.cursor()
 
         cursor.execute("""
             SELECT id, from_addr, subject, timestamp, sender_priority_score
             FROM emails
             WHERE sender_priority_score IS NOT NULL
+              AND id NOT IN (SELECT email_id FROM email_feedback)
             ORDER BY timestamp DESC
             LIMIT ?
         """, (limit,))
