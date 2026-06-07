@@ -1364,6 +1364,25 @@ body.facetime-mode .current-text {
 .insights-warn { color: #ff9800; }
 .insights-err  { color: #f44336; margin: 4px 0; }
 
+.insights-limit {
+    color: var(--text-secondary, #888888);
+    font-size: 0.9em;
+    margin-right: 8px;
+}
+
+.insights-util {
+    color: var(--neon-cyan);
+    font-weight: bold;
+    padding: 2px 6px;
+    background: rgba(0, 229, 255, 0.1);
+    border-radius: 3px;
+}
+
+.clickable-label {
+    cursor: pointer;
+    text-decoration: underline;
+}
+
 .skills-list {
     display: flex;
     flex-direction: column;

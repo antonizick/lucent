@@ -39,6 +39,10 @@ def _memory_corpus() -> dict:
         except Exception:
             return {"lines": 0, "size_kb": 0}
 
+    # Hard caps for LTMemory (10 sessions = ~240 lines, cap at 500 lines or 100KB)
+    ltmemory_line_limit = 500
+    ltmemory_size_limit_kb = 100
+
     lt = _count(MEMORY_DIR / "LTMemory.md")
     lt_arch = _count(MEMORY_DIR / "LTMemory.archive.md")
 
@@ -77,13 +81,33 @@ def _memory_corpus() -> dict:
         except Exception:
             pass
 
+    # Limits (based on curator rules)
+    daily_notes_limit_days = 7
+    daily_notes_utilization = round(100 * daily_count / daily_notes_limit_days) if daily_notes_limit_days > 0 else 0
+
+    # LTMemory utilization (whichever limit is hit first)
+    ltmemory_line_util = round(100 * lt["lines"] / ltmemory_line_limit) if ltmemory_line_limit > 0 else 0
+    ltmemory_size_util = round(100 * lt["size_kb"] / ltmemory_size_limit_kb) if ltmemory_size_limit_kb > 0 else 0
+    ltmemory_utilization = max(ltmemory_line_util, ltmemory_size_util)  # Take the higher utilization
+
     return {
-        "ltmemory": {"lines": lt["lines"], "size_kb": lt["size_kb"]},
-        "ltmemory_archive": {"lines": lt_arch["lines"], "size_kb": lt_arch["size_kb"]},
+        "ltmemory": {
+            "lines": lt["lines"],
+            "size_kb": lt["size_kb"],
+            "path": str(MEMORY_DIR / "LTMemory.md"),
+            "line_limit": ltmemory_line_limit,
+            "size_limit_kb": ltmemory_size_limit_kb,
+            "utilization_pct": ltmemory_utilization
+        },
+        "ltmemory_archive": {"lines": lt_arch["lines"], "size_kb": lt_arch["size_kb"], "path": str(MEMORY_DIR / "LTMemory.archive.md")},
         "auto_memory_files": am_count,
         "auto_memory_lines": am_lines,
+        "auto_memory_path": str(AUTO_MEMORY_DIR),
         "daily_notes_7d": daily_count,
         "daily_lines_7d": daily_lines,
+        "daily_notes_path": str(MEMORY_DIR),
+        "daily_notes_limit_days": daily_notes_limit_days,
+        "daily_notes_utilization_pct": daily_notes_utilization,
         "recall_index_chunks": index_chunks,
     }
 
@@ -114,6 +138,7 @@ def _skill_stats() -> dict:
         skills_list = []
         for skill in all_skills:
             u = usage.get(skill["slug"], {})
+            skill_path = SKILLS_DIR / skill["slug"]
             skills_list.append({
                 "slug": skill["slug"],
                 "name": skill.get("name", skill["slug"]),
@@ -122,12 +147,14 @@ def _skill_stats() -> dict:
                 "protected": skill["slug"] in protected_set,
                 "use_count": u.get("use_count", 0),
                 "last_used": u.get("last_used", ""),
+                "path": str(skill_path),
             })
         return {
             "total_live": len(all_skills),
             "by_state": by_state,
             "archived": archive_count,
             "protected_count": len(protected),
+            "skills_path": str(SKILLS_DIR),
             "top_used": [{"slug": s, "uses": u, "last": l[:10] if l else ""} for s, u, l in top_used],
             "all_skills": sorted(skills_list, key=lambda s: (-s["use_count"], s["slug"])),
         }
@@ -211,10 +238,22 @@ def _curator_stats() -> dict:
         lt = MEMORY_DIR / "LTMemory.md"
         if lt.exists():
             lt_live_sessions = lt.read_text().count("### Session")
+
+        # Limits and utilization
+        ltmemory_session_limit = 10  # KEEP_RECENT_SESSIONS from skill_curator.py
+        ltmemory_utilization = round(100 * lt_live_sessions / ltmemory_session_limit) if ltmemory_session_limit > 0 else 0
+
+        daily_notes_limit = 7  # Days tracked
+
         return {
             "last_run": last_run,
             "ltmemory_live_sessions": lt_live_sessions,
+            "ltmemory_live_sessions_limit": ltmemory_session_limit,
+            "ltmemory_utilization_pct": ltmemory_utilization,
             "ltmemory_archive_sessions": ltm_arch_sessions,
+            "daily_notes_limit_days": daily_notes_limit,
+            "ltmemory_path": str(MEMORY_DIR / "LTMemory.md"),
+            "ltmemory_archive_path": str(MEMORY_DIR / "LTMemory.archive.md"),
         }
     except Exception as e:
         return {"error": str(e)}

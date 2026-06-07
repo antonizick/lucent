@@ -2162,6 +2162,116 @@ async def vox_speak(request: SpeakRequest, accept: str = "application/json"):
     }
 
 
+def _get_wsl_distro() -> str:
+    """Get the WSL distro name from /proc/version."""
+    try:
+        proc_version = Path('/proc/version').read_text().lower()
+        if 'ubuntu' in proc_version:
+            return 'Ubuntu'
+        elif 'debian' in proc_version:
+            return 'Debian'
+        elif 'fedora' in proc_version:
+            return 'Fedora'
+        else:
+            return 'Ubuntu'  # Default to Ubuntu
+    except Exception:
+        return 'Ubuntu'
+
+@app.get("/view-file")
+async def view_file(path: str = ""):
+    """Serve a file for viewing or download."""
+    if not path:
+        raise HTTPException(status_code=400, detail="Path required")
+
+    try:
+        path_obj = Path(path).resolve()
+        if not path_obj.exists():
+            raise HTTPException(status_code=404, detail=f"Path does not exist")
+
+        if path_obj.is_dir():
+            # If it's a directory, list its contents
+            items = []
+            try:
+                for item in sorted(path_obj.iterdir()):
+                    items.append({
+                        "name": item.name,
+                        "path": str(item),
+                        "is_dir": item.is_dir(),
+                        "size": item.stat().st_size if item.is_file() else None,
+                    })
+            except PermissionError:
+                raise HTTPException(status_code=403, detail="Permission denied")
+            return {"type": "directory", "path": str(path_obj), "items": items}
+        else:
+            # If it's a file, serve its content
+            try:
+                content = path_obj.read_text(encoding='utf-8')
+                return FileResponse(
+                    path_obj,
+                    media_type="text/plain",
+                    filename=path_obj.name
+                )
+            except UnicodeDecodeError:
+                # Binary file - serve as download
+                return FileResponse(
+                    path_obj,
+                    filename=path_obj.name
+                )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error viewing file {path}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
+@app.post("/open-file")
+async def open_file(request: dict):
+    """Open a file or directory with the system's default file manager."""
+    path = request.get("path", "").strip()
+    if not path:
+        raise HTTPException(status_code=400, detail="Path required")
+
+    try:
+        path_obj = Path(path).resolve()
+        if not path_obj.exists():
+            raise HTTPException(status_code=404, detail=f"Path does not exist: {path}")
+
+        # Detect if running in WSL
+        is_wsl = Path('/proc/version').exists() and 'microsoft' in Path('/proc/version').read_text().lower()
+
+        if os.name == 'nt':
+            # Windows native
+            os.startfile(str(path_obj))
+            return {"ok": True, "path": str(path_obj), "wsl": False}
+        elif is_wsl:
+            # WSL - return UNC path for Windows to open
+            # Convert to Windows UNC path: \\wsl.localhost\<distro>\<path>
+            distro = _get_wsl_distro()
+            wsl_path = str(path_obj)
+            # Replace forward slashes with backslashes for UNC path
+            unc_path = f"\\\\wsl.localhost\\{distro}" + wsl_path.replace('/', '\\')
+
+            logger.info(f"WSL file open: {wsl_path} -> {unc_path}")
+            return {"ok": True, "path": str(path_obj), "wsl": True, "unc_path": unc_path, "action": "open_via_unc"}
+        else:
+            # macOS or Linux - try to open locally
+            system_type = os.uname().sysname if hasattr(os, 'uname') else 'Linux'
+            if system_type == 'Darwin':
+                subprocess.Popen(['open', str(path_obj)])
+            else:
+                # Linux - try various file managers
+                for cmd in ['nautilus', 'thunar', 'dolphin', 'pcmanfm', 'xdg-open']:
+                    try:
+                        subprocess.Popen([cmd, str(path_obj)])
+                        break
+                    except FileNotFoundError:
+                        continue
+            return {"ok": True, "path": str(path_obj), "wsl": False}
+    except Exception as e:
+        logger.error(f"Error opening file {path}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)

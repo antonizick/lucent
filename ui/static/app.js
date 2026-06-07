@@ -660,8 +660,42 @@ async function pollInsights() {
 
 // ── NERO Insights rendering ──────────────────────────────────
 
-function insightsRow(label, value) {
-    return `<div class="insights-row"><span class="insights-label">${label}</span><span class="insights-value">${value}</span></div>`;
+function openFilePath(path) {
+    try {
+        console.log('Opening file:', path);
+        // Use the view-file endpoint to display/download the file
+        const viewUrl = `/view-file?path=${encodeURIComponent(path)}`;
+        console.log('View URL:', viewUrl);
+        window.open(viewUrl, '_blank');
+    } catch (error) {
+        console.error('Error opening file:', error);
+    }
+}
+
+// Event delegation for clickable file links
+if (logContent) {
+    logContent.addEventListener('click', (e) => {
+        const link = e.target.closest('.clickable-label');
+        if (link && link.dataset.path) {
+            e.preventDefault();
+            openFilePath(link.dataset.path);
+        }
+    });
+}
+
+function insightsRow(label, value, filePath = null) {
+    const labelHtml = filePath
+        ? `<a href="#" class="insights-label clickable-label" data-path="${filePath}">${label}</a>`
+        : `<span class="insights-label">${label}</span>`;
+    return `<div class="insights-row">${labelHtml}<span class="insights-value">${value}</span></div>`;
+}
+
+function insightsRowWithLimit(label, value, limit, utilization, filePath = null) {
+    const labelHtml = filePath
+        ? `<a href="#" class="insights-label clickable-label" data-path="${filePath}">${label}</a>`
+        : `<span class="insights-label">${label}</span>`;
+    const utilizationBar = `<span class="insights-util" title="Utilization: ${utilization}%">[${utilization}%]</span>`;
+    return `<div class="insights-row">${labelHtml}<span class="insights-value">${value} <span class="insights-limit">/ ${limit}</span> ${utilizationBar}</span></div>`;
 }
 
 function insightsSection(title, rows) {
@@ -678,20 +712,22 @@ function renderInsights(data) {
     h += `<div class="insights-ts">NERO SELF-IMPROVEMENT INSIGHTS — ${now}</div>`;
 
     // Memory Corpus
-    h += insightsSection('MEMORY CORPUS', [
-        insightsRow('LTMemory.md',       `${corpus.ltmemory.lines} lines · ${corpus.ltmemory.size_kb} KB`),
-        insightsRow('LTMemory.archive',  `${corpus.ltmemory_archive.lines} lines · ${corpus.ltmemory_archive.size_kb} KB`),
-        insightsRow('Auto-memory',       `${corpus.auto_memory_files} files · ${corpus.auto_memory_lines} lines`),
-        insightsRow('Daily notes (7d)',  `${corpus.daily_notes_7d} files · ${corpus.daily_lines_7d} lines`),
+    const ltmemValue = `${corpus.ltmemory.lines}/${corpus.ltmemory.line_limit} lines · ${corpus.ltmemory.size_kb}/${corpus.ltmemory.size_limit_kb} KB <span class="insights-util" title="Utilization: ${corpus.ltmemory.utilization_pct}%">[${corpus.ltmemory.utilization_pct}%]</span>`;
+    const corpusRows = [
+        `<div class="insights-row"><a href="#" class="insights-label clickable-label" data-path="${corpus.ltmemory.path}">LTMemory.md</a><span class="insights-value">${ltmemValue}</span></div>`,
+        insightsRow('LTMemory.archive',  `${corpus.ltmemory_archive.lines} lines · ${corpus.ltmemory_archive.size_kb} KB`, corpus.ltmemory_archive.path),
+        insightsRow('Auto-memory',       `${corpus.auto_memory_files} files · ${corpus.auto_memory_lines} lines`, corpus.auto_memory_path),
+        insightsRowWithLimit('Daily notes', `${corpus.daily_notes_7d} files · ${corpus.daily_lines_7d} lines`, `${corpus.daily_notes_limit_days} days`, corpus.daily_notes_utilization_pct, corpus.daily_notes_path),
         insightsRow('Recall index',      `${corpus.recall_index_chunks} chunks`),
-    ]);
+    ];
+    h += insightsSection('MEMORY CORPUS', corpusRows);
 
     // Skill Library
     if (skills.error) {
         h += insightsSection('SKILL LIBRARY', [`<div class="insights-err">Error: ${skills.error}</div>`]);
     } else {
         const rows = [
-            insightsRow('Live skills',  `<span class="insights-hi">${skills.total_live}</span>`),
+            insightsRow('Live skills',  `<span class="insights-hi">${skills.total_live}</span>`, skills.skills_path),
             insightsRow('Protected',    skills.protected_count),
             insightsRow('Archived',     skills.archived),
         ];
@@ -735,11 +771,12 @@ function renderInsights(data) {
     if (curator.error) {
         h += insightsSection('CURATOR', [`<div class="insights-err">Error: ${curator.error}</div>`]);
     } else {
-        h += insightsSection('CURATOR', [
-            insightsRow('Last run',          curator.last_run),
-            insightsRow('Live sessions',     curator.ltmemory_live_sessions),
-            insightsRow('Archived sessions', curator.ltmemory_archive_sessions),
-        ]);
+        const rows = [
+            insightsRow('Last run', curator.last_run),
+            insightsRowWithLimit('Live sessions', curator.ltmemory_live_sessions, curator.ltmemory_live_sessions_limit, curator.ltmemory_utilization_pct, curator.ltmemory_path),
+            insightsRow('Archived sessions', curator.ltmemory_archive_sessions, curator.ltmemory_archive_path),
+        ];
+        h += insightsSection('CURATOR', rows);
     }
 
     // Proposals panel (loaded separately via loadProposals())
@@ -753,7 +790,10 @@ function renderInsights(data) {
             const protectedBadge = skill.protected ? ' 🔒' : '';
             const uses = skill.use_count > 0 ? ` · ${skill.use_count} uses` : '';
             const lastUsed = skill.last_used ? ` · last: ${skill.last_used.substring(0, 10)}` : '';
-            skillsRows.push(`<div class="skill-item"><span class="skill-name">${skill.slug}</span><span class="skill-meta">${skill.state}${protectedBadge}${uses}${lastUsed}</span></div>`);
+            const skillNameHtml = skill.path
+                ? `<a href="#" class="skill-name clickable-label" data-path="${skill.path}">${skill.slug}</a>`
+                : `<span class="skill-name">${skill.slug}</span>`;
+            skillsRows.push(`<div class="skill-item">${skillNameHtml}<span class="skill-meta">${skill.state}${protectedBadge}${uses}${lastUsed}</span></div>`);
         });
         skillsRows.push(`</div>`);
         h += insightsSection('SKILLS LISTING', skillsRows);
