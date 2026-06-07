@@ -158,6 +158,30 @@ export const server: Plugin = async (input) => {
     }
   }
 
+  // ── PostToolUse(Read) equivalent — skill usage tracking ───────────────────
+  //
+  // Claude Code's Insights "Top used" skill stats come from skills.py's
+  // bump_use(), which historically only fired through the `skills.py view`
+  // CLI path — but CLAUDE.md documents loading skill bodies by reading
+  // memory/skills/<slug>/SKILL.md directly with the Read tool, bypassing the
+  // counter entirely. scripts/skill_read_tracker.py closes that gap on the
+  // Claude Code side via a PostToolUse(Read) hook; `tool.execute.after` is
+  // OpenCode's equivalent. Same single-source principle: shell out to the
+  // identical script with the identical stdin JSON contract so both platforms
+  // feed one counter, one definition of "used".
+  async function trackSkillRead(toolName: string, args: any): Promise<void> {
+    try {
+      if (!/^read$/i.test(toolName || "")) return
+      const filePath = args?.filePath || args?.file_path || args?.path || ""
+      if (!/memory\/skills\/[^/]+\/SKILL\.md$/.test(String(filePath))) return
+
+      const payload = JSON.stringify({ tool_name: "Read", tool_input: { file_path: filePath } })
+      await $`echo ${payload} | python3 ${root}/scripts/skill_read_tracker.py`.nothrow().quiet()
+    } catch {
+      // Tracking is purely additive — never let it affect a tool call.
+    }
+  }
+
   // ── Soft voice-box enforcement (Stop-hook "did Lucent speak?" backstop) ────
   //
   // Claude Code's voice rule is enforced by convention (CLAUDE.md), not by a
@@ -283,6 +307,15 @@ export const server: Plugin = async (input) => {
       } catch {
         // Enforcement must never break a turn.
       }
+    },
+
+    /**
+     * PostToolUse(Read) equivalent — fires after every tool call completes.
+     * We only care about Read calls that loaded a SKILL.md; trackSkillRead
+     * filters and shells out to the same script Claude Code's hook uses.
+     */
+    "tool.execute.after": async (input) => {
+      void trackSkillRead(input.tool, input.args)
     },
 
     event: async ({ event }) => {
