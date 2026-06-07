@@ -1161,6 +1161,33 @@ if (emailFeedbackRefreshBtn) {
     emailFeedbackRefreshBtn.addEventListener('click', () => loadEmailFeedback());
 }
 
+// Email feedback "mark backlog reviewed" checkpoint button
+const emailFeedbackCheckpointBtn = document.getElementById('emailFeedbackCheckpointBtn');
+if (emailFeedbackCheckpointBtn) {
+    emailFeedbackCheckpointBtn.addEventListener('click', async () => {
+        if (!confirm('Mark everything currently in the queue as reviewed?\n\nFrom now on, only emails that arrive after this point will show up for rating — the current backlog will be permanently suppressed.')) {
+            return;
+        }
+        const original = emailFeedbackCheckpointBtn.textContent;
+        emailFeedbackCheckpointBtn.disabled = true;
+        emailFeedbackCheckpointBtn.textContent = 'Marking…';
+        try {
+            const res = await fetch('/email/feedback/checkpoint', { method: 'POST' });
+            const data = await res.json();
+            if (data.ok) {
+                await loadEmailFeedback();
+            } else {
+                alert(`Failed: ${data.msg || 'unknown error'}`);
+            }
+        } catch (e) {
+            alert(`Failed: ${e.message}`);
+        } finally {
+            emailFeedbackCheckpointBtn.disabled = false;
+            emailFeedbackCheckpointBtn.textContent = original;
+        }
+    });
+}
+
 // Load and display high-priority emails (email monitor)
 async function loadEmailMonitor() {
     try {

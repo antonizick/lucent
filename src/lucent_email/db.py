@@ -109,6 +109,16 @@ class EmailDatabase:
             )
         """)
 
+        # Single-row checkpoint marking "reviewed up to here" for the
+        # priority feedback queue — emails at or before this timestamp
+        # are suppressed from review.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS feedback_checkpoint (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                checkpoint_at DATETIME NOT NULL
+            )
+        """)
+
         # Full-text search index
         cursor.execute("""
             CREATE VIRTUAL TABLE IF NOT EXISTS emails_fts USING fts5(
@@ -320,18 +330,32 @@ class EmailDatabase:
         """Most recently scored emails for the feedback review UI.
 
         Excludes emails Nick has already given feedback on — once rated,
-        an email never resurfaces for review.
+        an email never resurfaces for review. Also excludes anything at or
+        before the review checkpoint (see set_feedback_checkpoint), so a
+        backlog of old emails can be dismissed in one action.
         """
         cursor = self.connection.cursor()
 
-        cursor.execute("""
-            SELECT id, from_addr, subject, timestamp, sender_priority_score
-            FROM emails
-            WHERE sender_priority_score IS NOT NULL
-              AND id NOT IN (SELECT email_id FROM email_feedback)
-            ORDER BY timestamp DESC
-            LIMIT ?
-        """, (limit,))
+        checkpoint = self.get_feedback_checkpoint()
+        if checkpoint:
+            cursor.execute("""
+                SELECT id, from_addr, subject, timestamp, sender_priority_score
+                FROM emails
+                WHERE sender_priority_score IS NOT NULL
+                  AND id NOT IN (SELECT email_id FROM email_feedback)
+                  AND timestamp > ?
+                ORDER BY timestamp DESC
+                LIMIT ?
+            """, (checkpoint, limit))
+        else:
+            cursor.execute("""
+                SELECT id, from_addr, subject, timestamp, sender_priority_score
+                FROM emails
+                WHERE sender_priority_score IS NOT NULL
+                  AND id NOT IN (SELECT email_id FROM email_feedback)
+                ORDER BY timestamp DESC
+                LIMIT ?
+            """, (limit,))
 
         return [
             {
@@ -343,6 +367,28 @@ class EmailDatabase:
             }
             for row in cursor.fetchall()
         ]
+
+    def get_feedback_checkpoint(self) -> Optional[str]:
+        """Return the "reviewed up to here" timestamp, or None if unset."""
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT checkpoint_at FROM feedback_checkpoint WHERE id = 1")
+        row = cursor.fetchone()
+        return row["checkpoint_at"] if row else None
+
+    def set_feedback_checkpoint(self, checkpoint_at: str = None) -> str:
+        """Mark everything up to now (or a given ISO timestamp) as reviewed.
+
+        Suppresses all matching emails from the feedback queue going forward.
+        Returns the checkpoint value that was stored.
+        """
+        checkpoint_at = checkpoint_at or datetime.now(timezone.utc).isoformat()
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            INSERT INTO feedback_checkpoint (id, checkpoint_at) VALUES (1, ?)
+            ON CONFLICT(id) DO UPDATE SET checkpoint_at = excluded.checkpoint_at
+        """, (checkpoint_at,))
+        self.connection.commit()
+        return checkpoint_at
 
     def record_email_feedback(self, email_id: str, original_score: float,
                               feedback_type: str, corrected_score: float = None,

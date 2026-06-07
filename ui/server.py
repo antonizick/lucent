@@ -862,6 +862,33 @@ async def email_feedback_sample(limit: int = 20):
         return {"emails": [], "error": str(e)}
 
 
+@app.post("/email/feedback/checkpoint")
+async def set_email_feedback_checkpoint():
+    """Mark everything currently in the queue as reviewed.
+
+    Stores a "reviewed up to here" timestamp; the feedback sample query then
+    excludes any email at or before it, suppressing the entire backlog going
+    forward — only emails that arrive after this point will be queued for review.
+    """
+    try:
+        import sys
+        parent_dir = str(Path(__file__).parent.parent)
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+
+        from src.lucent_email.config import load_config
+        from src.lucent_email.email_service import EmailService
+
+        config = load_config()
+        service = EmailService(config)
+
+        checkpoint = service.db.set_feedback_checkpoint()
+        return {"ok": True, "checkpoint": checkpoint, "msg": "Backlog cleared — only newer emails will appear for review"}
+    except Exception as e:
+        logger.error(f"Error setting email feedback checkpoint: {e}")
+        return {"ok": False, "msg": str(e)}
+
+
 @app.post("/email/feedback/{email_id}")
 async def submit_email_feedback(email_id: str, req: EmailFeedbackRequest):
     """Record approve/adjust feedback on an email's priority score.
