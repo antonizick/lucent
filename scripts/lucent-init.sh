@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Lucent session init hook — runs before each Claude Code response.
+# Lucent session init hook — runs before each response, on Claude Code
+# (UserPromptSubmit) or OpenCode (chat.message → lucent-plugin.ts), whichever
+# host is active. Platform is detected automatically via $CLAUDECODE (set to
+# "1" by Claude Code's CLI; absent under OpenCode) — no special wiring needed.
 #
 # SLIM VERSION (post-efficiency refactor 2026-05-24):
 # Identity / LTMemory / core rules are now injected ONCE at SessionStart by
@@ -16,8 +19,19 @@ LUCENT_DIR="/home/nick/dev/lucent"
 TODAY=$(date +%Y-%m-%d)
 NOTE="$LUCENT_DIR/memory/$TODAY.md"
 
-# Read hook stdin ONCE — contains Claude Code UserPromptSubmit JSON payload
-# (has the user's message; passed to recall script below)
+# Automatic platform detection — $CLAUDECODE is set by the Claude Code CLI
+# itself; OpenCode's plugin runs this script via a plain subshell, so it's
+# absent there. No env var needs to be set on the OpenCode side.
+if [[ -n "$CLAUDECODE" ]]; then
+  HOST_LABEL="Claude Code"
+else
+  HOST_LABEL="OpenCode"
+fi
+
+# Read hook stdin ONCE — contains the per-turn JSON payload (user's message),
+# shaped as {"prompt": "..."} on both platforms (Claude Code's UserPromptSubmit
+# and OpenCode's lucent-plugin.ts both feed it the same way; passed through to
+# the recall script below)
 HOOK_STDIN=$(cat)
 
 if [[ ! -f "$NOTE" ]]; then
@@ -30,7 +44,7 @@ cat <<EOF
 [Lucent] === RULES ACTIVE (full text in SessionStart bundle) ===
 [Lucent] 1. Voice — POST to http://localhost:8001/speak before every text reply.
 [Lucent] 2. Daily note — append to memory/$TODAY.md every response.
-[Lucent] 3. Text — respond in Claude Code.
+[Lucent] 3. Text — respond in $HOST_LABEL.
 [Lucent] Non-negotiable. Framework validates.
 EOF
 

@@ -2,19 +2,22 @@
 """
 NERO Phase 1 — Hook entry point for semantic recall.
 
-Called by lucent-init.sh before each turn. Reads the user's message from
-stdin (Claude Code UserPromptSubmit JSON payload), queries the memory index,
-and prints a <memory-context> block if relevant memories are found.
+Called by lucent-init.sh before each turn — on either host (Claude Code's
+UserPromptSubmit hook or OpenCode's chat.message via lucent-plugin.ts; both
+feed lucent-init.sh the same {"prompt": "..."} stdin shape). Reads the user's
+message from stdin, queries the memory index, and prints a <memory-context>
+block if relevant memories are found.
 
 RELIABILITY CONTRACT (100% guarantee):
-  - Never exits non-zero (a non-zero exit from UserPromptSubmit blocks the message).
+  - Never exits non-zero (a non-zero exit would block the message on Claude Code's
+    UserPromptSubmit; OpenCode's hook ignores exit codes but the contract still holds).
   - Never hangs — all Ollama calls have a 10s timeout; the whole script has
     a 15s wall-clock limit enforced by the caller via `timeout` in the hook.
   - Never prints garbage — only outputs a well-formed <memory-context> block or nothing.
   - Any exception at any level is caught and silently discarded.
   - If Ollama is unavailable, the hook output is identical to before this script existed.
 
-stdin : JSON from Claude Code UserPromptSubmit hook
+stdin : JSON payload from the per-turn hook (either host)
 stdout: <memory-context>…</memory-context> block, or empty
 """
 

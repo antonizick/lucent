@@ -14,6 +14,7 @@ Usage:
   python3 scripts/startup.py --json
 """
 
+import os
 import sys
 import json
 import random
@@ -235,7 +236,8 @@ def init_session_logger() -> CheckResult:
     try:
         sys.path.insert(0, str(LUCENT_ROOT / "scripts"))
         from session_logger import initialize_session_log, check_session_log_checkpoint
-        initialize_session_log(str(LUCENT_ROOT), topic="Claude Code session")
+        host = "Claude Code" if os.environ.get("CLAUDECODE") else "OpenCode"
+        initialize_session_log(str(LUCENT_ROOT), topic=f"{host} session")
         check_session_log_checkpoint(str(LUCENT_ROOT))
         return CheckResult(True, "Session logger initialized")
     except Exception as e:
@@ -579,8 +581,13 @@ def run(json_mode: bool = False) -> dict:
         warnings.append(f"LTMemory size: {ltmemory_size_result.reason}")
         log_to_activity(f"WARNING: {ltmemory_size_result.reason}")
 
-    degraded = bool(failures or warnings or fallbacks_used)
-    status = "STARTUP_DEGRADED" if degraded else "STARTUP_OK"
+    # Only critical failures cause STARTUP_DEGRADED and exit(1).
+    # Non-critical warnings (LTMemory size, compression timeout, announcements)
+    # are logged but don't block startup. This avoids spurious hook errors
+    # for non-fatal issues that the system handles gracefully.
+    critical_failures = bool(failures)
+    degraded = critical_failures  # For checkpoint tracking
+    status = "STARTUP_DEGRADED" if critical_failures else "STARTUP_OK"
 
     write_checkpoint_today(degraded)
 

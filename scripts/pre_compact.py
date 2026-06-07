@@ -2,11 +2,12 @@
 """
 NERO Phase 5 — PreCompact hook: memory durability guard.
 
-Fires before Claude Code compacts the transcript. Injects a concise
-block of must-keep facts into the compaction context so compaction
-never silently drops durable knowledge.
+Fires before the host compacts the transcript — Claude Code's PreCompact hook
+or OpenCode's experimental.session.compacting (see lucent-plugin.ts), whichever
+is active. Injects a concise block of must-keep facts into the compaction
+context so compaction never silently drops durable knowledge.
 
-Prints to stdout → Claude Code injects it into the compaction summary prompt.
+Prints to stdout → the host injects it into the compaction summary prompt.
 Exits 0 always (failures are silent no-ops — compaction must never block).
 
 What we preserve:

@@ -2,9 +2,12 @@
 """
 NERO Phase 3 — Per-turn self-improvement loop.
 
-After every assistant turn (Claude Code Stop hook), Lucent reflects on the
-exchange and asks: "did I just learn something about Nick, or how to do this
-class of task?" If yes, it proposes a memory write or skill update.
+After every assistant turn — Claude Code's Stop hook, or OpenCode's
+session.idle event feeding a translated transcript (see lucent-plugin.ts's
+buildClaudeShapedTranscript) — Lucent reflects on the exchange and asks:
+"did I just learn something about Nick, or how to do this class of task?"
+If yes, it proposes a memory write or skill update. Both hosts feed this
+script the identical stdin contract: {"transcript_path": "<jsonl file>"}.
 
 ARCHITECTURE (zero-latency + 100% reliability):
   - The hook entry (no args, reads Stop JSON on stdin) does almost nothing:
@@ -645,7 +648,7 @@ def hook_entry() -> None:
             stdin=subprocess.DEVNULL,
             stdout=log_fh,
             stderr=log_fh,
-            start_new_session=True,  # detach from Claude Code's process group
+            start_new_session=True,  # detach from the host's process group (Claude Code or OpenCode)
             cwd=str(LUCENT_ROOT),
         )
     except Exception:
