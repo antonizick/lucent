@@ -486,16 +486,56 @@ show_logs() {
 }
 
 ################################################################################
+# STATUS OVERVIEW DISPLAY
+################################################################################
+
+display_status_overview() {
+    echo ""
+    print_section "Service Status Overview"
+    echo ""
+
+    local max_len=0
+    for service in "${!SERVICES[@]}"; do
+        if [[ ${#service} -gt $max_len ]]; then
+            max_len=${#service}
+        fi
+    done
+
+    # Adjust width for padding
+    ((max_len += 2))
+
+    # Display services
+    for service in "${!SERVICES[@]}"; do
+        local status_output=$(get_service_status "$service")
+        local status="${status_output%|*}"
+        local details="${status_output#*|}"
+        local type="${SERVICE_TYPE[$service]}"
+
+        # Format the service name with padding
+        local padded_service=$(printf "%-${max_len}s" "$service")
+
+        if [[ "$type" == "cron" ]]; then
+            echo -e "  ${padded_service} ${YELLOW}[CRON]${NC}"
+        elif [[ "$status" == "RUNNING" ]]; then
+            echo -e "  ${padded_service} ${GREEN}✓ RUNNING${NC}"
+        else
+            echo -e "  ${padded_service} ${RED}✗ STOPPED${NC}"
+        fi
+    done
+    echo ""
+}
+
+################################################################################
 # INTERACTIVE MENU SYSTEM
 ################################################################################
 
 show_main_menu() {
     echo ""
     print_header "LUCENT SERVICE MANAGER"
-    echo ""
+    display_status_overview
     echo "What would you like to do?"
     echo ""
-    echo -e "  ${CYAN}1${NC}) Check service status"
+    echo -e "  ${CYAN}1${NC}) Refresh status"
     echo -e "  ${CYAN}2${NC}) Start service(s)"
     echo -e "  ${CYAN}3${NC}) Stop service(s)"
     echo -e "  ${CYAN}4${NC}) Restart service(s)"
@@ -773,7 +813,9 @@ main() {
         local choice=$(get_user_input "Enter your choice: ")
 
         case $choice in
-            1) handle_status ;;
+            1)
+                # Refresh happens automatically on next loop iteration
+                ;;
             2) handle_start ;;
             3) handle_stop ;;
             4) handle_restart ;;
