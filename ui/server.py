@@ -1891,314 +1891,82 @@ async def list_agents():
 @app.get("/activity-log-viewer")
 async def activity_log_viewer():
     """Serve the activity log viewer page."""
-    html_content = """
+    # Fetch the activity log data directly
+    lucent_root = Path(__file__).parent.parent
+    today = date.today().isoformat()
+    activity_log = LOGS_DIR / f"activity_{today}.log"
+
+    log_lines = []
+    if activity_log.exists():
+        for line in activity_log.read_text().splitlines():
+            if not line.strip():
+                log_lines.append(line)
+                continue
+
+            # Determine color class based on content
+            color_class = "entry-default"
+            if "[nero_apply]" in line:
+                color_class = "entry-nero-apply"
+            elif "[nero_reject]" in line:
+                color_class = "entry-nero-reject"
+            elif "[nero_refine]" in line:
+                color_class = "entry-nero-refine"
+            elif "[voice_box]" in line:
+                color_class = "entry-voice-box"
+            elif "[email_sync]" in line:
+                color_class = "entry-email-sync"
+            elif "[backup]" in line:
+                color_class = "entry-default"
+            elif "[service-monitor]" in line:
+                color_class = "entry-default"
+
+            log_lines.append(f'<span class="{color_class}">{line}</span>')
+    else:
+        log_lines = ["No activity logged for today yet."]
+
+    log_content = "\n".join(log_lines)
+
+    html_content = f"""
     <!DOCTYPE html>
-    <html lang="en">
+    <html>
     <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Lucent — Activity Log</title>
+        <title>Activity Log</title>
         <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            :root {
-                --bg-primary: #080810;
-                --bg-secondary: #0d0d1a;
-                --text-primary: #ffffff;
-                --text-secondary: #b0b0b0;
-                --neon-cyan: #00e5ff;
-                --border: #00e5ff;
-            }
-
-            body.light-mode {
-                --bg-primary: #f5f5f5;
-                --bg-secondary: #ffffff;
-                --text-primary: #1a1a1a;
-                --text-secondary: #666666;
-                --neon-cyan: #0066cc;
-                --border: #0066cc;
-            }
-
-            body {
+            body {{
                 font-family: 'Courier New', monospace;
-                background-color: var(--bg-primary);
-                color: var(--text-primary);
+                background: #080810;
+                color: #fff;
                 padding: 20px;
-                line-height: 1.6;
-            }
-
-            .container {
-                max-width: 900px;
-                margin: 0 auto;
-            }
-
-            .header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 20px;
-                padding-bottom: 15px;
-                border-bottom: 2px solid var(--neon-cyan);
-            }
-
-            h1 {
-                font-size: 24px;
-                color: var(--neon-cyan);
-                text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
-                letter-spacing: 2px;
-            }
-
-            .controls {
-                display: flex;
-                gap: 10px;
-            }
-
-            button {
-                padding: 8px 16px;
-                background-color: var(--bg-secondary);
-                color: var(--text-primary);
-                border: 1px solid var(--neon-cyan);
-                border-radius: 4px;
-                cursor: pointer;
-                font-size: 14px;
-                transition: all 0.2s ease;
-            }
-
-            button:hover {
-                background-color: rgba(0, 229, 255, 0.1);
-                box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
-            }
-
-            .theme-toggle {
-                background-color: transparent;
-            }
-
-            .info {
-                margin-bottom: 15px;
-                padding: 12px;
-                background-color: var(--bg-secondary);
-                border-left: 3px solid var(--neon-cyan);
-                color: var(--text-secondary);
-                font-size: 13px;
-            }
-
-            .log-content {
-                background-color: var(--bg-secondary);
-                border: 1px solid var(--neon-cyan);
-                border-radius: 4px;
+                margin: 0;
+            }}
+            h1 {{
+                color: #00e5ff;
+                border-bottom: 2px solid #00e5ff;
+                padding-bottom: 10px;
+            }}
+            .log-container {{
+                background: #0d0d1a;
+                border: 1px solid #00e5ff;
                 padding: 15px;
-                font-size: 12px;
-                max-height: 70vh;
-                overflow-y: auto;
-                color: var(--text-primary);
-                font-family: 'Courier New', monospace;
-            }
-
-            .log-content::-webkit-scrollbar {
-                width: 8px;
-            }
-
-            .log-content::-webkit-scrollbar-track {
-                background: var(--bg-primary);
-            }
-
-            .log-content::-webkit-scrollbar-thumb {
-                background: rgba(0, 229, 255, 0.3);
                 border-radius: 4px;
-            }
-
-            .log-content::-webkit-scrollbar-thumb:hover {
-                background: rgba(0, 229, 255, 0.5);
-            }
-
-            .loading {
-                text-align: center;
-                color: var(--text-secondary);
-                font-size: 14px;
-            }
-
-            .log-entry {
-                margin-bottom: 2px;
-                display: block;
-            }
-
-            .entry-nero-apply {
-                color: #4ade80;
-            }
-
-            .entry-nero-reject {
-                color: #f87171;
-            }
-
-            .entry-nero-refine {
-                color: #fbbf24;
-            }
-
-            .entry-voice-box {
-                color: #a78bfa;
-            }
-
-            .entry-email-sync {
-                color: #06b6d4;
-            }
-
-            .entry-default {
-                color: var(--text-primary);
-            }
-
-            body.light-mode .entry-nero-apply {
-                color: #059669;
-            }
-
-            body.light-mode .entry-nero-reject {
-                color: #dc2626;
-            }
-
-            body.light-mode .entry-nero-refine {
-                color: #d97706;
-            }
-
-            body.light-mode .entry-voice-box {
-                color: #7c3aed;
-            }
-
-            body.light-mode .entry-email-sync {
-                color: #0891b2;
-            }
+                overflow-y: auto;
+                max-height: 70vh;
+                font-size: 12px;
+                line-height: 1.6;
+                white-space: pre-wrap;
+                word-break: break-word;
+            }}
+            .entry-nero-apply {{ color: #4ade80; }}
+            .entry-nero-reject {{ color: #f87171; }}
+            .entry-nero-refine {{ color: #fbbf24; }}
+            .entry-voice-box {{ color: #a78bfa; }}
+            .entry-email-sync {{ color: #06b6d4; }}
+            .entry-default {{ color: #fff; }}
         </style>
     </head>
     <body>
-        <div class="container">
-            <div class="header">
-                <h1>Activity Log</h1>
-                <div class="controls">
-                    <button id="refreshBtn">🔄 Refresh</button>
-                    <button id="themeToggle">🌙</button>
-                </div>
-            </div>
-
-            <div class="info">
-                <strong>Last Updated:</strong> <span id="timestamp">Loading...</span> |
-                <strong>Entries:</strong> <span id="entryCount">-</span>
-            </div>
-
-            <div class="log-content" id="logContent">
-                <div class="loading">Loading activity log...</div>
-            </div>
-        </div>
-
-        <script>
-            const logContent = document.getElementById('logContent');
-            const timestamp = document.getElementById('timestamp');
-            const entryCount = document.getElementById('entryCount');
-            const refreshBtn = document.getElementById('refreshBtn');
-            const themeToggle = document.getElementById('themeToggle');
-
-            let autoRefreshInterval = null;
-            let isRefreshPaused = false;
-
-            function parseAndColorizeLog(logText) {
-                const logContent = document.getElementById('logContent');
-                logContent.innerHTML = '';
-
-                if (!logText || logText.trim() === '') {
-                    logContent.innerHTML = '<div class="loading">No activity logged for today yet</div>';
-                    return;
-                }
-
-                const lines = logText.split('\n').filter(line => line.trim());
-                lines.forEach(line => {
-                    const entry = document.createElement('div');
-                    entry.className = 'log-entry';
-
-                    let entryClass = 'entry-default';
-                    if (line.includes('[nero_apply]')) {
-                        entryClass = 'entry-nero-apply';
-                    } else if (line.includes('[nero_reject]')) {
-                        entryClass = 'entry-nero-reject';
-                    } else if (line.includes('[nero_refine]')) {
-                        entryClass = 'entry-nero-refine';
-                    } else if (line.includes('[voice_box]')) {
-                        entryClass = 'entry-voice-box';
-                    } else if (line.includes('[email_sync]')) {
-                        entryClass = 'entry-email-sync';
-                    }
-
-                    entry.className += ' ' + entryClass;
-                    entry.textContent = line;
-                    logContent.appendChild(entry);
-                });
-
-                // Auto-scroll to bottom
-                logContent.scrollTop = logContent.scrollHeight;
-            }
-
-            async function loadActivityLog() {
-                try {
-                    const response = await fetch('/activity-log');
-                    const data = await response.json();
-
-                    parseAndColorizeLog(data.content || '');
-                    entryCount.textContent = data.entries || 0;
-
-                    const now = new Date();
-                    timestamp.textContent = now.toLocaleTimeString();
-                } catch (error) {
-                    logContent.innerHTML = `<div class="loading">Error loading activity log: ${error.message}</div>`;
-                    console.error('Error:', error);
-                }
-            }
-
-            function startAutoRefresh() {
-                if (autoRefreshInterval) {
-                    clearInterval(autoRefreshInterval);
-                }
-                autoRefreshInterval = setInterval(loadActivityLog, 5000);
-                isRefreshPaused = false;
-                refreshBtn.style.opacity = '1.0';
-            }
-
-            function pauseAutoRefresh() {
-                if (autoRefreshInterval) {
-                    clearInterval(autoRefreshInterval);
-                    autoRefreshInterval = null;
-                }
-                isRefreshPaused = true;
-                refreshBtn.style.opacity = '0.6';
-            }
-
-            refreshBtn.addEventListener('click', loadActivityLog);
-
-            // Pause refresh on hover, resume on mouse leave
-            logContent.addEventListener('mouseenter', pauseAutoRefresh);
-            logContent.addEventListener('mouseleave', startAutoRefresh);
-
-            // Theme toggle
-            function initTheme() {
-                const savedTheme = localStorage.getItem('theme') || 'dark';
-                if (savedTheme === 'light') {
-                    document.body.classList.add('light-mode');
-                    themeToggle.textContent = '☀️';
-                } else {
-                    themeToggle.textContent = '🌙';
-                }
-            }
-
-            themeToggle.addEventListener('click', () => {
-                const isLight = document.body.classList.toggle('light-mode');
-                const theme = isLight ? 'light' : 'dark';
-                localStorage.setItem('theme', theme);
-                themeToggle.textContent = isLight ? '☀️' : '🌙';
-            });
-
-            initTheme();
-            loadActivityLog();
-            startAutoRefresh();
-        </script>
+        <h1>Activity Log — {today}</h1>
+        <div class="log-container">{log_content}</div>
     </body>
     </html>
     """
@@ -2447,4 +2215,4 @@ async def open_file(request: dict):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
