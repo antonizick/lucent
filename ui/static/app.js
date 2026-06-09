@@ -2283,10 +2283,12 @@ function todoRenderItem(item) {
     const isThawed = item.status === 'cryo' && (!item.cryo_until || item.cryo_until <= today);
 
     const el = document.createElement('div');
+    const priorityClass = item.priority ? ` priority-${item.priority.toLowerCase()}` : '';
     el.className = 'todo-item'
         + (item.status === 'done' ? ' todo-item-done' : '')
         + (isCryo ? ' todo-item-cryo' : '')
-        + (isThawed ? ' todo-item-thawed' : '');
+        + (isThawed ? ' todo-item-thawed' : '')
+        + priorityClass;
     el.dataset.id = item.id;
 
     const priClass = item.priority ? (TODO_PRI_COLORS[item.priority] || '') : 'todo-pri-none';
