@@ -840,6 +840,50 @@ async def search_emails(q: str = ""):
             "query": q
         }
 
+@app.get("/email/priority/cards")
+async def get_priority_email_cards():
+    """Return high-priority emails as structured JSON for the inline rating UI."""
+    try:
+        import sys
+        parent_dir = str(Path(__file__).parent.parent)
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+
+        from src.lucent_email.config import load_config
+        from src.lucent_email.email_service import EmailService
+        from datetime import datetime
+
+        config = load_config()
+        service = EmailService(config)
+
+        baseline_cutoff = None
+        if config.baseline_cutoff:
+            baseline_cutoff = datetime.fromisoformat(config.baseline_cutoff)
+
+        all_emails = service.db.search("", limit=100)
+
+        if baseline_cutoff:
+            filtered = [e for e in all_emails if e.timestamp and e.timestamp > baseline_cutoff]
+        else:
+            filtered = all_emails
+
+        priority_emails = [e for e in filtered if e.priority_score >= 7.0]
+
+        cards = []
+        for e in priority_emails[:20]:
+            cards.append({
+                "id": e.id,
+                "from_addr": e.from_addr,
+                "subject": e.subject,
+                "timestamp": e.timestamp.strftime("%Y-%m-%d %H:%M") if e.timestamp else "Unknown",
+                "score": e.priority_score,
+            })
+
+        return {"emails": cards, "total": len(cards)}
+    except Exception as ex:
+        logger.error(f"Error loading priority email cards: {ex}")
+        return {"emails": [], "error": str(ex)}
+
 @app.get("/email/feedback/sample")
 async def email_feedback_sample(limit: int = 20):
     """Return the most recently scored emails for the priority feedback review UI."""

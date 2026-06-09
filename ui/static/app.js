@@ -28,7 +28,6 @@ let lastRemindersContent = '';
 let lastInsightsData = null;
 let insightsInterval = null;
 let lastProposalsData = null;
-let lastEmailContent = '';
 let refreshCountdown = 30;
 let refreshTimerInterval = null;
 
@@ -597,17 +596,7 @@ async function pollForLog() {
                 logContent.scrollTop = 0;
             }
         } else if (currentLogTab === 'email-search') {
-            const response = await fetch('/log/email');
-            const data = await response.json();
-            const emailMonitorContent = document.getElementById('emailMonitorContent');
-            if (emailMonitorContent && data.content && data.content !== lastEmailContent) {
-                // Convert ANSI codes to HTML and preserve text formatting with <pre>
-                const htmlContent = '<pre style="white-space: pre-wrap; word-wrap: break-word; font-family: monospace;">' +
-                                    ansiToHtml(data.content) + '</pre>';
-                emailMonitorContent.innerHTML = htmlContent;
-                lastEmailContent = data.content;
-                emailMonitorContent.scrollTop = emailMonitorContent.scrollHeight;
-            }
+            loadEmailMonitor();
         }
     } catch (error) {
         console.error('Error polling for log:', error);
@@ -975,8 +964,6 @@ function switchLogTab(tab) {
     } else if (tab === 'insights') {
         lastInsightsData = null;
     } else if (tab === 'email-search') {
-        // Clear cache and load priority emails (email monitor) and poll PST status
-        lastEmailContent = '';
         loadEmailMonitor();
         loadEmailFeedback();
         pollPSTStatus();
@@ -1188,32 +1175,141 @@ if (emailFeedbackCheckpointBtn) {
     });
 }
 
-// Load and display high-priority emails (email monitor)
+// Load and display high-priority emails as inline-rateable cards
 async function loadEmailMonitor() {
+    const monitorContent = document.getElementById('emailMonitorContent');
+    if (!monitorContent) return;
+    monitorContent.innerHTML = '<div class="proposals-empty">Loading…</div>';
     try {
-        const monitorContent = document.getElementById('emailMonitorContent');
-        if (!monitorContent) {
-            return;
-        }
-
-        const response = await fetch('/log/email');
-        if (!response.ok) {
-            console.warn('Email monitor endpoint error:', response.status);
-            return;
-        }
-
-        const data = await response.json();
-
-        if (data.content) {
-            // Convert ANSI codes to HTML and preserve text formatting with <pre>
-            const htmlContent = '<pre style="white-space: pre-wrap; word-wrap: break-word; font-family: monospace;">' +
-                                ansiToHtml(data.content) + '</pre>';
-            monitorContent.innerHTML = htmlContent;
-        } else {
-            monitorContent.textContent = 'No priority emails at this time.\n';
-        }
+        const res = await fetch('/email/priority/cards');
+        const data = await res.json();
+        renderPriorityEmailCards(data.emails || []);
     } catch (error) {
         console.error('Error loading email monitor:', error);
+        monitorContent.innerHTML = '<div class="insights-err">Failed to load priority emails.</div>';
+    }
+}
+
+function renderPriorityEmailCards(emails) {
+    const container = document.getElementById('emailMonitorContent');
+    if (!container) return;
+    if (!emails.length) {
+        container.innerHTML = '<div class="proposals-empty">No high-priority emails at this time.</div>';
+        return;
+    }
+    let h = '';
+    emails.forEach(e => {
+        const id = escapeHtml(e.id);
+        const score = (e.score != null) ? Number(e.score).toFixed(1) : '—';
+        h += `<div class="proposal-card email-feedback-card priority-email-card" data-id="${id}" data-score="${e.score}">`;
+        h += `<div class="proposal-header">`;
+        h += `  <span class="proposal-type ptype-priority-email">★ ${score}/10</span>`;
+        h += `  <span class="proposal-target">${escapeHtml(e.timestamp || 'Unknown')}</span>`;
+        h += `</div>`;
+        h += `<div class="proposal-reason">From: ${escapeHtml(e.from_addr || '(unknown)')}</div>`;
+        h += `<div class="email-feedback-subject">${escapeHtml(e.subject || '(no subject)')}</div>`;
+        h += `<div class="proposal-actions">`;
+        h += `  <button class="proposal-btn apply-btn" onclick="priorityEmailFeedbackAction('approve','${id}')">Approve</button>`;
+        h += `  <button class="proposal-btn refine-btn" onclick="togglePriorityAdjustForm('${id}')">Adjust Rating</button>`;
+        h += `</div>`;
+        h += `<div id="priority-adjust-editor-${id}" class="refine-editor" style="display:none;">`;
+        h += `  <div class="adjust-score-row">`;
+        h += `    <label for="priority-adjust-score-${id}">Correct score (0-10):</label>`;
+        h += `    <input type="number" min="0" max="10" step="0.5" id="priority-adjust-score-${id}" class="adjust-score-input" value="${score !== '—' ? score : 5.0}">`;
+        h += `  </div>`;
+        h += `  <textarea id="priority-adjust-explain-${id}" class="refine-textarea" placeholder="Why should this score change? (used to refine priority guidelines)"></textarea>`;
+        h += `  <div class="refine-actions">`;
+        h += `    <button class="proposal-btn save-btn" onclick="submitPriorityAdjustment('${id}')">Submit</button>`;
+        h += `    <button class="proposal-btn cancel-btn" onclick="togglePriorityAdjustForm('${id}')">Cancel</button>`;
+        h += `  </div>`;
+        h += `</div>`;
+        h += `<div class="proposal-msg" id="pemsg-${id}"></div>`;
+        h += `</div>`;
+    });
+    container.innerHTML = h;
+}
+
+function togglePriorityAdjustForm(id) {
+    const editor = document.getElementById(`priority-adjust-editor-${id}`);
+    const card = document.querySelector(`.priority-email-card[data-id="${id}"]`);
+    const actions = card ? card.querySelector('.proposal-actions') : null;
+    if (!editor) return;
+    const showing = editor.style.display !== 'none';
+    editor.style.display = showing ? 'none' : 'block';
+    if (actions) {
+        actions.style.opacity = showing ? '1' : '0.5';
+        actions.style.pointerEvents = showing ? 'auto' : 'none';
+    }
+    if (!showing) {
+        const textarea = document.getElementById(`priority-adjust-explain-${id}`);
+        if (textarea) textarea.focus();
+    }
+}
+
+async function priorityEmailFeedbackAction(action, id) {
+    const msgEl = document.getElementById(`pemsg-${id}`);
+    if (msgEl) { msgEl.textContent = 'Submitting…'; msgEl.className = 'proposal-msg'; }
+    try {
+        const res = await fetch(`/email/feedback/${id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            const card = document.querySelector(`.priority-email-card[data-id="${id}"]`);
+            if (card) {
+                card.classList.add('proposal-done');
+                const actions = card.querySelector('.proposal-actions');
+                if (actions) actions.innerHTML = '<span style="color:#4caf50">✓ Reinforced</span>';
+            }
+            if (msgEl) { msgEl.textContent = data.msg; msgEl.className = 'proposal-msg proposal-ok'; }
+        } else if (msgEl) {
+            msgEl.textContent = data.msg || 'Failed'; msgEl.className = 'proposal-msg proposal-err';
+        }
+    } catch (e) {
+        if (msgEl) { msgEl.textContent = e.message; msgEl.className = 'proposal-msg proposal-err'; }
+    }
+}
+
+async function submitPriorityAdjustment(id) {
+    const scoreInput = document.getElementById(`priority-adjust-score-${id}`);
+    const explainInput = document.getElementById(`priority-adjust-explain-${id}`);
+    const msgEl = document.getElementById(`pemsg-${id}`);
+    const corrected_score = parseFloat(scoreInput.value);
+    const explanation = explainInput.value.trim();
+
+    if (isNaN(corrected_score) || corrected_score < 0 || corrected_score > 10) {
+        if (msgEl) { msgEl.textContent = 'Score must be between 0 and 10'; msgEl.className = 'proposal-msg proposal-err'; }
+        return;
+    }
+    if (!explanation) {
+        if (msgEl) { msgEl.textContent = 'Please explain why the rating should change'; msgEl.className = 'proposal-msg proposal-err'; }
+        return;
+    }
+    if (msgEl) { msgEl.textContent = 'Submitting…'; msgEl.className = 'proposal-msg'; }
+    try {
+        const res = await fetch(`/email/feedback/${id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'adjust', corrected_score, explanation })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            const card = document.querySelector(`.priority-email-card[data-id="${id}"]`);
+            if (card) {
+                card.classList.add('proposal-done');
+                const editor = document.getElementById(`priority-adjust-editor-${id}`);
+                if (editor) editor.style.display = 'none';
+                const actions = card.querySelector('.proposal-actions');
+                if (actions) actions.innerHTML = '<span style="color:#00bcd4">✓ Correction submitted</span>';
+            }
+            if (msgEl) { msgEl.textContent = data.msg; msgEl.className = 'proposal-msg proposal-ok'; }
+        } else if (msgEl) {
+            msgEl.textContent = data.msg || 'Failed'; msgEl.className = 'proposal-msg proposal-err';
+        }
+    } catch (e) {
+        if (msgEl) { msgEl.textContent = e.message; msgEl.className = 'proposal-msg proposal-err'; }
     }
 }
 

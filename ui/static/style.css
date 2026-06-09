@@ -1136,6 +1136,13 @@ body {
     overflow-x: hidden;
 }
 
+.email-monitor-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 2px 0;
+}
+
 #emailSearchContent {
     flex: 1;
     min-height: 0;
@@ -1476,6 +1483,7 @@ body.facetime-mode .current-text {
 .ptype-skill-create { background: rgba(33,150,243,0.25); color: #90caf9; }
 .ptype-skill-support-file { background: rgba(255,152,0,0.2); color: #ffcc80; }
 .ptype-email-score { background: rgba(0, 229, 255, 0.18); color: var(--neon-cyan); }
+.ptype-priority-email { background: rgba(244, 67, 54, 0.22); color: #ef9a9a; }
 
 .proposal-target {
     color: var(--neon-cyan);

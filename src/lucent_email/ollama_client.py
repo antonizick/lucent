@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class OllamaConfig:
     """Ollama configuration."""
     base_url: str = "http://localhost:11434"
-    model_fast: str = "qwen3:0.6b"  # Fast model for priority detection
+    model_fast: str = "mistral:latest"  # Fast model for priority detection
     model_quality: str = "qwen3-30b-a3b:latest"  # Quality model for composition
     temperature: float = 0.7
 

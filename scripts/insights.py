@@ -128,9 +128,11 @@ def _skill_stats() -> dict:
         by_state: dict[str, int] = {}
         for s in all_skills:
             by_state[s["state"]] = by_state.get(s["state"], 0) + 1
+        active_slugs = {s["slug"] for s in all_skills}
         top_used = sorted(
             [(slug, u.get("use_count", 0), u.get("last_used", ""))
-             for slug, u in usage.items() if u.get("use_count", 0) > 0],
+             for slug, u in usage.items()
+             if u.get("use_count", 0) > 0 and slug in active_slugs],
             key=lambda x: x[1], reverse=True
         )[:5]
         # Build full skills list with usage data

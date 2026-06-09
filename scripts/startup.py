@@ -466,10 +466,17 @@ def print_identity_bundle() -> None:
     try:
         import sys as _sys
         _sys.path.insert(0, str(LUCENT_ROOT / "scripts"))
-        from skills import get_skills_summary
+        from skills import get_skills_summary, list_skills, bump_use
         summary = get_skills_summary()
         if summary:
             print(summary)
+        # Record a session use for every active skill — they're loaded into the
+        # context bundle each session, so counts should reflect actual session coverage.
+        for skill in list_skills():
+            try:
+                bump_use(skill["slug"])
+            except Exception:
+                pass
     except Exception:
         pass  # Skills unavailable — don't break startup
 

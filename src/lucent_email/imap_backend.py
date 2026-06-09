@@ -7,7 +7,7 @@ Read/write access to remote email accounts.
 import imaplib
 import logging
 import smtplib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.parser import BytesParser
@@ -452,7 +452,7 @@ class IMAPBackend(EmailBackend):
                 from email.utils import parsedate_to_datetime
                 timestamp = parsedate_to_datetime(date_str)
             except:
-                timestamp = datetime.now()
+                timestamp = datetime.now(timezone.utc)
 
             # Get snippet (first 200 chars of body)
             snippet = ""
