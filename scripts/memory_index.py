@@ -31,6 +31,7 @@ MEMORY_DIR = LUCENT_DIR / "memory"
 SKILLS_DIR = MEMORY_DIR / "skills"
 AUTO_MEMORY_DIR = Path.home() / ".claude/projects/-home-nick-dev-lucent/memory"
 INDEX_PATH = MEMORY_DIR / ".recall_index.json"
+TODO_PATH = MEMORY_DIR / "TODO.json"
 
 OLLAMA_EMBED_URL = "http://localhost:11434/api/embeddings"
 EMBED_MODEL = "nomic-embed-text"
@@ -134,12 +135,54 @@ def _get_sources() -> list[tuple[str, Path]]:
     return sources
 
 
+def _get_todo_chunks() -> list[dict]:
+    """Convert open (and thawed-cryo) TODO items into indexable text chunks."""
+    if not TODO_PATH.exists():
+        return []
+    try:
+        data = json.loads(TODO_PATH.read_text())
+    except Exception:
+        return []
+
+    today = date.today().isoformat()
+    chunks = []
+    for item in data.get("items", []):
+        status = item.get("status", "open")
+        cryo_until = item.get("cryo_until") or ""
+        if status in ("archived", "done"):
+            continue
+        if status == "cryo" and cryo_until and cryo_until > today:
+            continue  # still frozen — don't surface in recall
+
+        parts = [f"TODO: {item.get('title', '')}"]
+        if item.get("priority"):
+            parts.append(f"Priority: {item['priority']}")
+        if item.get("tags"):
+            parts.append(f"Tags: {', '.join(item['tags'])}")
+        if item.get("description"):
+            parts.append(item["description"])
+        if item.get("notes"):
+            parts.append(item["notes"])
+
+        text = "\n".join(p for p in parts if p)[:MAX_CHUNK_CHARS]
+        if len(text) >= 20:
+            chunks.append({"source": "todo", "text": text, "hash": _sha16(text)})
+    return chunks
+
+
 def _fingerprint(sources: list[tuple[str, Path]]) -> str:
     parts = []
     for label, p in sources:
         try:
             st = p.stat()
             parts.append(f"{label}:{st.st_mtime:.0f}:{st.st_size}")
+        except OSError:
+            pass
+    # Include TODO.json mtime so changes trigger a re-index
+    if TODO_PATH.exists():
+        try:
+            st = TODO_PATH.stat()
+            parts.append(f"todo:{st.st_mtime:.0f}:{st.st_size}")
         except OSError:
             pass
     return _sha16("|".join(parts))
@@ -234,6 +277,18 @@ def build_index(force: bool = False) -> dict:
                     continue  # Ollama down — skip, don't poison index
                 chunk["embedding"] = emb
             new_chunks.append(chunk)
+
+    # Index TODO.json items (open + thawed cryo only)
+    for chunk in _get_todo_chunks():
+        h = chunk["hash"]
+        if h in existing_embs:
+            chunk["embedding"] = existing_embs[h]
+        else:
+            emb = _embed(chunk["text"])
+            if emb is None:
+                continue
+            chunk["embedding"] = emb
+        new_chunks.append(chunk)
 
     index = {"fingerprint": fp, "chunks": new_chunks}
     save_index(index)

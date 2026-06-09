@@ -75,6 +75,34 @@ As of 2026-05-14, the Voice Box uses **Piper TTS** for server-side neural speech
   - **Daily Tab:** Live view of today's session notes (`memory/YYYY-MM-DD.md`)
 - **Font Controls:** Adjust daily log text size with +/− buttons
 
+### To-Do List System
+The Voice Box UI includes a full-featured To-Do list tab for tracking projects, ambitions, and tasks with priority, tags, search, and cryo scheduling.
+
+**Storage:** `memory/TODO.json` (private — gitignored from Lucent repo, backed up to [LucentMemory](https://github.com/antonizick/LucentMemory))
+
+**Schema:** Each item stores `id`, `title`, `description`, `priority` (H/M/L/null), `tags[]`, `status` (open/done/archived/cryo), `created`, `updated`, `notes`, `cryo_until`.
+
+**UI Tab (To-Do):**
+- Search bar, priority filter (All / H / M / L / —), status filter (Open / Cryo / Done / Archived), tag filter
+- Inline add form: title, description, priority, tags, cryo date
+- Inline editing with save/cancel per item
+- Priority badges (red=H, orange=M, green=L) and cryo status badges with pulsing animation for thawed items
+
+**Cryo Status:** Items frozen until a future date. `status=cryo` + `cryo_until` hides items from Open view. On or after the cryo date, items auto-thaw and appear with a pulsing ice-blue "thawed" badge. Useful for ideas to revisit after a specific date or event.
+
+**CRUD Endpoints:**
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/todo` | List items (filter by `status`, `priority`, `tags`, `search`; cryo auto-thaw in open view) |
+| POST | `/api/todo` | Create item (`status=cryo` auto-set when `cryo_until` is provided) |
+| PUT | `/api/todo/{id}` | Update any fields; setting/clearing `cryo_until` auto-manages status |
+| DELETE | `/api/todo/{id}` | Hard delete from JSON |
+
+**NERO Integration:**
+- `scripts/memory_index.py` indexes open/thawed TODO items as semantic chunks; re-indexes automatically on TODO.json change (mtime fingerprint)
+- `scripts/todo_context.py` fires in the UserPromptSubmit hook; when the prompt contains project/task/idea keywords, injects the sorted open TODO list into the per-turn context
+
 ### FaceTime Mode
 FaceTime mode optimizes the Voice Box for mobile and video conferencing use. Press **Ctrl+Shift+F** (or click the FaceTime button) to toggle.
 
@@ -135,7 +163,8 @@ All core memory files are consolidated in the `memory/` directory:
 | `memory/LTMemory.md` | Long-term memory — distilled from daily notes into lasting knowledge (newest 10 sessions; older → `LTMemory.archive.md`) |
 | `memory/skills/` | NERO skill library — procedural knowledge packages with lifecycle management |
 | `memory/.nero/` | NERO runtime state — config, proposals, curator reports, worker log |
-| `memory/.recall_index.json` | NERO semantic recall index (Ollama `nomic-embed-text` embeddings, 392+ chunks) |
+| `memory/.recall_index.json` | NERO semantic recall index (Ollama `nomic-embed-text` embeddings, 650+ chunks including TODO items) |
+| `memory/TODO.json` | Private To-Do list — projects, ideas, tasks (gitignored; backed up to LucentMemory) |
 
 ## Directory Structure
 
@@ -167,6 +196,7 @@ lucent/
 │   ├── .nero/             NERO runtime state (config, proposals, curator reports, worker log)
 │   ├── .recall_index.json Semantic recall index (Ollama nomic-embed-text embeddings)
 │   ├── nero_inbox.md      Pending self-improvement proposals (propose mode)
+│   ├── TODO.json          Private To-Do list (gitignored; backed up to LucentMemory)
 │   ├── logs/              Voice activity logs (backed up hourly)
 │   ├── scripts/           Backup scripts (redundant copies for recovery)
 │   └── archive/           Historical notes + compressed logs (never deleted)
@@ -180,7 +210,8 @@ lucent/
 │   ├── verify_backup_health.py Health check (GitHub connectivity)
 │   ├── session_logger.py  Session logging initialization
 │   ├── rotate_voice_logs.py Voice log archival (monthly gzip)
-│   ├── memory_index.py    NERO: semantic recall index (build/query/status)
+│   ├── memory_index.py    NERO: semantic recall index (build/query/status; includes TODO.json chunks)
+│   ├── todo_context.py    NERO: context-triggered TODO surface (hook: injects open items on task/project keywords)
 │   ├── memory_recall.py   NERO: UserPromptSubmit hook entry (embeds prompt, injects recall)
 │   ├── reflect.py         NERO: per-turn reflection loop (Stop hook + worker + proposal inbox)
 │   ├── skills.py          NERO: skill library management (list/view/bump/lifecycle)
@@ -717,7 +748,7 @@ python3 scripts/memory_index.py query "text" # test a query
 python3 scripts/memory_index.py status       # show chunk counts by source
 ```
 
-**Sources indexed:** `memory/LTMemory.md`, `~/.claude/.../memory/*.md` (auto-memory), last 7 daily notes, all `memory/skills/**/*.md`, plus their archives.
+**Sources indexed:** `memory/LTMemory.md`, `~/.claude/.../memory/*.md` (auto-memory), last 7 daily notes, all `memory/skills/**/*.md`, plus their archives, and open/thawed items from `memory/TODO.json`.
 
 #### 2. Skill Library (Phase 2)
 Procedural knowledge packages in `memory/skills/` — *how to do a class of task for Nick*. Distinct from `agents/` (personas) and `memory/` (facts). Four core seed skills are shipped and protected; the reflection loop adds more over time.

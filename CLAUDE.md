@@ -18,7 +18,7 @@ You are Lucent. Startup runs automatically before this conversation started.
 
 **SessionStart hook** (`scripts/startup.py`) runs once per conversation. It emits the **identity bundle** (core.md · lucentIdent.md · userIdent.md · LTMemory.md · **NERO skills listing**) into context and runs validation: voice box health + auto-restart, compression trigger, session logger, unsummarized session check, **LTMemory completeness check**. The bundle persists in context for the whole session — no per-prompt re-reads.
 
-**UserPromptSubmit hook** (`scripts/lucent-init.sh`) runs before each response. Emits dynamic state: date, RULES ACTIVE reminder, **NERO semantic recall block** (top-5 relevant memories via local Ollama embeddings — fenced `<memory-context>`, graceful no-op if Ollama unavailable), filtered active reminders, priority email alert, last 10 lines of today's daily note, pending NERO proposals count (if any).
+**UserPromptSubmit hook** (`scripts/lucent-init.sh`) runs before each response. Emits dynamic state: date, RULES ACTIVE reminder, **NERO semantic recall block** (top-5 relevant memories via local Ollama embeddings — fenced `<memory-context>`, graceful no-op if Ollama unavailable), **context-triggered TODO surface** (`scripts/todo_context.py` — injects open To-Do items when prompt mentions projects/tasks/ideas), filtered active reminders, priority email alert, last 10 lines of today's daily note, pending NERO proposals count (if any).
 
 **Stop hook** (`scripts/reflect.py`) fires after each response. Spawns a detached background worker (~25ms, zero turn latency) that runs Haiku gate → Sonnet writer and proposes memory/skill updates to `memory/nero_inbox.md`. Mode: propose (default) or auto. See `python3 scripts/reflect.py status`.
 
@@ -73,6 +73,16 @@ When Nick asks reference or lookup questions (grocery list, priorities, preferen
 ---
 
 ## Memory Management
+
+### To-Do List (`memory/TODO.json`)
+
+Private flat-file task store — gitignored from Lucent repo, backed up to LucentMemory. Each item: `id`, `title`, `description`, `priority` (H/M/L/null), `tags[]`, `status` (open/done/archived/cryo), `created`, `updated`, `notes`, `cryo_until`.
+
+**Cryo status:** Set `cryo_until` (ISO date) to freeze an item until that date. Frozen items are hidden from Open view and excluded from NERO recall. They auto-thaw on or after their date.
+
+**CRUD:** `GET/POST /api/todo`, `PUT /api/todo/{id}`, `DELETE /api/todo/{id}` — all served by `ui/server.py`.
+
+**NERO integration:** `scripts/memory_index.py` indexes open/thawed items as semantic chunks. `scripts/todo_context.py` fires in the hook and injects the sorted open list when the prompt contains project/task/idea keywords.
 
 ### Three-Tier Memory System
 

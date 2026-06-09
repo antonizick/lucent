@@ -225,6 +225,23 @@ class EmailFeedbackRequest(BaseModel):
     corrected_score: float | None = None
     explanation: str | None = None
 
+class TodoCreateRequest(BaseModel):
+    title: str
+    description: Optional[str] = ""
+    priority: Optional[str] = None  # "H", "M", "L", or null
+    tags: list[str] = []
+    notes: Optional[str] = ""
+    cryo_until: Optional[str] = None  # "YYYY-MM-DD" — freeze until this date
+
+class TodoUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[str] = None
+    tags: Optional[list[str]] = None
+    status: Optional[str] = None  # "open", "done", "archived", "cryo"
+    notes: Optional[str] = None
+    cryo_until: Optional[str] = None  # "YYYY-MM-DD" or "" to clear
+
 @app.get("/")
 async def root():
     """Serve index.html"""
@@ -2255,6 +2272,147 @@ async def open_file(request: dict):
     except Exception as e:
         logger.error(f"Error opening file {path}: {e}")
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
+TODO_PATH = Path(__file__).parent.parent / "memory" / "TODO.json"
+
+def _load_todos() -> dict:
+    if not TODO_PATH.exists():
+        return {"items": []}
+    try:
+        return json.loads(TODO_PATH.read_text())
+    except Exception:
+        return {"items": []}
+
+def _save_todos(data: dict) -> None:
+    TODO_PATH.write_text(json.dumps(data, indent=2) + "\n")
+
+@app.get("/api/todo")
+async def list_todos(
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    tags: Optional[str] = None,
+    search: Optional[str] = None,
+):
+    """List todo items with optional filters. tags param is comma-separated."""
+    data = _load_todos()
+    items = data.get("items", [])
+
+    tag_filter = [t.strip().lower() for t in tags.split(",")] if tags else []
+
+    today_str = date.today().isoformat()
+
+    def matches(item):
+        item_status = item.get("status", "open")
+        cryo_until = item.get("cryo_until") or ""
+
+        if status == "open" or not status:
+            # Open view: open items + cryo items whose date has passed (thawed)
+            if item_status == "cryo":
+                if not cryo_until or cryo_until > today_str:
+                    return False  # still frozen
+            elif item_status != "open":
+                return False
+        elif status == "cryo":
+            # Cryo view: only items still frozen
+            if item_status != "cryo":
+                return False
+            if cryo_until and cryo_until <= today_str:
+                return False  # already thawed
+        else:
+            if item_status != status:
+                return False
+
+        if priority and item.get("priority") != priority:
+            return False
+        if tag_filter:
+            item_tags = [t.lower() for t in item.get("tags", [])]
+            if not any(t in item_tags for t in tag_filter):
+                return False
+        if search:
+            needle = search.lower()
+            haystack = (item.get("title", "") + " " + item.get("description", "") + " " + item.get("notes", "")).lower()
+            if needle not in haystack:
+                return False
+        return True
+
+    priority_order = {"H": 0, "M": 1, "L": 2, None: 3}
+    filtered = [i for i in items if matches(i)]
+    filtered.sort(key=lambda i: (priority_order.get(i.get("priority"), 3), i.get("created", "")))
+    return {"items": filtered}
+
+@app.post("/api/todo")
+async def create_todo(req: TodoCreateRequest):
+    """Create a new todo item."""
+    if req.priority not in (None, "H", "M", "L"):
+        raise HTTPException(status_code=400, detail="priority must be H, M, L, or null")
+
+    data = _load_todos()
+    now = date.today().isoformat()
+    status = "cryo" if req.cryo_until else "open"
+    item = {
+        "id": str(uuid.uuid4()),
+        "title": req.title.strip(),
+        "description": req.description or "",
+        "priority": req.priority,
+        "tags": [t.strip() for t in req.tags if t.strip()],
+        "status": status,
+        "created": now,
+        "updated": now,
+        "notes": req.notes or "",
+        "cryo_until": req.cryo_until or None,
+    }
+    data["items"].append(item)
+    _save_todos(data)
+    log_activity(f"✅ TODO created: {item['title']}", source="todo")
+    return item
+
+@app.put("/api/todo/{todo_id}")
+async def update_todo(todo_id: str, req: TodoUpdateRequest):
+    """Update an existing todo item."""
+    if req.priority is not None and req.priority not in ("H", "M", "L", ""):
+        raise HTTPException(status_code=400, detail="priority must be H, M, L, or empty string (clears it)")
+    if req.status is not None and req.status not in ("open", "done", "archived", "cryo"):
+        raise HTTPException(status_code=400, detail="status must be open, done, archived, or cryo")
+
+    data = _load_todos()
+    for item in data["items"]:
+        if item["id"] == todo_id:
+            if req.title is not None:
+                item["title"] = req.title.strip()
+            if req.description is not None:
+                item["description"] = req.description
+            if req.priority is not None:
+                item["priority"] = req.priority if req.priority != "" else None
+            if req.tags is not None:
+                item["tags"] = [t.strip() for t in req.tags if t.strip()]
+            if req.status is not None:
+                item["status"] = req.status
+                if req.status != "cryo":
+                    item["cryo_until"] = None
+            if req.cryo_until is not None:
+                item["cryo_until"] = req.cryo_until if req.cryo_until != "" else None
+                if req.cryo_until and req.cryo_until != "":
+                    item["status"] = "cryo"
+            if req.notes is not None:
+                item["notes"] = req.notes
+            item["updated"] = date.today().isoformat()
+            _save_todos(data)
+            log_activity(f"✏️ TODO updated: {item['title']}", source="todo")
+            return item
+    raise HTTPException(status_code=404, detail="Todo not found")
+
+@app.delete("/api/todo/{todo_id}")
+async def delete_todo(todo_id: str):
+    """Permanently delete a todo item."""
+    data = _load_todos()
+    original_len = len(data["items"])
+    data["items"] = [i for i in data["items"] if i["id"] != todo_id]
+    if len(data["items"]) == original_len:
+        raise HTTPException(status_code=404, detail="Todo not found")
+    _save_todos(data)
+    log_activity(f"🗑️ TODO deleted: {todo_id}", source="todo")
+    return {"ok": True}
 
 
 if __name__ == "__main__":

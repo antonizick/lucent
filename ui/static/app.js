@@ -980,6 +980,7 @@ function switchLogTab(tab) {
     document.getElementById('logLabelWeekly').classList.toggle('hidden', tab !== 'weekly');
     document.getElementById('logLabelMemory').classList.toggle('hidden', tab !== 'memory');
     document.getElementById('logLabelReminders').classList.toggle('hidden', tab !== 'reminders');
+    document.getElementById('logLabelTodo').classList.toggle('hidden', tab !== 'todo');
     document.getElementById('logLabelInsights').classList.toggle('hidden', tab !== 'insights');
     document.getElementById('logLabelEmailSearch').classList.toggle('hidden', tab !== 'email-search');
 
@@ -987,23 +988,31 @@ function switchLogTab(tab) {
     const logHeader = document.querySelector('.log-header');
     const logContentElement = document.getElementById('logContent');
     const emailSearchPanel = document.getElementById('emailSearchPanel');
+    const todoPanel = document.getElementById('todoPanel');
 
     // Always show header (tabs are needed for navigation)
     if (logHeader) logHeader.classList.remove('hidden');
 
-    // When email-search is active: hide main log content, show email panel
     if (tab === 'email-search') {
         if (logContentElement) logContentElement.classList.add('hidden');
         if (emailSearchPanel) emailSearchPanel.classList.remove('hidden');
+        if (todoPanel) todoPanel.classList.add('hidden');
+    } else if (tab === 'todo') {
+        if (logContentElement) logContentElement.classList.add('hidden');
+        if (emailSearchPanel) emailSearchPanel.classList.add('hidden');
+        if (todoPanel) todoPanel.classList.remove('hidden');
+        todoLoad();
     } else {
-        // For other tabs: show main content, hide email panel
         if (logContentElement) logContentElement.classList.remove('hidden');
         if (emailSearchPanel) emailSearchPanel.classList.add('hidden');
+        if (todoPanel) todoPanel.classList.add('hidden');
     }
 
     // Clear content and poll immediately
     if (tab === 'email-search') {
         // email-search is manual — no auto-poll
+    } else if (tab === 'todo') {
+        // todo is managed by its own JS; no log poll needed
     } else if (tab === 'insights') {
         logContent.innerHTML = '<div class="insights-panel"><div class="insights-ts">Loading...</div></div>';
         lastInsightsData = null;
@@ -2220,3 +2229,314 @@ document.addEventListener('keydown', (e) => {
         toggleFacetimeMode();
     }
 });
+
+// ─── TO-DO MODULE ────────────────────────────────────────────────────────────
+
+const TODO_PRI_LABELS = { H: 'H', M: 'M', L: 'L', null: '—' };
+const TODO_PRI_COLORS = { H: 'todo-pri-h', M: 'todo-pri-m', L: 'todo-pri-l' };
+
+let todoState = {
+    priority: '',      // '' = all, 'H'/'M'/'L'/'null'
+    status: 'open',
+    search: '',
+    tagFilter: '',
+    newPriority: null, // for the add form
+    editingId: null,
+};
+
+async function todoLoad() {
+    const list = document.getElementById('todoList');
+    if (!list) return;
+    list.innerHTML = '<div class="todo-loading">Loading…</div>';
+
+    const params = new URLSearchParams();
+    if (todoState.status) params.set('status', todoState.status);
+    if (todoState.priority && todoState.priority !== 'null') params.set('priority', todoState.priority);
+    if (todoState.search) params.set('search', todoState.search);
+    if (todoState.tagFilter) params.set('tags', todoState.tagFilter);
+
+    try {
+        const res = await fetch('/api/todo?' + params.toString());
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+
+        // Client-side filter: priority=null means items with no priority set
+        let items = data.items || [];
+        if (todoState.priority === 'null') {
+            items = items.filter(i => !i.priority);
+        }
+
+        list.innerHTML = '';
+        if (items.length === 0) {
+            list.innerHTML = '<div class="todo-empty">No items found.</div>';
+            return;
+        }
+        items.forEach(item => list.appendChild(todoRenderItem(item)));
+    } catch (e) {
+        list.innerHTML = '<div class="todo-empty">Error loading to-dos: ' + e.message + '</div>';
+    }
+}
+
+function todoRenderItem(item) {
+    const today = new Date().toISOString().slice(0, 10);
+    const isCryo = item.status === 'cryo' && item.cryo_until && item.cryo_until > today;
+    const isThawed = item.status === 'cryo' && (!item.cryo_until || item.cryo_until <= today);
+
+    const el = document.createElement('div');
+    el.className = 'todo-item'
+        + (item.status === 'done' ? ' todo-item-done' : '')
+        + (isCryo ? ' todo-item-cryo' : '')
+        + (isThawed ? ' todo-item-thawed' : '');
+    el.dataset.id = item.id;
+
+    const priClass = item.priority ? (TODO_PRI_COLORS[item.priority] || '') : 'todo-pri-none';
+    const priLabel = item.priority || '—';
+    const tags = (item.tags || []).map(t => `<span class="todo-tag">${escHtml(t)}</span>`).join('');
+    const desc = item.description ? `<div class="todo-desc">${escHtml(item.description)}</div>` : '';
+    const notes = item.notes ? `<div class="todo-notes">${escHtml(item.notes)}</div>` : '';
+    const cryoBadge = isCryo ? `<span class="todo-cryo-badge" title="Frozen until ${item.cryo_until}">❄ ${item.cryo_until}</span>` : '';
+    const thawedBadge = isThawed ? `<span class="todo-thawed-badge" title="Cryo expired — ready to work">❄ thawed</span>` : '';
+
+    el.innerHTML = `
+        <div class="todo-item-main">
+            <button class="todo-done-btn" title="${item.status === 'done' ? 'Re-open' : 'Mark done'}" data-id="${item.id}" data-status="${item.status}">
+                ${item.status === 'done' ? '↩' : '✓'}
+            </button>
+            <span class="todo-pri-badge ${priClass}">${priLabel}</span>
+            <span class="todo-title">${escHtml(item.title)}</span>
+            ${cryoBadge}${thawedBadge}
+            <div class="todo-tags">${tags}</div>
+            <div class="todo-item-actions">
+                <button class="todo-edit-btn" data-id="${item.id}" title="Edit">✏</button>
+                <button class="todo-archive-btn" data-id="${item.id}" title="Archive">⊘</button>
+                <button class="todo-del-btn" data-id="${item.id}" title="Delete">✕</button>
+            </div>
+        </div>
+        ${desc}${notes}
+    `;
+
+    // Edit form (hidden inline)
+    const editForm = document.createElement('div');
+    editForm.className = 'todo-edit-form hidden';
+    editForm.id = 'todo-edit-' + item.id;
+    editForm.innerHTML = `
+        <input type="text" class="todo-input-title" value="${escAttr(item.title)}" id="todo-edit-title-${item.id}">
+        <textarea class="todo-input-desc" rows="2" id="todo-edit-desc-${item.id}">${escHtml(item.description || '')}</textarea>
+        <div class="todo-add-row">
+            <div class="todo-pri-selector">
+                <span class="todo-filter-label">Priority:</span>
+                ${['', 'H', 'M', 'L'].map(p => {
+                    const active = (item.priority || '') === p ? ' active' : '';
+                    const cls = p ? ' todo-pri-' + p.toLowerCase() : ' todo-pri-none';
+                    return `<button class="todo-editpri-btn${cls}${active}" data-id="${item.id}" data-val="${p}">${p || '—'}</button>`;
+                }).join('')}
+            </div>
+            <input type="text" class="todo-input-tags" value="${escAttr((item.tags||[]).join(', '))}" id="todo-edit-tags-${item.id}" placeholder="Tags">
+            <textarea class="todo-input-desc" rows="1" id="todo-edit-notes-${item.id}" placeholder="Notes">${escHtml(item.notes || '')}</textarea>
+            <div class="todo-cryo-input-group" title="Freeze until date (leave blank to unfreeze)">
+                <span class="todo-filter-label">❄ Cryo until:</span>
+                <input type="date" class="todo-input-cryo" id="todo-edit-cryo-${item.id}" value="${escAttr(item.cryo_until || '')}">
+            </div>
+        </div>
+        <div class="todo-edit-actions">
+            <button class="todo-save-btn" data-id="${item.id}">Save</button>
+            <button class="todo-cancel-btn" data-id="${item.id}">Cancel</button>
+        </div>
+    `;
+    el.appendChild(editForm);
+
+    // Events
+    el.querySelector('.todo-done-btn').addEventListener('click', () => todoToggleDone(item.id, item.status));
+    el.querySelector('.todo-edit-btn').addEventListener('click', () => todoShowEdit(item.id));
+    el.querySelector('.todo-archive-btn').addEventListener('click', () => todoArchive(item.id));
+    el.querySelector('.todo-del-btn').addEventListener('click', () => todoDelete(item.id));
+    editForm.querySelector('.todo-save-btn').addEventListener('click', () => todoSaveEdit(item.id));
+    editForm.querySelector('.todo-cancel-btn').addEventListener('click', () => todoHideEdit(item.id));
+    editForm.querySelectorAll('.todo-editpri-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            editForm.querySelectorAll('.todo-editpri-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+
+    return el;
+}
+
+function todoShowEdit(id) {
+    const form = document.getElementById('todo-edit-' + id);
+    if (form) form.classList.remove('hidden');
+}
+
+function todoHideEdit(id) {
+    const form = document.getElementById('todo-edit-' + id);
+    if (form) form.classList.add('hidden');
+}
+
+async function todoSaveEdit(id) {
+    const title = document.getElementById('todo-edit-title-' + id)?.value.trim();
+    const desc = document.getElementById('todo-edit-desc-' + id)?.value.trim();
+    const notes = document.getElementById('todo-edit-notes-' + id)?.value.trim();
+    const tagsRaw = document.getElementById('todo-edit-tags-' + id)?.value || '';
+    const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+    const activeBtn = document.querySelector(`#todo-edit-${id} .todo-editpri-btn.active`);
+    const priority = activeBtn ? (activeBtn.dataset.val || null) : null;
+    const cryoUntil = document.getElementById('todo-edit-cryo-' + id)?.value || '';
+
+    if (!title) return;
+    try {
+        const res = await fetch('/api/todo/' + id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, description: desc, notes, tags, priority: priority || '', cryo_until: cryoUntil }),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        todoLoad();
+    } catch (e) {
+        alert('Failed to save: ' + e.message);
+    }
+}
+
+async function todoToggleDone(id, currentStatus) {
+    const newStatus = currentStatus === 'done' ? 'open' : 'done';
+    try {
+        await fetch('/api/todo/' + id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus }),
+        });
+        todoLoad();
+    } catch (e) {
+        alert('Failed to update: ' + e.message);
+    }
+}
+
+async function todoArchive(id) {
+    try {
+        await fetch('/api/todo/' + id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'archived' }),
+        });
+        todoLoad();
+    } catch (e) {
+        alert('Failed to archive: ' + e.message);
+    }
+}
+
+async function todoDelete(id) {
+    if (!confirm('Permanently delete this to-do?')) return;
+    try {
+        const res = await fetch('/api/todo/' + id, { method: 'DELETE' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        todoLoad();
+    } catch (e) {
+        alert('Failed to delete: ' + e.message);
+    }
+}
+
+async function todoCreate() {
+    const title = document.getElementById('todoNewTitle')?.value.trim();
+    if (!title) return;
+    const desc = document.getElementById('todoNewDesc')?.value.trim() || '';
+    const tagsRaw = document.getElementById('todoNewTags')?.value || '';
+    const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+    const cryoUntil = document.getElementById('todoNewCryo')?.value || '';
+
+    try {
+        const res = await fetch('/api/todo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, description: desc, priority: todoState.newPriority, tags, cryo_until: cryoUntil || null }),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        document.getElementById('todoNewTitle').value = '';
+        document.getElementById('todoNewDesc').value = '';
+        document.getElementById('todoNewTags').value = '';
+        const cryoField = document.getElementById('todoNewCryo');
+        if (cryoField) cryoField.value = '';
+        // Reset new-priority buttons
+        document.querySelectorAll('.todo-newpri-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector('.todo-newpri-btn[data-val=""]')?.classList.add('active');
+        todoState.newPriority = null;
+        todoLoad();
+    } catch (e) {
+        alert('Failed to create: ' + e.message);
+    }
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) {
+    return String(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// Wire up todo toolbar events
+(function initTodoUI() {
+    // Priority filter buttons
+    document.querySelectorAll('.todo-filter-btn[data-priority]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.todo-filter-btn[data-priority]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            todoState.priority = btn.dataset.priority;
+            todoLoad();
+        });
+    });
+
+    // Status filter buttons
+    document.querySelectorAll('.todo-status-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.todo-status-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            todoState.status = btn.dataset.status;
+            todoLoad();
+        });
+    });
+
+    // Search
+    const todoSearch = document.getElementById('todoSearch');
+    if (todoSearch) {
+        let searchTimer;
+        todoSearch.addEventListener('input', () => {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => {
+                todoState.search = todoSearch.value.trim();
+                todoLoad();
+            }, 300);
+        });
+    }
+
+    // Tag filter
+    const todoTagFilter = document.getElementById('todoTagFilter');
+    if (todoTagFilter) {
+        let tagTimer;
+        todoTagFilter.addEventListener('input', () => {
+            clearTimeout(tagTimer);
+            tagTimer = setTimeout(() => {
+                todoState.tagFilter = todoTagFilter.value.trim();
+                todoLoad();
+            }, 300);
+        });
+    }
+
+    // New priority selector
+    document.querySelectorAll('.todo-newpri-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.todo-newpri-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            todoState.newPriority = btn.dataset.val || null;
+        });
+    });
+
+    // Add button
+    const addBtn = document.getElementById('todoAddBtn');
+    if (addBtn) addBtn.addEventListener('click', todoCreate);
+
+    // Submit on Enter in title field
+    const titleField = document.getElementById('todoNewTitle');
+    if (titleField) {
+        titleField.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); todoCreate(); }
+        });
+    }
+})();

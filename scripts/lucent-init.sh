@@ -58,6 +58,13 @@ if [[ -n "$RECALL" ]]; then
   echo "$RECALL"
 fi
 
+# Context-triggered TODO surface — fires when prompt mentions projects/ideas/tasks.
+TODO_SURFACE=$(echo "$HOOK_STDIN" | timeout 5 python3 "$LUCENT_DIR/scripts/todo_context.py" 2>/dev/null)
+if [[ -n "$TODO_SURFACE" ]]; then
+  echo ""
+  echo "$TODO_SURFACE"
+fi
+
 echo ""
 echo "[Lucent] === ACTIVE REMINDERS ==="
 python3 "$LUCENT_DIR/scripts/active_reminders.py"
