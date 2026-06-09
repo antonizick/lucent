@@ -5,7 +5,9 @@
       "Edit",
       "Write",
       "WebSearch",
-      "Skill(update-config)"
+      "Skill(update-config)",
+      "Skill(run)",
+      "Skill(schedule)"
     ]
   }
 }
