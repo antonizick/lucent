@@ -1235,6 +1235,24 @@ async def apply_reflect_proposal(proposal_id: str):
     lucent_root = Path(__file__).parent.parent
     reflect_script = lucent_root / "scripts" / "reflect.py"
     try:
+        # Fetch proposal details for logging
+        proposals_path = lucent_root / "memory" / ".nero" / "proposals.jsonl"
+        proposal_info = None
+        if proposals_path.exists():
+            for line in proposals_path.read_text().splitlines():
+                try:
+                    r = json.loads(line)
+                    if r.get("id") == proposal_id:
+                        action = r.get("action", {})
+                        proposal_info = {
+                            "type": action.get("type", "unknown"),
+                            "target": action.get("skill") or action.get("slug") or action.get("path") or "—",
+                            "reason": action.get("reason", "")
+                        }
+                        break
+                except Exception:
+                    pass
+
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None,
@@ -1245,6 +1263,14 @@ async def apply_reflect_proposal(proposal_id: str):
             )
         )
         ok = result.returncode == 0
+
+        # Log the action
+        if proposal_info:
+            log_activity(
+                f"✅ APPLIED {proposal_info['type'].upper()}: {proposal_info['target']}",
+                source="nero_apply"
+            )
+
         return {"ok": ok, "msg": (result.stdout or result.stderr).strip()}
     except Exception as e:
         return {"ok": False, "msg": str(e)}
@@ -1256,6 +1282,24 @@ async def reject_reflect_proposal(proposal_id: str):
     lucent_root = Path(__file__).parent.parent
     reflect_script = lucent_root / "scripts" / "reflect.py"
     try:
+        # Fetch proposal details for logging
+        proposals_path = lucent_root / "memory" / ".nero" / "proposals.jsonl"
+        proposal_info = None
+        if proposals_path.exists():
+            for line in proposals_path.read_text().splitlines():
+                try:
+                    r = json.loads(line)
+                    if r.get("id") == proposal_id:
+                        action = r.get("action", {})
+                        proposal_info = {
+                            "type": action.get("type", "unknown"),
+                            "target": action.get("skill") or action.get("slug") or action.get("path") or "—",
+                            "reason": action.get("reason", "")
+                        }
+                        break
+                except Exception:
+                    pass
+
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None,
@@ -1266,6 +1310,14 @@ async def reject_reflect_proposal(proposal_id: str):
             )
         )
         ok = result.returncode == 0
+
+        # Log the action
+        if proposal_info:
+            log_activity(
+                f"❌ REJECTED {proposal_info['type'].upper()}: {proposal_info['target']}",
+                source="nero_reject"
+            )
+
         return {"ok": ok, "msg": (result.stdout or result.stderr).strip()}
     except Exception as e:
         return {"ok": False, "msg": str(e)}
@@ -1287,12 +1339,18 @@ async def refine_reflect_proposal(proposal_id: str, req: RefineRequest):
     try:
         records = []
         found = False
+        proposal_info = None
         for line in proposals_path.read_text().splitlines():
             if not line.strip():
                 continue
             try:
                 r = json.loads(line)
                 if r.get("id") == proposal_id and r.get("status") == "pending":
+                    action = r.get("action", {})
+                    proposal_info = {
+                        "type": action.get("type", "unknown"),
+                        "target": action.get("skill") or action.get("slug") or action.get("path") or "—",
+                    }
                     r["action"]["content"] = new_content
                     found = True
                 records.append(r)
@@ -1305,6 +1363,13 @@ async def refine_reflect_proposal(proposal_id: str, req: RefineRequest):
         with open(proposals_path, "w") as f:
             for r in records:
                 f.write(json.dumps(r) + "\n")
+
+        # Log the action
+        if proposal_info:
+            log_activity(
+                f"✏️  REFINED {proposal_info['type'].upper()}: {proposal_info['target']}",
+                source="nero_refine"
+            )
 
         return {"ok": True, "msg": f"Refined proposal {proposal_id}"}
     except Exception as e:
@@ -1926,12 +1991,11 @@ async def activity_log_viewer():
                 border: 1px solid var(--neon-cyan);
                 border-radius: 4px;
                 padding: 15px;
-                white-space: pre-wrap;
-                word-break: break-word;
                 font-size: 12px;
                 max-height: 70vh;
                 overflow-y: auto;
                 color: var(--text-primary);
+                font-family: 'Courier New', monospace;
             }
 
             .log-content::-webkit-scrollbar {
@@ -1955,6 +2019,55 @@ async def activity_log_viewer():
                 text-align: center;
                 color: var(--text-secondary);
                 font-size: 14px;
+            }
+
+            .log-entry {
+                margin-bottom: 2px;
+                display: block;
+            }
+
+            .entry-nero-apply {
+                color: #4ade80;
+            }
+
+            .entry-nero-reject {
+                color: #f87171;
+            }
+
+            .entry-nero-refine {
+                color: #fbbf24;
+            }
+
+            .entry-voice-box {
+                color: #a78bfa;
+            }
+
+            .entry-email-sync {
+                color: #06b6d4;
+            }
+
+            .entry-default {
+                color: var(--text-primary);
+            }
+
+            body.light-mode .entry-nero-apply {
+                color: #059669;
+            }
+
+            body.light-mode .entry-nero-reject {
+                color: #dc2626;
+            }
+
+            body.light-mode .entry-nero-refine {
+                color: #d97706;
+            }
+
+            body.light-mode .entry-voice-box {
+                color: #7c3aed;
+            }
+
+            body.light-mode .entry-email-sync {
+                color: #0891b2;
             }
         </style>
     </head>
@@ -1988,21 +2101,54 @@ async def activity_log_viewer():
             let autoRefreshInterval = null;
             let isRefreshPaused = false;
 
+            function parseAndColorizeLog(logText) {
+                const logContent = document.getElementById('logContent');
+                logContent.innerHTML = '';
+
+                if (!logText || logText.trim() === '') {
+                    logContent.innerHTML = '<div class="loading">No activity logged for today yet</div>';
+                    return;
+                }
+
+                const lines = logText.split('\n').filter(line => line.trim());
+                lines.forEach(line => {
+                    const entry = document.createElement('div');
+                    entry.className = 'log-entry';
+
+                    let entryClass = 'entry-default';
+                    if (line.includes('[nero_apply]')) {
+                        entryClass = 'entry-nero-apply';
+                    } else if (line.includes('[nero_reject]')) {
+                        entryClass = 'entry-nero-reject';
+                    } else if (line.includes('[nero_refine]')) {
+                        entryClass = 'entry-nero-refine';
+                    } else if (line.includes('[voice_box]')) {
+                        entryClass = 'entry-voice-box';
+                    } else if (line.includes('[email_sync]')) {
+                        entryClass = 'entry-email-sync';
+                    }
+
+                    entry.className += ' ' + entryClass;
+                    entry.textContent = line;
+                    logContent.appendChild(entry);
+                });
+
+                // Auto-scroll to bottom
+                logContent.scrollTop = logContent.scrollHeight;
+            }
+
             async function loadActivityLog() {
                 try {
                     const response = await fetch('/activity-log');
                     const data = await response.json();
 
-                    logContent.textContent = data.content || 'No activity logged for today yet';
+                    parseAndColorizeLog(data.content || '');
                     entryCount.textContent = data.entries || 0;
 
                     const now = new Date();
                     timestamp.textContent = now.toLocaleTimeString();
-
-                    // Auto-scroll to bottom
-                    logContent.scrollTop = logContent.scrollHeight;
                 } catch (error) {
-                    logContent.textContent = `Error loading activity log: ${error.message}`;
+                    logContent.innerHTML = `<div class="loading">Error loading activity log: ${error.message}</div>`;
                     console.error('Error:', error);
                 }
             }
