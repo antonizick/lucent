@@ -3,10 +3,16 @@ Email priority detection using Ollama local LLM.
 
 Scores emails 0-10 for priority. Uses keyword pre-filtering (no tokens)
 for obvious cases, falls back to Ollama for nuanced analysis.
+
+Trusted senders are configured in memory/email/trusted_senders.json.
+Each entry has an "email" (substring match), optional "priority" (0-10 float),
+and optional "name"/"note" fields. Set "priority" to null to let Ollama score
+the sender normally while still bypassing keyword spam filters.
 """
 
 import json
 import logging
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from .models import EmailMetadata
@@ -14,22 +20,55 @@ from .ollama_client import OllamaClient
 
 logger = logging.getLogger(__name__)
 
+_TRUSTED_SENDERS_PATH = Path("~/dev/lucent/memory/email/trusted_senders.json").expanduser()
+
 
 class PriorityDetector:
     """Detects and scores email priority using Claude Haiku."""
 
-    # Keywords that suggest low priority (newsletters, notifications, financial spam)
+    _trusted_senders_cache: Optional[List[dict]] = None
+
+    @classmethod
+    def _load_trusted_senders(cls) -> List[dict]:
+        """Load trusted senders from flat file, with class-level cache."""
+        if cls._trusted_senders_cache is not None:
+            return cls._trusted_senders_cache
+        try:
+            cls._trusted_senders_cache = json.loads(_TRUSTED_SENDERS_PATH.read_text())
+            logger.debug(f"Loaded {len(cls._trusted_senders_cache)} trusted senders")
+        except FileNotFoundError:
+            logger.info("trusted_senders.json not found — no trusted senders configured")
+            cls._trusted_senders_cache = []
+        except Exception as e:
+            logger.warning(f"Failed to load trusted_senders.json: {e}")
+            cls._trusted_senders_cache = []
+        return cls._trusted_senders_cache
+
+    # Keywords that suggest low priority (newsletters, financial spam).
+    # Do NOT add generic transactional words like "notification", "update", "alert"
+    # — those appear in legitimate account emails and block Ollama from seeing them.
     LOW_PRIORITY_KEYWORDS = [
         "newsletter", "digest", "promotion", "marketing",
-        "noreply", "notification", "alert", "update",
         "weekly report", "monthly report",
         # Financial spam / unsolicited offers (from feedback + guidelines)
-        "refinancing", "property", "vehicle", "insurance quote", "insurance quotes",
-        "pending offer", "pending offers", "utility bill", "relief", "right away",
-        "new option", "new options", "refi", "vehicle quote", "relief offer",
+        "refinancing", "vehicle quote", "insurance quote", "insurance quotes",
+        "pending offer", "pending offers", "utility bill",
+        "new option", "new options", "refi", "relief offer",
         "home relief", "property notice", "property inquiry",
         # EverQuote / vehicle quote senders (from feedback)
         "everquote", "providing quotes", "deals@providingquotes",
+    ]
+
+    # Sender-domain patterns that are always low priority regardless of content.
+    LOW_PRIORITY_SENDER_DOMAINS = [
+        "mvpsolarpower.com",
+        "quickenloanservice.com",
+        "knowledgebanner.com",
+        "allin1loans.com",
+        "providingquotes.com",
+        "ratechop.org",
+        "silvermagnus.com",
+        "award-headquarters.com",
     ]
 
     # Keywords that suggest high priority (urgent action needed)
@@ -42,12 +81,35 @@ class PriorityDetector:
     @classmethod
     def keyword_prefilter(cls, email: EmailMetadata) -> Optional[float]:
         """
-        Quick priority score based on keywords, no Claude call.
+        Quick priority score based on keywords, no Ollama call.
 
-        Returns 0 (low), 5 (medium), 9 (high), or None (needs Haiku analysis).
+        Returns a float (0-10) to short-circuit scoring, or None to send to Ollama.
+
+        Trusted senders (trusted_senders.json) are checked first:
+        - "priority": <number>  → return that score directly, skip Ollama
+        - "priority": null      → skip keyword filters, let Ollama score normally
         """
+        from_addr = (email.from_addr or "").lower()
+
+        # Check trusted senders from flat file first.
+        for entry in cls._load_trusted_senders():
+            if entry.get("email", "").lower() in from_addr:
+                fixed_priority = entry.get("priority")
+                if fixed_priority is not None:
+                    logger.debug(f"Trusted sender {entry['email']} → fixed score {fixed_priority}")
+                    return float(fixed_priority)
+                else:
+                    logger.debug(f"Trusted sender {entry['email']} → bypass filters, send to Ollama")
+                    return None
+
+        # Blocklisted sender domains are always low priority.
+        for domain in cls.LOW_PRIORITY_SENDER_DOMAINS:
+            if domain in from_addr:
+                logger.debug(f"Blocked sender domain: {domain} in {email.id}")
+                return 0.0
+
         # Include FROM address in keyword matching (catches noreply@, sender domains, etc)
-        text = (email.subject + " " + email.snippet + " " + email.from_addr).lower()
+        text = (email.subject + " " + email.snippet + " " + from_addr).lower()
 
         # Check low-priority patterns
         for keyword in cls.LOW_PRIORITY_KEYWORDS:
@@ -65,7 +127,7 @@ class PriorityDetector:
         if email.flagged:
             return 8.0
 
-        # Unknown; needs Haiku analysis
+        # Unknown; needs Ollama analysis
         return None
 
     @classmethod
