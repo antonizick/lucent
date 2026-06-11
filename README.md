@@ -135,6 +135,29 @@ The Voice Box popup includes real-time backup health monitoring. When you mouseo
 - `GET /backup/status` — Returns last commit times for both repositories with health status
 - `POST /run-backup` — Triggers immediate memory folder backup
 
+### Project Creation Workflow
+Lucent scaffolds new projects deterministically — no hand-built boilerplate, port conflicts, or missing files.
+
+**Trigger (any of these):**
+- `/newproject`, `/np`, `/nxproject`, `/nxnewproject` — slash commands
+- Phrase: **"New project: …"**, "create a new project", "start project X"
+
+**What it does:**
+1. Proposes free ports from `idea/PORTS.md` (Nick confirms — never silent)
+2. Runs `scripts/new_project.py create …` to scaffold: `CLAUDE.md`, `planning.md`, `README.md`, `.gitignore`, `.lucentrc`
+3. Registers the confirmed port in **both** `idea/PORTS.md` (the ledger) and `idea/project-health.sh` (the control script) — must stay in sync
+4. Writes `memory/<name>_planning.md` for non-trivial projects
+5. Registers in `LTMemory.md` and NERO recall index
+
+**Port deconfliction is a hard mandate.** Reserved ports (8000–8003, 8010) are refused. `scripts/new_project.py ports` shows the full ledger, live-bound ports, and drift warnings (ports in use but unregistered).
+
+```bash
+python3 scripts/new_project.py ports           # show ledger + propose free ports
+python3 scripts/new_project.py create --name X --port N --purpose "..." --features "A||B||C"
+```
+
+Project sessions launch from `cd idea/<Name> && claude` — only the project's own `CLAUDE.md` loads (lean context: voice + daily notes only, no Lucent identity bundle).
+
 ### Discord Integration
 Lucent integrates with Discord for monitoring and async responses. A background monitor watches for messages, forwards them to Ollama, and posts responses back to Discord with intelligent web search integration and emoji feedback.
 
@@ -217,7 +240,8 @@ lucent/
 │   ├── skills.py          NERO: skill library management (list/view/bump/lifecycle)
 │   ├── skill_curator.py   NERO: weekly curator (lifecycle + consolidation + memory hygiene)
 │   ├── pre_compact.py     NERO: PreCompact hook (injects must-keep context before compaction)
-│   └── insights.py        NERO: self-improvement health dashboard
+│   ├── insights.py        NERO: self-improvement health dashboard
+│   └── new_project.py     Project scaffolder: port deconfliction, template deploy, ledger + health-script sync
 ├── ui/                    Voice Box web UI & Discord integration
 │   ├── server.py          FastAPI server (voice, Piper TTS, Discord, backup status)
 │   ├── piper_manager.py   Piper TTS wrapper (thread-safe synthesis, voice switching)
