@@ -175,6 +175,31 @@ def archive_accumulating_daily_note() -> None:
         # Log error but don't fail the backup
         log_to_daily_note(f"Archive update failed: {e}")
 
+def maybe_prune_ltmemory() -> None:
+    """
+    Auto-prune LTMemory.md if session count exceeds the keep limit.
+    Runs on every backup cycle; no-ops when within limit.
+    Old sessions move to LTMemory.archive.md (non-destructive).
+    """
+    ltmemory_path = MEMORY_DIR / "LTMemory.md"
+    if not ltmemory_path.exists():
+        return
+    try:
+        import re
+        content = ltmemory_path.read_text()
+        session_count = len(re.findall(r'^### Session \d{4}-\d{2}-\d{2}', content, re.MULTILINE))
+
+        # Import keep constant from curator
+        sys.path.insert(0, str(Path(__file__).parent))
+        from curator import SESSIONS_TO_KEEP, prune_sessions
+
+        if session_count > SESSIONS_TO_KEEP:
+            kept, archived = prune_sessions(keep_n=SESSIONS_TO_KEEP, dry_run=False)
+            log_to_activity(f"LTMemory auto-prune: {session_count} sessions → kept {kept}, archived {archived}")
+    except Exception as e:
+        log_to_activity(f"LTMemory auto-prune: failed ({e})")
+
+
 def backup_memory() -> int:
     """
     Backup memory folder to Git.
@@ -253,10 +278,13 @@ def main():
     # Step 2: Archive the accumulating daily note (maintains live archive)
     archive_accumulating_daily_note()
 
-    # Step 3: Backup memory folder to git
+    # Step 3: Auto-prune LTMemory.md if over session limit
+    maybe_prune_ltmemory()
+
+    # Step 4: Backup memory folder to git
     exit_code = backup_memory()
 
-    # Step 4: Verify lucent core repo
+    # Step 5: Verify lucent core repo
     check_lucent_core()
 
     sys.exit(exit_code)
