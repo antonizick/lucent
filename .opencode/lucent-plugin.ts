@@ -9,10 +9,16 @@
  * settings.json hooks (SessionStart, UserPromptSubmit, …). The OpenCode plugin
  * SDK (v1.14.x) exposes equivalent automatic hooks — this plugin wires them up:
  *
- *   Claude Code hook   →  OpenCode hook (used here)
- *   ------------------    ----------------------------------------
- *   SessionStart       →  first `chat.message` of a session (startup guard)
- *   UserPromptSubmit   →  every `chat.message` (per-turn context injection)
+ *   Claude Code hook        →  OpenCode hook (used here)
+ *   ---------------------      ----------------------------------------------
+ *   SessionStart            →  first `chat.message` of a session (startup guard)
+ *   UserPromptSubmit        →  every `chat.message` (per-turn context injection)
+ *   Stop → reflect.py       →  `session.idle` (NERO reflection)
+ *   Stop → log_turn_end.py  →  `session.idle` (per-turn daily-note line)
+ *   PostToolUse(Read)       →  `tool.execute.after` (skill-read tracking)
+ *   PreCompact              →  `experimental.session.compacting`
+ *   SessionEnd → log...     →  `session.deleted` (best-effort; see notes below)
+ *   (voice rule, conv.)     →  `experimental.text.complete` (soft backstop)
  *
  * SINGLE-SOURCE PRINCIPLE
  * -----------------------
@@ -228,6 +234,33 @@ export const server: Plugin = async (input) => {
     }
   }
 
+  // ── Stop / SessionEnd daily-note logging equivalents ───────────────────────
+  //
+  // Claude Code's Stop hook runs log_turn_end.py after every response, and its
+  // SessionEnd hook runs log_session_end.py when the CLI exits. Both simply
+  // append a timestamp line to today's daily note (no stdin). Same single-source
+  // principle as everything else here — shell out to the identical scripts:
+  //   - log_turn_end.py    → session.idle    (assistant finished, session quiet)
+  //   - log_session_end.py → session.deleted (best-effort)
+  //
+  // Trigger-mapping caveats, named explicitly per the dual-platform mandate:
+  //   * OpenCode has no clean "app exit" hook the way Claude Code's SessionEnd
+  //     fires on CLI close; `session.deleted` is the nearest lifecycle signal,
+  //     so the session-end line lands when a session is removed rather than on
+  //     every TUI quit. The line is a low-stakes boundary marker, so best-effort
+  //     coverage is acceptable.
+  //   * Claude's SessionEnd also emits a "Session complete." voice line, but
+  //     ui/server.py suppresses exactly that message at the /speak handler
+  //     ([/speak] Suppressed SessionEnd ...), so porting it would be a no-op.
+  //     The portable, meaningful part is the daily-note line — that's what we run.
+  async function runDailyNoteLogger(script: string): Promise<void> {
+    try {
+      await $`python3 ${root}/scripts/${script}`.nothrow().quiet()
+    } catch {
+      // Logging is purely additive — never let it affect the session.
+    }
+  }
+
   return {
     /**
      * UserPromptSubmit equivalent — fires automatically on every user message.
@@ -323,12 +356,18 @@ export const server: Plugin = async (input) => {
         if (event?.type === "session.idle") {
           const sessionID = (event as any)?.properties?.sessionID
           if (sessionID) {
-            // Fire-and-forget — never let reflection block the session.
+            // Stop-hook equivalents — fire-and-forget, never block the session.
+            // log_turn_end.py mirrors Claude Code's Stop → per-turn note line;
+            // triggerReflection mirrors Claude Code's Stop → reflect.py.
+            void runDailyNoteLogger("log_turn_end.py")
             void triggerReflection(sessionID)
           }
+        } else if (event?.type === "session.deleted") {
+          // SessionEnd-equivalent (best-effort — see runDailyNoteLogger notes).
+          void runDailyNoteLogger("log_session_end.py")
         }
       } catch {
-        // Reflection must never affect the session.
+        // Lifecycle logging/reflection must never affect the session.
       }
     },
 
