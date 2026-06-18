@@ -14,6 +14,8 @@ Usage:
 import subprocess
 import sys
 import json
+import os
+import re
 from pathlib import Path
 from datetime import datetime, date, timedelta
 
@@ -200,6 +202,83 @@ def maybe_prune_ltmemory() -> None:
         log_to_activity(f"LTMemory auto-prune: failed ({e})")
 
 
+# ---------------------------------------------------------------------------
+# Secret-scan guard
+# ---------------------------------------------------------------------------
+# Root cause of the 2026-05-17 leak: a credential typed into a daily note was
+# committed + pushed to the private LucentMemory repo by this very script. This
+# guard scans the STAGED diff (newly added lines only) for credential-shaped
+# content and refuses to commit/push if any is found. High precision by design —
+# it matches secret *values* (high-entropy strings assigned to secret-named keys,
+# or known token formats), NOT the mere word "password" — so it won't silently
+# block the unattended hourly backup on ordinary note text. Fails OPEN on its own
+# errors (defense-in-depth, not the primary control). Override for emergencies:
+# LUCENT_BACKUP_ALLOW_SECRETS=1.
+
+_SECRET_KEY_RE = re.compile(
+    r'(?i)(password|passwd|secret|token|api[_-]?key|access[_-]?key|'
+    r'private[_-]?key|client[_-]?secret|credential)'
+    r'\s*[:=(]\s*[\'"`(]?([^\s\'"`)]{12,})'
+)
+_KNOWN_TOKEN_RE = re.compile(
+    r'(AKIA[0-9A-Z]{16}'                      # AWS access key id
+    r'|sk-[A-Za-z0-9]{20,}'                   # OpenAI/Anthropic-style key
+    r'|ghp_[A-Za-z0-9]{30,}'                  # GitHub PAT
+    r'|xox[baprs]-[A-Za-z0-9-]{10,}'          # Slack token
+    r'|-----BEGIN [A-Z ]*PRIVATE KEY-----)'   # private key block
+)
+
+
+def _shannon_entropy(s: str) -> float:
+    from collections import Counter
+    import math as _m
+    if not s:
+        return 0.0
+    n = len(s)
+    return -sum((c / n) * _m.log2(c / n) for c in Counter(s).values())
+
+
+def _looks_like_secret(value: str) -> bool:
+    """High-entropy, mixed-class token — not a word, not a redaction placeholder."""
+    v = value.strip().strip('`\'"()')
+    if len(v) < 12:
+        return False
+    if set(v) <= set('*x•.-_'):          # asterisk/placeholder redactions
+        return False
+    classes = sum([
+        any(c.isupper() for c in v),
+        any(c.islower() for c in v),
+        any(c.isdigit() for c in v),
+    ])
+    return classes >= 2 and _shannon_entropy(v) >= 3.0
+
+
+def _mask_for_log(line: str) -> str:
+    """Redact long tokens so the alert itself never re-exposes the secret."""
+    masked = re.sub(r'[A-Za-z0-9/+=_\-]{10,}',
+                    lambda m: m.group(0)[:2] + '…' + '*' * 6, line)
+    return masked.strip()[:160]
+
+
+def scan_staged_for_secrets(cwd: str) -> list:
+    """Return masked descriptions of credential-shaped content in the staged diff."""
+    code, diff, _ = run_cmd("git diff --cached --unified=0", cwd=cwd)
+    if code != 0:
+        return []
+    findings = []
+    for line in diff.splitlines():
+        if not line.startswith('+') or line.startswith('+++'):
+            continue
+        content = line[1:]
+        if _KNOWN_TOKEN_RE.search(content):
+            findings.append(_mask_for_log(content))
+            continue
+        m = _SECRET_KEY_RE.search(content)
+        if m and _looks_like_secret(m.group(2)):
+            findings.append(_mask_for_log(content))
+    return findings
+
+
 def backup_memory() -> int:
     """
     Backup memory folder to Git.
@@ -233,6 +312,23 @@ def backup_memory() -> int:
         # Still write health check timestamp (verified, no changes needed)
         write_health_check("memory")
         return 0
+
+    # Secret-scan guard — never commit/push credentials to the backup repo.
+    if os.environ.get("LUCENT_BACKUP_ALLOW_SECRETS") != "1":
+        try:
+            findings = scan_staged_for_secrets(str(MEMORY_DIR))
+        except Exception as e:
+            findings = []  # fail open — a broken scanner must not block backups
+            log_to_activity(f"Backup: secret-scan errored, proceeding (fail-open): {e}")
+        if findings:
+            run_cmd("git reset", cwd=str(MEMORY_DIR))  # unstage; leave files in place
+            print(f"✗ ABORTED: {len(findings)} possible secret(s) in staged memory changes — not committing/pushing.")
+            for f in findings[:5]:
+                print(f"   ⚠ {f}")
+            print("   Remove the credential from the offending file, then the next backup resumes.")
+            print("   Emergency override: LUCENT_BACKUP_ALLOW_SECRETS=1 (use only if it's a false positive).")
+            log_to_activity(f"Backup: ABORTED — {len(findings)} possible secret(s) detected; commit/push skipped")
+            return 1
 
     # Commit
     code, stdout, stderr = run_cmd(
