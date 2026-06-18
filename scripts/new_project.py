@@ -8,8 +8,13 @@ Two subcommands so the workflow matches Nick's "propose, then I confirm" rule:
                           candidate free ports. Writes nothing.
 
     create --name N --port P [...]   Scaffold the project with the CONFIRMED
-                          port: dir, CLAUDE.md, planning.md, README.md,
-                          .gitignore, .lucentrc, and a ledger row.
+                          port: dir, CLAUDE.md (Claude Code), AGENTS.md
+                          (OpenCode), planning.md, README.md, .gitignore,
+                          .lucentrc, and a ledger row.
+
+Dual-platform parity is a hard mandate: every project ships BOTH CLAUDE.md and
+AGENTS.md carrying identical project-mode rules, so it behaves the same whether
+launched with `claude` or `opencode`.
 
 Port deconfliction is a hard mandate. `create` refuses to run if the chosen
 port is reserved, already in the ledger, or currently bound.
@@ -29,6 +34,7 @@ IDEA = ROOT / "idea"
 LEDGER = IDEA / "PORTS.md"
 HEALTH = IDEA / "project-health.sh"
 TEMPLATE = ROOT / "memory" / "templates" / "project_CLAUDE.md"
+TEMPLATE_AGENTS = ROOT / "memory" / "templates" / "project_AGENTS.md"
 
 RESERVED = {8000, 8001, 8002, 8003, 8010}
 ASSIGN_FLOOR = 8100  # new web services climb from here
@@ -157,14 +163,22 @@ def cmd_create(a) -> int:
 
     planning_rel = f"memory/{name.lower().replace(' ', '_')}_planning.md"
 
-    # --- Directory + CLAUDE.md ------------------------------------------
+    # --- Directory + CLAUDE.md (Claude Code) + AGENTS.md (OpenCode) ------
+    # Both files carry the same project-mode rules so the project behaves
+    # identically whether it's launched with `claude` or `opencode`. Dual-
+    # platform parity is a hard mandate — never emit one without the other.
     proj.mkdir(parents=True)
-    tmpl = TEMPLATE.read_text()
-    tmpl = re.sub(r"> \*\*Template\.\*\*.*?notice block\.\n\n---\n\n", "", tmpl, flags=re.S)
-    tmpl = (tmpl.replace("{{PROJECT_NAME}}", name)
-                .replace("{{PLANNING_DOC}}", planning_rel)
-                .replace("{{PORT}}", str(port)))
-    (proj / "CLAUDE.md").write_text(tmpl)
+
+    def render(template_path: Path) -> str:
+        text = template_path.read_text()
+        # Strip the leading "> **Template.** … --- " notice block.
+        text = re.sub(r"> \*\*Template\.\*\*.*?\n---\n\n", "", text, flags=re.S)
+        return (text.replace("{{PROJECT_NAME}}", name)
+                    .replace("{{PLANNING_DOC}}", planning_rel)
+                    .replace("{{PORT}}", str(port)))
+
+    (proj / "CLAUDE.md").write_text(render(TEMPLATE))
+    (proj / "AGENTS.md").write_text(render(TEMPLATE_AGENTS))
 
     # --- .lucentrc ------------------------------------------------------
     (proj / ".lucentrc").write_text(
@@ -194,8 +208,9 @@ def cmd_create(a) -> int:
     # --- README.md ------------------------------------------------------
     (proj / "README.md").write_text(
         f"# {name}\n\n{a.purpose or ''}\n\n"
-        f"## Quick start\n\n```bash\ncd {proj} && claude\n```\n\n"
-        f"Launches in project mode: voice + daily-note rules only, no Lucent bundle.\n\n"
+        f"## Quick start\n\n```bash\ncd {proj} && claude   # or: opencode\n```\n\n"
+        f"Launches in project mode: voice + daily-note rules only, no Lucent bundle.\n"
+        f"Works on both platforms — `CLAUDE.md` (Claude Code) and `AGENTS.md` (OpenCode) carry the same rules.\n\n"
         f"## Service\n\n- **Port:** {port} (registered in `idea/PORTS.md`)\n\n"
         f"## Planning\n\nSee `planning.md` for phases and scope.\n"
     )
@@ -224,11 +239,12 @@ def cmd_create(a) -> int:
         print(f"     Port {port} registered in idea/project-health.sh PORTS map")
     else:
         print(f"     [!] Could not auto-edit project-health.sh — add ['{name.lower().replace(' ', '_')}']={port} by hand")
-    print(f"     Files: CLAUDE.md, planning.md, README.md, .gitignore, .lucentrc")
+    print(f"     Files: CLAUDE.md, AGENTS.md, planning.md, README.md, .gitignore, .lucentrc")
+    print(f"     Dual-platform: CLAUDE.md (Claude Code) + AGENTS.md (OpenCode) — same project-mode rules")
     print(f"     Planning doc path declared: {planning_rel} (create it in Lucent if non-trivial)")
     print(f"\n     NOTE: once the service runs, add START/STOP/STATUS entries for it")
     print(f"           in project-health.sh so the control script can manage it.")
-    print(f"\n     Launch:  cd {proj} && claude")
+    print(f"\n     Launch:  cd {proj} && claude   (or: opencode)")
     return 0
 
 
