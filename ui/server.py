@@ -877,12 +877,22 @@ async def get_priority_email_cards():
         if config.baseline_cutoff:
             baseline_cutoff = datetime.fromisoformat(config.baseline_cutoff)
 
+        # "Mark backlog reviewed" watermark for the priority section — emails at
+        # or before this point are suppressed here (does not affect search).
+        priority_checkpoint = None
+        checkpoint_raw = service.db.get_priority_checkpoint()
+        if checkpoint_raw:
+            priority_checkpoint = datetime.fromisoformat(checkpoint_raw)
+
         all_emails = service.db.search("", limit=100)
 
         if baseline_cutoff:
             filtered = [e for e in all_emails if e.timestamp and e.timestamp > baseline_cutoff]
         else:
             filtered = all_emails
+
+        if priority_checkpoint:
+            filtered = [e for e in filtered if e.timestamp and e.timestamp > priority_checkpoint]
 
         priority_emails = [e for e in filtered if e.priority_score >= 7.0]
 
@@ -947,6 +957,34 @@ async def set_email_feedback_checkpoint():
         return {"ok": True, "checkpoint": checkpoint, "msg": "Backlog cleared — only newer emails will appear for review"}
     except Exception as e:
         logger.error(f"Error setting email feedback checkpoint: {e}")
+        return {"ok": False, "msg": str(e)}
+
+
+@app.post("/email/priority/checkpoint")
+async def set_priority_email_checkpoint():
+    """Mark the priority-emails backlog as reviewed.
+
+    Stores a "reviewed up to here" timestamp scoped to the PRIORITY EMAILS
+    section; the priority cards query then excludes any email at or before it,
+    suppressing the current priority backlog — only higher-priority emails that
+    arrive after this point will appear. Does not affect email search.
+    """
+    try:
+        import sys
+        parent_dir = str(Path(__file__).parent.parent)
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+
+        from src.lucent_email.config import load_config
+        from src.lucent_email.email_service import EmailService
+
+        config = load_config()
+        service = EmailService(config)
+
+        checkpoint = service.db.set_priority_checkpoint()
+        return {"ok": True, "checkpoint": checkpoint, "msg": "Priority backlog cleared — only newer priority emails will appear"}
+    except Exception as e:
+        logger.error(f"Error setting priority email checkpoint: {e}")
         return {"ok": False, "msg": str(e)}
 
 

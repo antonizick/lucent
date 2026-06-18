@@ -119,6 +119,17 @@ class EmailDatabase:
             )
         """)
 
+        # Single-row checkpoint marking "reviewed up to here" for the
+        # PRIORITY EMAILS section — emails at or before this timestamp are
+        # suppressed from the priority cards. Parallel to feedback_checkpoint
+        # but scoped only to the priority view (does not affect search).
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS priority_checkpoint (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                checkpoint_at DATETIME NOT NULL
+            )
+        """)
+
         # Full-text search index
         cursor.execute("""
             CREATE VIRTUAL TABLE IF NOT EXISTS emails_fts USING fts5(
@@ -385,6 +396,28 @@ class EmailDatabase:
         cursor = self.connection.cursor()
         cursor.execute("""
             INSERT INTO feedback_checkpoint (id, checkpoint_at) VALUES (1, ?)
+            ON CONFLICT(id) DO UPDATE SET checkpoint_at = excluded.checkpoint_at
+        """, (checkpoint_at,))
+        self.connection.commit()
+        return checkpoint_at
+
+    def get_priority_checkpoint(self) -> Optional[str]:
+        """Return the priority-emails "reviewed up to here" timestamp, or None."""
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT checkpoint_at FROM priority_checkpoint WHERE id = 1")
+        row = cursor.fetchone()
+        return row["checkpoint_at"] if row else None
+
+    def set_priority_checkpoint(self, checkpoint_at: str = None) -> str:
+        """Mark the priority-emails backlog reviewed up to now (or given ISO ts).
+
+        Suppresses all matching emails from the PRIORITY EMAILS section going
+        forward. Returns the checkpoint value that was stored.
+        """
+        checkpoint_at = checkpoint_at or datetime.now(timezone.utc).isoformat()
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            INSERT INTO priority_checkpoint (id, checkpoint_at) VALUES (1, ?)
             ON CONFLICT(id) DO UPDATE SET checkpoint_at = excluded.checkpoint_at
         """, (checkpoint_at,))
         self.connection.commit()

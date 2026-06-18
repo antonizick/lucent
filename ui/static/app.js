@@ -1184,6 +1184,33 @@ if (emailFeedbackCheckpointBtn) {
     });
 }
 
+// Priority emails "mark backlog reviewed" checkpoint button
+const priorityEmailCheckpointBtn = document.getElementById('priorityEmailCheckpointBtn');
+if (priorityEmailCheckpointBtn) {
+    priorityEmailCheckpointBtn.addEventListener('click', async () => {
+        if (!confirm('Mark everything currently in the queue as reviewed?\n\nFrom now on, only emails that arrive after this point will show up for rating — the current backlog will be permanently suppressed.')) {
+            return;
+        }
+        const original = priorityEmailCheckpointBtn.textContent;
+        priorityEmailCheckpointBtn.disabled = true;
+        priorityEmailCheckpointBtn.textContent = 'Marking…';
+        try {
+            const res = await fetch('/email/priority/checkpoint', { method: 'POST' });
+            const data = await res.json();
+            if (data.ok) {
+                await loadEmailMonitor();
+            } else {
+                alert(`Failed: ${data.msg || 'unknown error'}`);
+            }
+        } catch (e) {
+            alert(`Failed: ${e.message}`);
+        } finally {
+            priorityEmailCheckpointBtn.disabled = false;
+            priorityEmailCheckpointBtn.textContent = original;
+        }
+    });
+}
+
 // Load and display high-priority emails as inline-rateable cards
 async function loadEmailMonitor() {
     const monitorContent = document.getElementById('emailMonitorContent');
