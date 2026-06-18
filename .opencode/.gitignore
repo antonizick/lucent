@@ -1,0 +1,5 @@
+node_modules
+bun.lock
+
+# package.json + package-lock.json ARE tracked on purpose: the plugin's
+# @opencode-ai/plugin dependency must be reproducible on a fresh clone.
