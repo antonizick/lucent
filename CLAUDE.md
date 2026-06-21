@@ -147,7 +147,7 @@ LTMemory.md maintains "Recent Sessions" section in **reverse chronological order
 
 Lucent learns continuously from sessions. Key operational details:
 
-**Skill library** — `memory/skills/` contains procedural knowledge packages. The SessionStart bundle lists available skills (names only). Full bodies load on demand: `read memory/skills/<name>/SKILL.md`. The reflection loop creates new skills and patches existing ones. Protected skills (`voice-protocol`, `daily-note-protocol`, `memory-reference-lookup`, `project-creation`) are never archived.
+**Skill library** — `memory/skills/` contains procedural knowledge packages. The SessionStart bundle lists available skills (names only). Full bodies load on demand: `read memory/skills/<name>/SKILL.md`. The reflection loop creates new skills and patches existing ones. Protected skills (`voice-protocol`, `daily-note-protocol`, `memory-reference-lookup`, `project-creation`, `efficient-code`, `terse-output`) are never archived.
 
 **Reflection proposals** — When the hook shows `NERO PROPOSALS: N pending`, review before applying:
 ```bash
@@ -165,6 +165,19 @@ python3 scripts/skill_curator.py run --live       # apply (snapshot taken first)
 **Insights** — `python3 scripts/insights.py` shows memory corpus sizes, skill library health, reflection gate hit-rate, and curator state.
 
 **Recall index** — Rebuilt automatically when sources change. Force rebuild: `python3 scripts/memory_index.py build`.
+
+---
+
+## Code Philosophy (default behavior)
+
+YAGNI ladder active for all code: stdlib first, no unrequested abstractions, shortest
+working diff. Terse output active: drop filler, fragments OK, code first.
+
+Mark intentional simplifications: `# lucent: <ceiling>, <upgrade path>`.
+Non-trivial logic leaves one runnable check (assert/test).
+
+Full rules: `memory/skills/efficient-code/SKILL.md`, `memory/skills/terse-output/SKILL.md`.
+Platform-native reference: `memory/skills/platform-native/SKILL.md`.
 
 ---
 
