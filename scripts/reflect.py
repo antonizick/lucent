@@ -371,6 +371,36 @@ def pending_count() -> int:
     return sum(1 for r in _read_proposals() if r.get("status") == "pending")
 
 
+def submit_proposal(action: dict, gate_reason: str = "") -> dict:
+    """Public API: submit a proposal respecting the current NERO mode.
+
+    In auto mode, applies immediately. In propose mode, queues for review.
+    Always re-renders the inbox and returns the proposal record.
+    """
+    cfg = load_config()
+    mode = cfg.get("mode", "propose")
+    record = {
+        "id": uuid.uuid4().hex[:8],
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "status": "pending",
+        "action": action,
+        "gate_reason": gate_reason,
+    }
+
+    if mode == "auto":
+        ok, msg = apply_action(action)
+        record["status"] = "applied" if ok else "failed"
+        record["apply_msg"] = msg
+        _log_to_activity(f"auto-applied {action.get('type', 'unknown')}: {msg}")
+        _log(f"auto {action.get('type')}: {ok} {msg}")
+    else:
+        _log(f"proposed {action.get('type')} ({action.get('reason', '')[:60]})")
+
+    _append_proposal(record)
+    _render_inbox()
+    return record
+
+
 def _render_inbox() -> None:
     """Regenerate the human-readable inbox from pending proposals."""
     records = _read_proposals()

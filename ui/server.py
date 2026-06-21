@@ -1043,21 +1043,21 @@ async def submit_email_feedback(email_id: str, req: EmailFeedbackRequest):
             f"- **Was scored**: {original_score:.1f}/10 → **Should be**: {req.corrected_score:.1f}/10\n"
             f"- **Why**: {explanation}"
         )
-        reflect._append_proposal({
-            "id": uuid.uuid4().hex[:8],
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "status": "pending",
-            "action": {
-                "type": "email_rule_update",
-                "reason": f"Nick adjusted the score for an email from {email.from_addr or 'unknown sender'} "
-                          f"({original_score:.1f} → {req.corrected_score:.1f})",
-                "path": "memory/email/priority_guidelines.md",
-                "content": content,
-            },
-            "gate_reason": "user-submitted email priority correction",
-        })
+        action = {
+            "type": "email_rule_update",
+            "reason": f"Nick adjusted the score for an email from {email.from_addr or 'unknown sender'} "
+                      f"({original_score:.1f} → {req.corrected_score:.1f})",
+            "path": "memory/email/priority_guidelines.md",
+            "content": content,
+        }
+        result = reflect.submit_proposal(action, gate_reason="user-submitted email priority correction")
 
-        return {"ok": True, "msg": "Correction recorded — drafted a guideline update for your review in Insights"}
+        if result.get("status") == "applied":
+            return {"ok": True, "msg": "Correction recorded and auto-applied to priority guidelines"}
+        elif result.get("status") == "failed":
+            return {"ok": True, "msg": f"Correction recorded but auto-apply failed: {result.get('apply_msg', 'unknown error')}"}
+        else:
+            return {"ok": True, "msg": "Correction recorded — drafted a guideline update for your review in Insights"}
     except Exception as e:
         logger.error(f"Error recording email feedback: {e}")
         return {"ok": False, "msg": str(e)}
@@ -1471,6 +1471,38 @@ async def refine_reflect_proposal(proposal_id: str, req: RefineRequest):
             )
 
         return {"ok": True, "msg": f"Refined proposal {proposal_id}"}
+    except Exception as e:
+        return {"ok": False, "msg": str(e)}
+
+
+@app.post("/reflect/mode/{mode}")
+async def set_reflect_mode(mode: str):
+    """Set the reflection loop mode (propose or auto)."""
+    if mode not in ["propose", "auto"]:
+        return {"ok": False, "msg": "Mode must be 'propose' or 'auto'"}
+
+    lucent_root = Path(__file__).parent.parent
+    reflect_script = lucent_root / "scripts" / "reflect.py"
+
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: subprocess.run(
+                ["python3", str(reflect_script), "mode", mode],
+                capture_output=True, text=True, timeout=10,
+                cwd=str(lucent_root)
+            )
+        )
+        ok = result.returncode == 0
+
+        if ok:
+            log_activity(
+                f"🔄 NERO mode changed to {mode}",
+                source="nero_mode_change"
+            )
+
+        return {"ok": ok, "msg": (result.stdout or result.stderr).strip(), "mode": mode}
     except Exception as e:
         return {"ok": False, "msg": str(e)}
 
