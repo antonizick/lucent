@@ -36,8 +36,9 @@ CLI:
   python3 scripts/reflect.py status               # show config + pending count
   python3 scripts/reflect.py review               # print pending proposals
   python3 scripts/reflect.py apply <id>           # apply a pending proposal
+  python3 scripts/reflect.py apply-all            # apply all pending proposals at once
   python3 scripts/reflect.py reject <id>          # reject a pending proposal
-  python3 scripts/reflect.py mode propose|auto    # set mode
+  python3 scripts/reflect.py mode propose|auto    # set mode (auto applies pending retroactively)
   python3 scripts/reflect.py enable|disable       # toggle the loop
 """
 
@@ -60,6 +61,7 @@ STATE_PATH = NERO_DIR / "state.json"
 PROPOSALS_PATH = NERO_DIR / "proposals.jsonl"
 WORKER_LOG = NERO_DIR / "worker.log"
 INBOX_PATH = MEMORY_DIR / "nero_inbox.md"
+ACTIVITY_LOG_DIR = MEMORY_DIR / "logs"
 
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 SONNET_MODEL = "claude-sonnet-4-6"
@@ -103,6 +105,19 @@ def _log(msg: str) -> None:
         ts = datetime.now(timezone.utc).isoformat()
         with open(WORKER_LOG, "a") as f:
             f.write(f"[{ts}] {msg}\n")
+    except Exception:
+        pass
+
+
+def _log_to_activity(msg: str) -> None:
+    """Log to the daily activity log (memory/logs/activity_YYYY-MM-DD.log)."""
+    try:
+        ACTIVITY_LOG_DIR.mkdir(parents=True, exist_ok=True)
+        today = datetime.now()
+        log_path = ACTIVITY_LOG_DIR / f"activity_{today.strftime('%Y-%m-%d')}.log"
+        ts = today.strftime("%Y-%m-%d %H:%M:%S")
+        with open(log_path, "a") as f:
+            f.write(f"[{ts}] [nero-reflection] {msg}\n")
     except Exception:
         pass
 
@@ -727,6 +742,27 @@ def _cmd_reject(pid: str):
     _render_inbox()
 
 
+def _apply_all_pending() -> None:
+    """Apply all pending proposals and log to activity log."""
+    records = _read_proposals()
+    pending = [r for r in records if r.get("status") == "pending"]
+    if not pending:
+        print("No pending proposals.")
+        return
+
+    for r in pending:
+        ok, msg = apply_action(r["action"])
+        r["status"] = "applied" if ok else "failed"
+        r["apply_msg"] = msg
+        action_type = r.get("action", {}).get("type", "unknown")
+        _log_to_activity(f"Applied {action_type}: {msg}")
+        print(("✓ " if ok else "✗ ") + f"[{r['id']}] {msg}")
+
+    _rewrite_proposals(records)
+    _render_inbox()
+    print(f"\nApplied {len(pending)} proposal(s)")
+
+
 def _cmd_mode(mode: str):
     if mode not in ("propose", "auto"):
         print("mode must be 'propose' or 'auto'", file=sys.stderr)
@@ -734,7 +770,17 @@ def _cmd_mode(mode: str):
     cfg = load_config()
     cfg["mode"] = mode
     save_config(cfg)
-    print(f"mode set to {mode}")
+
+    # When switching to auto mode, apply all pending proposals retroactively
+    if mode == "auto":
+        pending_count = sum(1 for r in _read_proposals() if r.get("status") == "pending")
+        if pending_count > 0:
+            print(f"Switching to auto mode and applying {pending_count} pending proposal(s)...")
+            _apply_all_pending()
+        else:
+            print("mode set to auto")
+    else:
+        print(f"mode set to {mode}")
 
 
 def _cmd_toggle(enabled: bool):
@@ -763,6 +809,8 @@ if __name__ == "__main__":
         _cmd_apply(args[1])
     elif args[0] == "reject" and len(args) >= 2:
         _cmd_reject(args[1])
+    elif args[0] == "apply-all":
+        _apply_all_pending()
     elif args[0] == "mode" and len(args) >= 2:
         _cmd_mode(args[1])
     elif args[0] == "enable":
