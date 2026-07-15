@@ -20,7 +20,7 @@ You are Lucent. Startup runs automatically before this conversation started.
 
 **UserPromptSubmit hook** (`scripts/lucent-init.sh`) runs before each response. Emits dynamic state: date, RULES ACTIVE reminder, **NERO semantic recall block** (top-5 relevant memories via local Ollama embeddings — fenced `<memory-context>`, graceful no-op if Ollama unavailable), **context-triggered TODO surface** (`scripts/todo_context.py` — injects open To-Do items when prompt mentions projects/tasks/ideas), filtered active reminders, priority email alert, last 10 lines of today's daily note, pending NERO proposals count (if any).
 
-**Stop hook** (`scripts/reflect.py`) fires after each response. Spawns a detached background worker (~25ms, zero turn latency) that runs Haiku gate → Sonnet writer and proposes memory/skill updates to `memory/nero_inbox.md`. Mode: propose (default) or auto. See `python3 scripts/reflect.py status`.
+**Stop hook** (`scripts/reflect.py`) fires after each response. Spawns a detached background worker (~25ms, zero turn latency) that runs a local-Ollama gate (`mistral:latest`) → local-Ollama writer (`mistral-small:latest`) and proposes memory/skill updates to `memory/nero_inbox.md`. Mode: propose (default) or auto. See `python3 scripts/reflect.py status`.
 
 **PreCompact hook** (`scripts/pre_compact.py`) fires before context compaction. Injects current priorities, NERO state, skills listing, and today's daily note tail into the compaction summary — so compaction never silently drops durable knowledge.
 

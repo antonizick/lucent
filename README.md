@@ -197,7 +197,7 @@ lucent/
 ├── README.md              This file
 ├── .lucentrc              Per-project config for session loading
 ├── lucent-sync.sh         Sync script — commit + push to GitHub
-├── lucentrc               Sync config (remote URL, log dedup)
+├── lucentrc               Master template for .lucentrc — new_project.py generates each satellite project's .lucentrc from this
 ├── .sync.log              Sync history (30-day auto-cleanup)
 ├── agents/                Sub-agent definitions: {name}-agent.md
 ├── idea/                  Working directory for projects
@@ -266,44 +266,186 @@ lucent/
 
 ## Setup
 
-> **Fresh deployment or disaster recovery?** The [Deployment Guide](docs/DEPLOYMENT.md) covers the full process end-to-end: system prerequisites, cloning both repos, Python and Node dependencies, environment variables, installing and enabling all systemd services, cron jobs, `.bashrc` auto-starts, and step-by-step setup for Claude Code, Ollama, and OpenCode. The quick steps below are for reference only.
+> **Audience:** a fresh Ubuntu 22.04 LTS box or WSL2 distro, no prior Lucent install. Every command below has been verified against a live, working Lucent instance. For the exhaustive reference version of this same process — every troubleshooting scenario, Discord/Gibson/Docker deep dives, full command output examples — see the [Deployment Guide](docs/DEPLOYMENT.md). This section is the complete, correct, minimum path to a working system; nothing here is a stub pointing elsewhere.
 
-### 1. Clone the repo
+### 0. WSL2 only — enable systemd first
+
+**Skip this on bare-metal/cloud Ubuntu** (systemd is already PID 1 there). On WSL2, systemd is off by default, and every systemd step below (§5, Ollama, Docker) will fail with "System has not been booted with systemd" until you do this:
 
 ```bash
+sudo tee /etc/wsl.conf > /dev/null << 'EOF'
+[boot]
+systemd=true
+EOF
+```
+
+Then, from **Windows** (not inside WSL): `wsl --shutdown`. Reopen your WSL2 terminal and confirm with `systemctl --version` (should print a version, not "command not found").
+
+### 1. System prerequisites
+
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y git python3 python3-pip curl wget build-essential libssl-dev libffi-dev python3-dev
+```
+
+Node.js 20+ is only needed if you plan to use **OpenCode** (§9) — Claude Code's native installer doesn't need it. If you want it now:
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+node --version   # v22+
+```
+
+### 2. Clone both repos
+
+Lucent is two repositories: the core framework, and a separate private memory repo nested inside it at `memory/`. `memory/` is gitignored in the core repo — a fresh clone will not create that directory at all, so the private memory repo must be cloned into it explicitly:
+
+```bash
+mkdir -p ~/dev && cd ~/dev
 git clone https://github.com/antonizick/lucent.git
 cd lucent
+git clone https://github.com/antonizick/LucentMemory.git memory
 ```
 
-### 2. Configure your AI agent
-
-#### Claude Code
-
-Add to `~/.claude/settings.json` or use the config command:
-
-```json
-{
-  "systemPrompt": "You are Lucent, a personal AI assistant. Before doing anything, read the startup ritual: memory/core.md, memory/lucentIdent.md, memory/userIdent.md, memory/LTMemory.md, and today's daily note."
-}
+Verify:
+```bash
+git -C ~/dev/lucent remote -v         # antonizick/lucent.git
+git -C ~/dev/lucent/memory remote -v  # antonizick/LucentMemory.git
 ```
 
-Or set it via CLI:
+### 3. Python dependencies
+
+No virtualenv — everything installs system-wide via `pip3`.
 
 ```bash
-claude config set --key system-prompt "You are Lucent, a personal AI assistant. Before doing anything, read memory/core.md, memory/lucentIdent.md, memory/userIdent.md, memory/LTMemory.md, and today's daily note."
+cd ~/dev/lucent/ui
+pip3 install -r requirements.txt
+pip3 install "discord.py>=2.3.0" aiohttp flask ddgs
 ```
 
-#### OpenCode
+`ddgs` is easy to skip since it's not in `requirements.txt` — it powers the Discord monitor's web-search feature, and without it `discord_monitor.py` fails at import time. Skip the `discord.py`/`aiohttp`/`flask`/`ddgs` line entirely if you don't plan to use Discord integration (§10).
 
-The `lucentrc` file at the repo root contains the full configuration. Copy it to your project's `.opencode/` directory:
+### 4. Voice engine (Piper TTS)
+
+From the repo root:
 
 ```bash
-cp lucentrc ~/.opencode/settings.json
+cd ~/dev/lucent
+bash setup.sh
 ```
 
-### 3. Set up aliases
+This installs `piper-tts` and downloads the four voice models (~290 MB total) into `ui/voices/`. Verify:
 
-Add to `~/.bash_aliases` (or `~/.zsh_aliases`):
+```bash
+ls -la ui/voices/*.onnx   # each file should be > 10 MB — anything under 1 KB is a corrupt/failed download
+```
+
+### 5. Environment variables
+
+```bash
+cp ~/dev/lucent/ui/.env.example ~/dev/lucent/ui/.env
+chmod 600 ~/dev/lucent/ui/.env
+```
+
+Edit `ui/.env`:
+
+```bash
+# Required
+LUCENT_ROOT=/home/nick/dev/lucent   # match your actual home directory
+
+# Only needed for the optional email-triage feature (§8.2) — NERO's reflection
+# loop, weekly curator, and auto-summarize run entirely on local Ollama and
+# do not use this key.
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Required exactly as shown if you use Discord (§10) — this is server.py's own port, not
+# the optional 8002 auth proxy or the 8003 webhook receiver. Getting this wrong silently
+# breaks Discord message routing.
+BACKEND_URL=http://localhost:8001
+
+# Only needed for Discord integration (§10) — omit this whole block otherwise
+DISCORD_BOT_TOKEN=your_bot_token_here
+DISCORD_SERVER_ID=your_server_id_here
+DISCORD_CHANNEL_ID=your_lucent_commands_channel_id
+DISCORD_LOG_CHANNEL_ID=your_lucent_logs_channel_id
+DISCORD_LOG_WEBHOOK_URL=your_log_webhook_url_here
+DISCORD_CLAUDE_CHANNEL_ID=your_claude_direct_channel_id   # optional even within Discord setup
+```
+
+### 6. Ollama (local AI backend)
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+sudo systemctl enable --now ollama.service
+ollama pull mistral            # default sub-agent invocation model + NERO reflection Stage 1 gate
+ollama pull mistral-small      # REQUIRED for NERO's reflection writer, curator consolidation, and auto-summarize
+ollama pull nomic-embed-text   # REQUIRED for NERO's semantic memory recall
+```
+
+`nomic-embed-text` is easy to forget because skipping it produces **no error at all** — every embedding call site in the recall pipeline (`scripts/memory_index.py`, `scripts/memory_recall.py`) wraps calls in a broad exception handler so a recall miss never blocks a response. Without this model, NERO's per-turn `<memory-context>` injection just silently never returns anything, indefinitely.
+
+`mistral-small` is a ~14GB pull and easy to skip since nothing fails loudly at setup time either — `scripts/ollama_client.py` only discovers a missing model the first time `reflect.py`'s Stage 2 writer, `skill_curator.py`'s consolidation pass, or `auto_summarize.py` actually runs (background/cron paths), where the error lands in `memory/.nero/worker.log` or the relevant `/tmp/*.log`, not in front of you.
+
+### 7. Systemd services
+
+Three service unit files ship at the repo root. Discord's two (`lucent-monitor`, `discord-bot`) are only needed if you're using Discord integration.
+
+```bash
+cd ~/dev/lucent
+sudo cp lucent-voice-box.service /etc/systemd/system/
+sudo cp lucent-monitor.service   /etc/systemd/system/   # Discord only
+sudo cp discord-bot.service      /etc/systemd/system/   # Discord only
+sudo systemctl daemon-reload
+
+sudo systemctl enable --now lucent-voice-box.service
+sudo systemctl enable --now lucent-monitor.service      # Discord only
+sudo systemctl enable --now discord-bot.service          # Discord only
+
+sudo systemctl status lucent-voice-box lucent-monitor discord-bot --no-pager
+```
+
+### 8. Cron jobs
+
+```bash
+crontab -e
+```
+
+Add:
+
+```cron
+# Backup memory repo to GitHub every hour
+0 * * * * python3 /home/nick/dev/lucent/scripts/backup_memory.py >> /tmp/memory-backup-cron.log 2>&1
+
+# Rotate voice/activity logs every Monday at 2am
+0 2 * * 1 python3 /home/nick/dev/lucent/scripts/rotate_voice_logs.py >> /tmp/voice-log-rotation.log 2>&1
+
+# Auto-summarize prior day's session into LTMemory.md (hourly, 2 min after backup)
+2 * * * * python3 /home/nick/dev/lucent/scripts/auto_summarize.py >> /tmp/auto-summarize.log 2>&1
+
+# Self-healing service monitor — restarts any failed systemd unit (every 5 min)
+*/5 * * * * python3 /home/nick/dev/lucent/scripts/service_monitor.py >> /home/nick/dev/lucent/ui/logs/service_monitor.log 2>&1
+
+# Weekly curator: skill lifecycle + LTMemory pruning (Sunday 7:23 PM)
+23 19 * * 0 cd /home/nick/dev/lucent && python3 scripts/skill_curator.py run --live >> /tmp/curator_cron.log 2>&1
+```
+
+The self-healing monitor needs passwordless sudo scoped to `systemctl`:
+
+```bash
+echo "$(whoami) ALL=(ALL) NOPASSWD: /usr/bin/systemctl" | sudo tee /etc/sudoers.d/lucent-service-monitor
+sudo chmod 440 /etc/sudoers.d/lucent-service-monitor
+```
+
+Email-triage cron jobs (sync/scoring, monitor) are optional and require a separate credential file — see [Deployment Guide §8.2](docs/DEPLOYMENT.md#82-what-each-job-does) if you want that feature.
+
+### 9. Shell configuration (`~/.bashrc`)
+
+```bash
+# pip user-installed binaries (includes the claude CLI)
+export PATH=$PATH:~/.local/bin
+```
+
+Add to `~/.bash_aliases`:
 
 ```bash
 # Launcher aliases (select platform & model)
@@ -314,7 +456,68 @@ alias luc='python3 /home/nick/dev/lucent/scripts/ai-launcher.py'
 alias brain='/home/nick/dev/lucent/lucent-sync.sh'
 ```
 
-Source your aliases and run `brain` to perform the initial push, or `lucent` to launch your chosen AI platform.
+```bash
+source ~/.bashrc && source ~/.bash_aliases
+```
+
+### 10. Claude Code (primary platform)
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+claude --version
+claude doctor   # should show "Config install method: native" and no issues
+claude login    # opens a browser for OAuth
+```
+
+**No further configuration needed.** The Claude Code hooks that drive Lucent's entire startup ritual, per-turn memory recall, and NERO reflection loop are committed to the repo at `.claude/settings.json` and activate automatically the moment you launch `claude` from `~/dev/lucent` — there is no separate systemPrompt or config-set step. Verify:
+
+```bash
+cd ~/dev/lucent
+claude   # you should see a "[Lucent]" prefixed startup message before you type anything
+```
+
+### 11. OpenCode (optional alternative platform)
+
+```bash
+curl -fsSL https://opencode.ai/install | bash
+export PATH=$PATH:~/.opencode/bin   # add to ~/.bashrc to persist
+cd ~/dev/lucent/.opencode && npm install
+cd ~/dev/lucent && opencode .
+```
+
+The plugin (`.opencode/lucent-plugin.ts`) and config (`opencode.json`, `.opencode/settings.json`) are already committed — `npm install` just pulls in `@opencode-ai/plugin`.
+
+### 12. Docker & Open WebUI (optional)
+
+Only needed if you want a browser chat UI over your local Ollama models — Lucent itself doesn't depend on this.
+
+```bash
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER   # log out/in afterward
+sudo systemctl enable --now docker
+
+docker run -d -p 8088:8080 \
+    --add-host=host.docker.internal:host-gateway \
+    -v open-webui-data:/app/backend/data \
+    --name open-webui --restart always \
+    ghcr.io/open-webui/open-webui:latest
+```
+
+Access at `http://localhost:8088`.
+
+### 13. Verify everything
+
+```bash
+sudo systemctl status lucent-voice-box lucent-monitor discord-bot ollama --no-pager
+curl -s http://localhost:8001/services/health | python3 -m json.tool
+curl -X POST http://localhost:8001/speak -H "Content-Type: application/json" -d '{"text": "Deployment verified"}'
+python3 /home/nick/dev/lucent/scripts/memory_index.py status   # should show real chunk counts, not zero
+crontab -l
+```
+
+Open `http://localhost:8001` in a browser — you should hear the test message and see the Voice Box UI.
+
+Discord bot creation (Developer Portal steps), Gibson security auditing, and full troubleshooting for every step above live in the [Deployment Guide](docs/DEPLOYMENT.md).
 
 ## Usage
 
@@ -801,9 +1004,11 @@ Skills are listed in the `SessionStart` identity bundle (progressive disclosure 
 #### 3. Per-Turn Reflection Loop (Phase 3)
 After every turn, the `Stop` hook spawns a **detached background worker** in ~25ms (zero turn latency). The worker runs:
 
-1. **Stage 0 — trivial filter:** exchanges under 200 chars → skip (no API cost)
-2. **Stage 1 — Haiku gate:** "is there anything worth durably saving here?" YES/NO
-3. **Stage 2 — Sonnet writer:** decides exactly what to save, emits structured JSON actions
+1. **Stage 0 — trivial filter:** exchanges under 200 chars → skip (no inference cost)
+2. **Stage 1 — gate (local Ollama, `mistral:latest`):** "is there anything worth durably saving here?" YES/NO
+3. **Stage 2 — writer (local Ollama, `mistral-small:latest`):** decides exactly what to save, emits structured JSON actions
+
+Both stages run entirely on local Ollama (`scripts/ollama_client.py`) — no Anthropic API key needed. A reachability check runs before each call; timeouts, connection failures, and empty/malformed responses are logged to `memory/.nero/worker.log` and treated as a no-op (never blocks or crashes the turn).
 
 Ported from Hermes' `background_review.py` — including the critical **anti-pattern list**: never capture environment-dependent failures, negative tool claims ("X is broken"), transient errors, or one-off narratives.
 
@@ -834,7 +1039,7 @@ Weekly skill lifecycle management + memory hygiene. Dry-run by default; `--live`
 
 **4a — Skill curation:**
 - Lifecycle transitions: `active → stale (30d) → archived (90d)`, reactivates on use. Protected/pinned skills exempt.
-- LLM umbrella-building pass (Sonnet): clusters narrow reflection-created skills and merges them into broad class-level umbrellas.
+- LLM umbrella-building pass (local Ollama, `mistral-small:latest`): clusters narrow reflection-created skills and merges them into broad class-level umbrellas.
 
 **4b — Memory hygiene:**
 - `LTMemory.md` Recent Sessions capped at 10 — older sessions moved to `memory/LTMemory.archive.md` (still recall-indexed).
@@ -1267,8 +1472,8 @@ Lucent = memory files + daily notes + agent config + GitHub sync
                     │                     │ response          │
   Stop hook         │  ◄──────────────────┘                  │
   ────────────────► │  ┌──────────────┐                      │
-  (detached)        │  │ reflect.py   │  Haiku gate           │
-                    │  │ worker       │→ Sonnet writer        │
+  (detached)        │  │ reflect.py   │  local Ollama gate    │
+                    │  │ worker       │→ local Ollama writer  │
                     │  └──────┬───────┘→ proposals inbox     │
                     │         │                               │
                     └─────────┼───────────────────────────── ┘

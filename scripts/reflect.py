@@ -43,7 +43,6 @@ CLI:
 """
 
 import json
-import os
 import subprocess
 import sys
 import uuid
@@ -63,8 +62,11 @@ WORKER_LOG = NERO_DIR / "worker.log"
 INBOX_PATH = MEMORY_DIR / "nero_inbox.md"
 ACTIVITY_LOG_DIR = MEMORY_DIR / "logs"
 
-HAIKU_MODEL = "claude-haiku-4-5-20251001"
-SONNET_MODEL = "claude-sonnet-4-6"
+sys.path.insert(0, str(Path(__file__).parent))
+from ollama_client import call_ollama, check_ollama_health, GATE_MODEL, WRITER_MODEL
+
+GATE_TIMEOUT = 60      # seconds — short classifier call
+WRITER_TIMEOUT = 180   # seconds — larger structured-JSON call
 
 MIN_EXCHANGE_CHARS = 200   # Stage 0: skip trivial turns below this combined size
 MAX_EXCHANGE_CHARS = 24000  # cap context sent to the models
@@ -123,40 +125,18 @@ def _log_to_activity(msg: str) -> None:
 
 
 # ===========================================================================
-# API key + LLM calls
+# LLM calls (local Ollama — see scripts/ollama_client.py)
 # ===========================================================================
 
-def get_api_key() -> str | None:
-    """Match auto_summarize.py: env first, then ui/.env."""
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if key:
-        return key
-    env_file = LUCENT_ROOT / "ui" / ".env"
-    if env_file.exists():
-        for line in env_file.read_text().splitlines():
-            if line.startswith("ANTHROPIC_API_KEY="):
-                return line.split("=", 1)[1].strip().strip('"').strip("'")
-    return None
-
-
-def _call_model(model: str, system: str, user: str, api_key: str, max_tokens: int) -> str | None:
-    try:
-        import anthropic
-    except ImportError:
-        _log("anthropic SDK not installed")
-        return None
-    try:
-        client = anthropic.Anthropic(api_key=api_key)
-        resp = client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
-        return resp.content[0].text.strip()
-    except Exception as e:
-        _log(f"{model} call failed: {e}")
-        return None
+def _call_model(model: str, system: str, user: str, num_predict: int, num_ctx: int, timeout: float) -> str | None:
+    content, err = call_ollama(
+        model, system, user,
+        num_predict=num_predict, num_ctx=num_ctx, timeout=timeout,
+        log_fn=_log,
+    )
+    if err:
+        _log(f"{model} call failed: {err}")
+    return content
 
 
 # ===========================================================================
@@ -589,16 +569,15 @@ def run_worker(transcript_path: str) -> None:
         save_state(state)
         return
 
-    api_key = get_api_key()
-    if not api_key:
-        _log("no API key — skipping")
+    if not check_ollama_health():
+        _log("ollama unreachable at startup check — skipping (is `ollama serve` / systemd unit running?)")
         return
 
-    # Stage 1 — Haiku gate.
+    # Stage 1 — fast gate.
     gate = _call_model(
-        HAIKU_MODEL, GATE_SYSTEM,
+        GATE_MODEL, GATE_SYSTEM,
         GATE_USER_TEMPLATE.format(exchange=exchange),
-        api_key, max_tokens=128,
+        num_predict=128, num_ctx=4096, timeout=GATE_TIMEOUT,
     )
     state["last_leaf_uuid"] = leaf_uuid
     state["last_run_at"] = datetime.now(timezone.utc).isoformat()
@@ -609,16 +588,16 @@ def run_worker(transcript_path: str) -> None:
         return
     gate_reason = gate.strip()[:300]
 
-    # Stage 2 — Sonnet writer.
+    # Stage 2 — structured writer.
     writer_out = _call_model(
-        SONNET_MODEL, WRITER_SYSTEM,
+        WRITER_MODEL, WRITER_SYSTEM,
         WRITER_USER_TEMPLATE.format(
             skills=_skills_listing(),
             memory_slugs=_memory_slugs(),
             gate_reason=gate_reason,
             exchange=exchange,
         ),
-        api_key, max_tokens=4096,
+        num_predict=3000, num_ctx=16384, timeout=WRITER_TIMEOUT,
     )
     if not writer_out:
         return

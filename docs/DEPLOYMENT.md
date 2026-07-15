@@ -166,10 +166,11 @@ cd lucent
 
 ### 3.3 Clone Lucent Memory (nested inside core)
 
-The memory repo lives at `~/dev/lucent/memory/` and is its own independent git repository. The `memory/` directory already exists in the core repo (it has a `.gitkeep`), so you need to handle this carefully:
+The memory repo lives at `~/dev/lucent/memory/` and is its own independent git repository. `memory/` is listed in the core repo's `.gitignore`, so a fresh clone of Lucent Core will **not** contain a `memory/` directory at all — nothing under that path is ever committed to the core repo.
 
 ```bash
-# Remove the placeholder directory that exists in the core repo
+# Defensive no-op on a truly fresh clone (memory/ won't exist yet) —
+# only matters if you're re-running this step after a partial/failed setup
 rm -rf ~/dev/lucent/memory
 
 # Clone the memory repo into that location
@@ -266,11 +267,13 @@ requests>=2.31.0
 
 ### 4.2 Install Discord Bot Additional Dependencies
 
-The Discord bot (`ui/discord_bot.py`) requires packages not in `requirements.txt`:
+The Discord bot (`ui/discord_bot.py`) and monitor (`ui/discord_monitor.py`) require packages not in `requirements.txt`:
 
 ```bash
-pip3 install "discord.py>=2.3.0" aiohttp flask
+pip3 install "discord.py>=2.3.0" aiohttp flask ddgs
 ```
+
+`ddgs` (DuckDuckGo metasearch, v9.14.2 verified) powers the monitor's web-search feature — without it, `discord_monitor.py` fails at import time (`ModuleNotFoundError`), not just at search time.
 
 ### 4.3 Install Piper TTS (Neural Voice Engine)
 
@@ -308,6 +311,7 @@ pip3 install \
     "discord.py>=2.3.0" \
     "aiohttp>=3.13.0" \
     "flask>=3.0.0" \
+    "ddgs" \
     "piper-tts"
 ```
 
@@ -497,7 +501,9 @@ cp ~/dev/lucent/ui/.env.example ~/dev/lucent/ui/.env
 Edit `~/dev/lucent/ui/.env` and fill in all values:
 
 ```bash
-# Anthropic API — required for Claude-powered agent invocation
+# Anthropic API — only needed for the optional email-triage feature (§8.2).
+# NERO's reflection loop, weekly curator, and auto-summarize run entirely on
+# local Ollama (scripts/ollama_client.py) and do not use this key.
 ANTHROPIC_API_KEY=sk-ant-...
 
 # Discord Bot Configuration
@@ -506,15 +512,17 @@ DISCORD_SERVER_ID=your_discord_server_id
 DISCORD_CHANNEL_ID=channel_id_where_lucent_reads_commands
 DISCORD_LOG_CHANNEL_ID=channel_id_for_lucent_logs
 DISCORD_LOG_WEBHOOK_URL=https://discord.com/api/webhooks/...
+# Optional: a second channel routed straight to Claude instead of Ollama (discord_bot.py). Omit to disable.
+DISCORD_CLAUDE_CHANNEL_ID=channel_id_for_direct_claude_messages
 
-# Backend URL (Voice Box routes Discord responses to this)
-BACKEND_URL=http://localhost:8002
+# Backend URL — where discord_monitor.py posts responses. This is server.py / the Voice Box, port 8001.
+BACKEND_URL=http://localhost:8001
 
 # Lucent root path (used by some scripts)
 LUCENT_ROOT=/home/nick/dev/lucent
 ```
 
-> **Note:** `BACKEND_URL` is set to `http://localhost:8002` by default in the example but the Voice Box runs on `8001`. The Discord bot's webhook receiver runs on `8003`. Review and adjust per your active service configuration.
+> **Important:** `BACKEND_URL` must be `http://localhost:8001` — that's where `ui/server.py` (the Voice Box) actually listens for `/message/pending` and `/response`. Port 8002 is a separate, optional local auth proxy not covered by this guide; port 8003 is the Discord bot's own webhook receiver, not something `BACKEND_URL` should point at. Setting this wrong breaks Discord message routing silently (the monitor logs POST failures but Discord itself shows no error).
 
 ### 6.2 Secure the .env File
 
@@ -702,8 +710,8 @@ Save and exit.
 - Logs results to `/tmp/voice-log-rotation.log`
 
 **Auto-Summarize (hourly, :02)**
-- Finds daily notes flagged `UNSUMMARIZED`, reads their `memory/archive/` copy, calls Claude Haiku via the Anthropic API, and writes a real Recent Sessions summary into `LTMemory.md`
-- Requires `ANTHROPIC_API_KEY` to be set (see §6.1) — without it, this job fails silently to `/tmp/auto-summarize.log`
+- Finds daily notes flagged `UNSUMMARIZED`, reads their `memory/archive/` copy, calls the local Ollama writer model (`mistral-small:latest`), and writes a real Recent Sessions summary into `LTMemory.md`
+- Requires Ollama to be running and reachable at `localhost:11434` — if unreachable, or if the call times out, the job logs the reason and exits non-zero to `/tmp/auto-summarize.log` without writing a partial summary
 - Dry-run manually: `python3 scripts/auto_summarize.py --dry-run`
 
 **Service Monitor (every 5 min)**
@@ -774,13 +782,15 @@ if ! pgrep -x "ollama" > /dev/null; then
     ollama serve &>/dev/null &
 fi
 
-# Ensure Docker daemon is running
-sudo service docker start &>/dev/null || true
+# Docker itself is systemd-managed (enabled + active via `sudo systemctl enable --now docker`
+# in §13.1) — no need to start it here. Only start it manually if you skipped that step:
+#   sudo service docker start &>/dev/null || true
 
-# Start Open WebUI container if not already running
+# Start Open WebUI container if not already running.
+# Requires your user to be in the `docker` group (§13.1) — otherwise prefix with `sudo`.
 if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qw "open-webui"; then
     echo "[auto] Starting Open WebUI..."
-    sudo docker run -d \
+    docker run -d \
         -p 8088:8080 \
         --add-host=host.docker.internal:host-gateway \
         -v open-webui-data:/app/backend/data \
@@ -790,7 +800,7 @@ if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qw "open-webui"; then
 fi
 ```
 
-> **Note:** The `sudo service docker start` command requires passwordless sudo for the `service` command, or you must configure `/etc/sudoers` appropriately. On WSL2, this is standard.
+> **Note:** This block assumes `docker` runs without `sudo`, which requires your user to be in the `docker` group (`sudo usermod -aG docker $USER`, then log out/in — see §13.1). If you'd rather not add the group, prefix both `docker` commands above with `sudo`.
 
 ### 9.3 Apply .bashrc Changes
 
@@ -804,18 +814,24 @@ source ~/.bashrc
 
 ### 10.1 Install Claude Code CLI
 
+Use Anthropic's native installer (self-updating, no Node/npm dependency for Claude Code itself — Node is only needed later for the OpenCode plugin, §12):
+
 ```bash
-npm install -g @anthropic-ai/claude-code
+curl -fsSL https://claude.ai/install.sh | bash
 ```
+
+This installs a versioned copy under `~/.local/share/claude/versions/` and symlinks it at `~/.local/bin/claude`.
 
 Verify:
 
 ```bash
 claude --version
-which claude   # should be ~/.local/bin/claude or /usr/local/bin/claude
+which claude    # should be ~/.local/bin/claude
+claude doctor   # should report "Config install method: native" and "No installation issues found"
 ```
 
 > If `claude` is not found after install, ensure `~/.local/bin` is in your PATH (see Section 9.1).
+> An older `npm install -g @anthropic-ai/claude-code` method also exists and still works, but the native installer is what this deployment is verified against — it self-updates and doesn't require Node.js to be installed first.
 
 ### 10.2 Authenticate with Anthropic
 
@@ -825,7 +841,7 @@ claude login
 
 This opens a browser for OAuth authentication with your Anthropic account. Follow the prompts. Your API key is stored in `~/.claude/` after login.
 
-Alternatively, set the API key directly in `ui/.env` (used by the Voice Box server for agent invocation):
+Alternatively, set the API key directly in `ui/.env`. This is only needed for the optional email-triage feature (§8.2) — NERO's reflection loop, curator, and auto-summarize don't use it:
 
 ```bash
 echo "ANTHROPIC_API_KEY=sk-ant-..." >> ~/dev/lucent/ui/.env
@@ -839,8 +855,12 @@ The Claude Code hooks are already committed to the repo at `.claude/settings.jso
 
 | Hook Event | Command | Purpose |
 |-----------|---------|---------|
+| `SessionStart` | `scripts/startup.py` | IGNITION Phase 3 — automatic startup ritual: parallel voice box/context/compression checks, auto-restart fallback, checkpoint write |
 | `UserPromptSubmit` | `scripts/lucent-init.sh` | Injects full Lucent context before every response |
-| `SessionEnd` | `curl .../speak` | Sends "Session complete." voice message when session ends |
+| `PostToolUse` | `scripts/skill_read_tracker.py` | Bumps per-skill use counters when a skill file is read |
+| `Stop` | `scripts/log_turn_end.py` then `scripts/reflect.py` | Backstop turn-end timestamp, then NERO's detached reflection worker (local Ollama gate → local Ollama writer → proposals inbox) |
+| `PreCompact` | `scripts/pre_compact.py` | Injects priorities, NERO state, skills listing, and today's daily note tail before context compaction |
+| `SessionEnd` | `scripts/log_session_end.py` then `curl .../speak` | Logs session close, sends "Session complete." voice message |
 
 **`lucent-init.sh` injects:**
 - Today's date
@@ -910,17 +930,19 @@ sudo systemctl status ollama.service
 
 ### 11.3 Pull Required Models
 
-The agent invocation system defaults to `mistral:latest`. Pull at minimum:
+Three models are required — two are easy to miss because their absence fails silently:
 
 ```bash
-ollama pull mistral
+ollama pull mistral            # default agent invocation model (scripts/invoke_agent.py) + NERO reflection Stage 1 gate
+ollama pull mistral-small      # REQUIRED for NERO's reflection writer, curator consolidation, and auto-summarize (scripts/reflect.py, scripts/skill_curator.py, scripts/auto_summarize.py, all via scripts/ollama_client.py)
+ollama pull nomic-embed-text   # REQUIRED for NERO semantic recall (scripts/memory_index.py, scripts/memory_recall.py)
 ```
 
-Additional models used by the Discord bot (pulled on demand, but pre-pulling speeds things up):
+> **`nomic-embed-text` is not optional despite failing silently if missing.** It's the embedding model behind NERO's per-turn `<memory-context>` recall block (injected via the `UserPromptSubmit` hook → `lucent-init.sh` → `memory_recall.py`). Every call site wraps embedding calls in a broad `except Exception: pass` — by design, so a recall failure never blocks a response — which means skipping this pull does **not** produce an error anywhere. Recall just quietly never returns anything, every session, forever, until someone thinks to check `python3 scripts/memory_index.py status`.
 
-```bash
-ollama pull mistral        # default agent model
-```
+> **`mistral-small` fails just as quietly, in a different place.** Nothing at setup time checks for it. The first sign of a missing pull is a logged error the next time the reflection worker, weekly curator, or hourly auto-summarize cron actually runs — `memory/.nero/worker.log` for the reflection loop, `/tmp/curator_cron.log` for the curator, `/tmp/auto-summarize.log` for auto-summarize. `scripts/ollama_client.py`'s `check_ollama_health()` confirms Ollama itself is reachable, but does not verify any specific model is pulled.
+
+`mistral` (already pulled above) also covers the Discord bot and general sub-agent invocation — no separate pull needed.
 
 To see what models are currently available:
 
@@ -1080,8 +1102,10 @@ Open WebUI is a browser-based interface for interacting with Ollama models. It r
 # Install Docker
 curl -fsSL https://get.docker.com | sh
 
-# Add your user to the docker group (optional — current setup uses sudo)
+# Add your user to the docker group (required to run `docker` without sudo — this is
+# what §9.2's auto-start block and the rest of this section assume)
 sudo usermod -aG docker $USER
+# Log out and back in (or `newgrp docker`) for the group membership to take effect
 
 # Start and enable Docker
 sudo systemctl enable --now docker
@@ -1092,7 +1116,7 @@ sudo systemctl enable --now docker
 The `.bashrc` auto-start block (Section 9.2) handles this on each login. To start it manually:
 
 ```bash
-sudo docker run -d \
+docker run -d \
     -p 8088:8080 \
     --add-host=host.docker.internal:host-gateway \
     -v open-webui-data:/app/backend/data \
@@ -1100,6 +1124,8 @@ sudo docker run -d \
     --restart always \
     ghcr.io/open-webui/open-webui:latest
 ```
+
+(Prefix with `sudo` if you skipped adding your user to the `docker` group above.)
 
 Access at: `http://localhost:8088`
 
@@ -1145,9 +1171,12 @@ In `ui/.env`:
 DISCORD_SERVER_ID=<right-click your server → Copy ID>
 DISCORD_CHANNEL_ID=<right-click the commands channel → Copy ID>
 DISCORD_LOG_CHANNEL_ID=<right-click the logs channel → Copy ID>
+DISCORD_CLAUDE_CHANNEL_ID=<optional — right-click a channel to route straight to Claude → Copy ID>
 ```
 
 To enable Copy ID: Discord Settings → Advanced → Developer Mode → ON.
+
+`DISCORD_CLAUDE_CHANNEL_ID` is optional (`discord_bot.py` defaults it to `0`/disabled if unset) — set it only if you want a second channel that bypasses Ollama and goes straight to Claude.
 
 ### 14.3 Create a Webhook for Logging
 

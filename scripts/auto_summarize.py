@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 """
-Auto-summarizer: calls Haiku API to write LTMemory session summaries.
+Auto-summarizer: calls local Ollama to write LTMemory session summaries.
 
 Runs hourly via cron (2 minutes after backup_memory.py). Finds daily notes
-marked UNSUMMARIZED, reads their archives, calls Haiku, and writes
-comprehensive summaries to LTMemory.md Recent Sessions.
+marked UNSUMMARIZED, reads their archives, calls the local Ollama writer
+model, and writes comprehensive summaries to LTMemory.md Recent Sessions.
 
 Safe to run manually:
   python3 scripts/auto_summarize.py
   python3 scripts/auto_summarize.py --dry-run  # show what would be written
 """
 
-import os
 import sys
-import json
-import re
 from pathlib import Path
 from datetime import date, timedelta
 
@@ -24,8 +21,11 @@ ARCHIVE_DIR = MEMORY_DIR / "archive"
 LTMEMORY_PATH = MEMORY_DIR / "LTMemory.md"
 UNSUMMARIZED_MARKER = MEMORY_DIR / ".unsummarized_sessions.json"
 
-HAIKU_MODEL = "claude-haiku-4-5-20251001"
-MAX_ARCHIVE_CHARS = 60_000  # ~15K tokens — well within Haiku's context
+sys.path.insert(0, str(Path(__file__).parent))
+from ollama_client import call_ollama, check_ollama_health, WRITER_MODEL
+
+MAX_ARCHIVE_CHARS = 60_000  # ~15K tokens — comfortably within mistral-small's 32K context
+SUMMARY_TIMEOUT = 180       # seconds — long input, local inference on a 3090 Ti
 
 SUMMARY_PROMPT = """You are summarizing a day's work log for Nick's personal productivity system (Lucent).
 
@@ -48,19 +48,6 @@ FORMAT RULES:
 
 ARCHIVE:
 {archive_content}"""
-
-
-def get_api_key() -> str | None:
-    """Get Anthropic API key from env, falling back to ui/.env."""
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if key:
-        return key
-    env_file = LUCENT_ROOT / "ui" / ".env"
-    if env_file.exists():
-        for line in env_file.read_text().splitlines():
-            if line.startswith("ANTHROPIC_API_KEY="):
-                return line.split("=", 1)[1].strip().strip('"').strip("'")
-    return None
 
 
 def find_unsummarized_dates() -> list[str]:
@@ -88,31 +75,25 @@ def ltmemory_has_session(date_str: str) -> bool:
     return f"### Session {date_str}" in LTMEMORY_PATH.read_text()
 
 
-def call_haiku(archive_content: str, api_key: str) -> str | None:
-    """Call Haiku API to generate summary. Returns summary text or None on failure."""
-    try:
-        import anthropic
-    except ImportError:
-        print("  ✗ anthropic package not installed — run: pip install anthropic")
-        return None
-
+def call_summarizer(archive_content: str) -> str | None:
+    """Call the local Ollama writer model to generate a summary. Returns
+    summary text, or None on failure (logged to stdout — cron redirects
+    this to /tmp/auto-summarize.log)."""
     if len(archive_content) > MAX_ARCHIVE_CHARS:
         archive_content = archive_content[:MAX_ARCHIVE_CHARS] + "\n\n[archive truncated — see full file in memory/archive/]"
 
-    try:
-        client = anthropic.Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model=HAIKU_MODEL,
-            max_tokens=700,  # ~5-8 tight bullets; hard ceiling reinforcing the prompt's brevity rule
-            messages=[{
-                "role": "user",
-                "content": SUMMARY_PROMPT.format(archive_content=archive_content)
-            }]
-        )
-        return response.content[0].text.strip()
-    except Exception as e:
-        print(f"  ✗ Haiku API call failed: {e}")
+    content, err = call_ollama(
+        WRITER_MODEL,
+        system="",
+        user=SUMMARY_PROMPT.format(archive_content=archive_content),
+        num_predict=700,  # ~5-8 tight bullets; hard ceiling reinforcing the prompt's brevity rule
+        num_ctx=20000,    # covers the 60K-char archive cap (~15K tokens) plus prompt + response
+        timeout=SUMMARY_TIMEOUT,
+    )
+    if err:
+        print(f"  ✗ Ollama call failed: {err}")
         return None
+    return content
 
 
 def prepend_session_to_ltmemory(date_str: str, summary: str) -> bool:
@@ -150,9 +131,8 @@ def main():
 
     print(f"  Found: {', '.join(unsummarized)}")
 
-    api_key = get_api_key()
-    if not api_key:
-        print("  ✗ ANTHROPIC_API_KEY not found in env or ui/.env — cannot summarize")
+    if not check_ollama_health():
+        print("  ✗ Ollama unreachable at localhost:11434 — cannot summarize (is `ollama serve` / systemd unit running?)")
         return 1
 
     success_count = 0
@@ -171,10 +151,10 @@ def main():
         print(f"  → {date_str}: reading archive ({size:,} bytes)...")
         archive_content = archive_path.read_text()
 
-        print(f"  → {date_str}: calling Haiku API...")
-        summary = call_haiku(archive_content, api_key)
+        print(f"  → {date_str}: calling local Ollama ({WRITER_MODEL})...")
+        summary = call_summarizer(archive_content)
         if not summary:
-            print(f"  ✗ {date_str}: API call failed, leaving for manual review")
+            print(f"  ✗ {date_str}: Ollama call failed, leaving for manual review")
             continue
 
         line_count = len(summary.splitlines())

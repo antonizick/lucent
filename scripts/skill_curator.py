@@ -30,13 +30,13 @@ Usage:
 """
 
 import json
-import os
 import shutil
 import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+from ollama_client import call_ollama, check_ollama_health, WRITER_MODEL
 
 LUCENT_ROOT = Path(__file__).parent.parent
 MEMORY_DIR = LUCENT_ROOT / "memory"
@@ -55,7 +55,7 @@ ARCHIVE_AFTER_DAYS = 90
 KEEP_RECENT_SESSIONS = 10
 AUTO_MEMORY_STALE_DAYS = 90
 
-SONNET_MODEL = "claude-sonnet-4-6"
+CONSOLIDATE_TIMEOUT = 180  # seconds — local inference, larger candidate listings take longer
 
 
 def _now() -> datetime:
@@ -184,18 +184,6 @@ def _curatable_skills() -> list[dict]:
     return [s for s in sk.list_skills() if sk.is_curatable(s["slug"])]
 
 
-def _get_api_key():
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if key:
-        return key
-    env_file = LUCENT_ROOT / "ui" / ".env"
-    if env_file.exists():
-        for line in env_file.read_text().splitlines():
-            if line.startswith("ANTHROPIC_API_KEY="):
-                return line.split("=", 1)[1].strip().strip('"').strip("'")
-    return None
-
-
 def run_consolidation(live: bool) -> dict:
     """LLM umbrella pass. Returns {plan, applied, candidates}. Dry-run unless live."""
     import skills as sk
@@ -208,30 +196,24 @@ def run_consolidation(live: bool) -> dict:
         )
         return result
 
-    api_key = _get_api_key()
-    if not api_key:
-        result["skipped_reason"] = "no API key"
+    if not check_ollama_health():
+        result["skipped_reason"] = "ollama unreachable (is `ollama serve` / systemd unit running?)"
         return result
 
     listing = "\n".join(
         f"- {s['slug']} (state={s['state']}, uses={s['use_count']}): {s['description']}"
         for s in candidates
     )
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-        resp = client.messages.create(
-            model=SONNET_MODEL,
-            max_tokens=3000,
-            system=CONSOLIDATE_SYSTEM,
-            messages=[{"role": "user", "content":
-                       f"Candidate skills (agent-created, unprotected):\n{listing}\n\n"
-                       "Produce the consolidation plan JSON."}],
-        )
-        plan = _parse_json(resp.content[0].text)
-    except Exception as e:
-        result["skipped_reason"] = f"LLM call failed: {e}"
+    content, err = call_ollama(
+        WRITER_MODEL, CONSOLIDATE_SYSTEM,
+        f"Candidate skills (agent-created, unprotected):\n{listing}\n\n"
+        "Produce the consolidation plan JSON.",
+        num_predict=3000, num_ctx=8192, timeout=CONSOLIDATE_TIMEOUT,
+    )
+    if err:
+        result["skipped_reason"] = f"LLM call failed: {err}"
         return result
+    plan = _parse_json(content)
 
     result["plan"] = plan
     if not live or not plan:
