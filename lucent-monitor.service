@@ -1,7 +1,7 @@
 [Unit]
 Description=Lucent Discord Instruction Monitor
-After=network.target lucent-server.service
-Wants=lucent-server.service
+After=network.target lucent-voice-box.service
+Wants=lucent-voice-box.service
 
 [Service]
 Type=simple

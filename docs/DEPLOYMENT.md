@@ -50,7 +50,8 @@ Lucent is a persistent AI assistant framework that runs across two Git repositor
 ┌─────────────────────────────────────────────────────────────┐
 │                 Voice Box (port 8001)                        │
 │  ui/server.py — FastAPI — TTS queue, SSE broadcast,         │
-│  service health, backup status, agent invocation            │
+│  service health, backup status, Discord message routing,    │
+│  agent invocation (single process, single service)          │
 └──────────────┬────────────────────┬────────────────────────┘
                │                    │
      ┌─────────▼──────┐   ┌─────────▼──────┐
@@ -60,8 +61,8 @@ Lucent is a persistent AI assistant framework that runs across two Git repositor
      └────┬───────────┘   └─────────────────┘
           │
   ┌───────▼──────────────────────────────┐
-  │ Discord Monitor + Poller              │
-  │ discord_monitor.py / discord_poller.py│
+  │ Discord Monitor                       │
+  │ discord_monitor.py                    │
   └───────────────────────────────────────┘
 
 Memory:
@@ -81,6 +82,31 @@ The Memory repo is a **git submodule-style nested repo** inside the core repo. I
 ---
 
 ## 2. Prerequisites
+
+### 2.0 WSL2 Only — Enable systemd First
+
+**Skip this section on bare-metal/cloud Ubuntu** — systemd is already PID 1 there.
+
+On WSL2, systemd is **not** enabled by default. Every service in §7, plus Ollama's systemd unit (§11.2) and Docker's (§13.1), require `systemctl`, which silently does not exist without this step — `sudo systemctl enable --now ...` fails with "System has not been booted with systemd" rather than doing anything useful.
+
+1. Create or edit `/etc/wsl.conf` inside the WSL2 distro:
+   ```bash
+   sudo tee /etc/wsl.conf > /dev/null << 'EOF'
+   [boot]
+   systemd=true
+   EOF
+   ```
+2. From **Windows** (PowerShell/CMD, not inside WSL), fully restart the WSL2 VM:
+   ```powershell
+   wsl --shutdown
+   ```
+3. Reopen your WSL2 terminal and verify:
+   ```bash
+   ps -p 1 -o comm=        # should print: systemd
+   systemctl --version     # should print a version, not "command not found"
+   ```
+
+If this step is skipped, §7 (Systemd Services), §11.2 (Ollama), and §13.1 (Docker) will all fail on WSL2.
 
 ### 2.1 System Packages
 
@@ -202,7 +228,6 @@ After cloning, your structure should look like:
 │   ├── voice_config.json     # Avatar→voice assignments
 │   ├── discord_bot.py
 │   ├── discord_monitor.py
-│   ├── discord_poller.py
 │   ├── discord_logger.py
 │   ├── requirements.txt
 │   ├── start.sh
@@ -503,17 +528,17 @@ chmod 600 ~/dev/lucent/ui/.env
 
 ### 7.1 Service Architecture
 
-Five Lucent-specific services must be installed and enabled. The service unit files live in the repo root and must be **copied** (not symlinked) to `/etc/systemd/system/`.
+Three Lucent-specific services must be installed and enabled. The service unit files live in the repo root and must be **copied** (not symlinked) to `/etc/systemd/system/`.
 
 | Service File | Description | Port |
 |-------------|-------------|------|
-| `lucent-voice-box.service` | FastAPI Voice Box — core TTS/API hub | 8001 |
-| `lucent-server.service` | Discord Integration Server | — |
-| `lucent-monitor.service` | Discord Instruction Monitor | — |
-| `lucent-poller.service` | Discord Message Poller | — |
+| `lucent-voice-box.service` | FastAPI Voice Box — core hub. Runs `ui/server.py`, which serves TTS, health/backup endpoints, **and** Discord message routing (`/message/pending`, `/response`) in a single process | 8001 |
+| `lucent-monitor.service` | Discord Instruction Monitor — polls the queue exposed by the voice box, calls Ollama, posts responses back | — |
 | `discord-bot.service` | Discord Bot (webhook receiver) | 8003 |
 
-Service dependency order: `lucent-voice-box` → `lucent-server` → `lucent-monitor` and `lucent-poller`
+> **Note:** `ui/server.py` is one FastAPI app that backs both "the voice box" and "the Discord integration server" — there is no separate process for Discord routing. An earlier `lucent-server.service` unit that ran the same file a second time (on an undocumented port) was removed as a redundant duplicate; likewise a `lucent-poller.service` unit that pointed at a `discord_poller.py` script no longer present in the codebase was removed. Neither is needed — `lucent-monitor.service` talks directly to the voice box on port 8001.
+
+Service dependency order: `lucent-voice-box` → `lucent-monitor` (the bot has no hard dependency on the other two).
 
 ### 7.2 Install All Service Files
 
@@ -521,9 +546,7 @@ Service dependency order: `lucent-voice-box` → `lucent-server` → `lucent-mon
 cd ~/dev/lucent
 
 sudo cp lucent-voice-box.service /etc/systemd/system/
-sudo cp lucent-server.service    /etc/systemd/system/
 sudo cp lucent-monitor.service   /etc/systemd/system/
-sudo cp lucent-poller.service    /etc/systemd/system/
 sudo cp discord-bot.service      /etc/systemd/system/
 
 sudo systemctl daemon-reload
@@ -535,16 +558,14 @@ Enable all services to start on boot, then start them now:
 
 ```bash
 sudo systemctl enable --now lucent-voice-box.service
-sudo systemctl enable --now lucent-server.service
 sudo systemctl enable --now lucent-monitor.service
-sudo systemctl enable --now lucent-poller.service
 sudo systemctl enable --now discord-bot.service
 ```
 
 ### 7.4 Verify Services Are Running
 
 ```bash
-sudo systemctl status lucent-voice-box lucent-server lucent-monitor lucent-poller discord-bot --no-pager
+sudo systemctl status lucent-voice-box lucent-monitor discord-bot --no-pager
 ```
 
 Or use the included restart script which also shows status:
@@ -574,31 +595,12 @@ Environment="PYTHONUNBUFFERED=1"
 WantedBy=multi-user.target
 ```
 
-**lucent-server.service** — Routes Discord commands through the system.
-```ini
-[Unit]
-Description=Lucent Discord Integration Server
-After=network-online.target
-
-[Service]
-Type=simple
-User=nick
-WorkingDirectory=/home/nick/dev/lucent/ui
-ExecStart=/usr/bin/python3 /home/nick/dev/lucent/ui/server.py
-Restart=on-failure
-RestartSec=10
-Environment="PYTHONUNBUFFERED=1"
-
-[Install]
-WantedBy=multi-user.target
-```
-
-**lucent-monitor.service** — Watches for Discord instructions, depends on `lucent-server`.
+**lucent-monitor.service** — Watches for Discord instructions, depends on `lucent-voice-box` (which is what actually exposes the message queue on port 8001).
 ```ini
 [Unit]
 Description=Lucent Discord Instruction Monitor
-After=network.target lucent-server.service
-Wants=lucent-server.service
+After=network.target lucent-voice-box.service
+Wants=lucent-voice-box.service
 
 [Service]
 Type=simple
@@ -607,26 +609,6 @@ WorkingDirectory=/home/nick/dev/lucent/ui
 ExecStart=/usr/bin/python3 /home/nick/dev/lucent/ui/discord_monitor.py
 Restart=on-failure
 RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-**lucent-poller.service** — Polls Discord messages, requires `lucent-server`.
-```ini
-[Unit]
-Description=Lucent Discord Message Poller
-After=network-online.target lucent-server.service
-Requires=lucent-server.service
-
-[Service]
-Type=simple
-User=nick
-WorkingDirectory=/home/nick/dev/lucent/ui
-ExecStart=/usr/bin/python3 /home/nick/dev/lucent/ui/discord_poller.py
-Restart=on-failure
-RestartSec=10
-Environment="PYTHONUNBUFFERED=1"
 
 [Install]
 WantedBy=multi-user.target
@@ -671,7 +653,7 @@ sudo systemctl status discord-bot.service
 
 ## 8. Cron Jobs
 
-Two cron jobs keep memory backed up and logs rotated.
+Seven cron jobs keep memory backed up, logs rotated, services self-healing, email triaged, and sessions/skills curated. Two (email sync + email monitor) require an additional credential file and an optional pip install — see §8.2.
 
 ### 8.1 Install Cron Jobs
 
@@ -679,7 +661,7 @@ Two cron jobs keep memory backed up and logs rotated.
 crontab -e
 ```
 
-Add these two lines:
+Add these lines:
 
 ```cron
 # Lucent: Backup memory repo to GitHub every hour
@@ -687,6 +669,21 @@ Add these two lines:
 
 # Lucent: Rotate voice/activity logs every Monday at 2am
 0 2 * * 1 python3 /home/nick/dev/lucent/scripts/rotate_voice_logs.py >> /tmp/voice-log-rotation.log 2>&1
+
+# Lucent: Auto-summarize prior day's session into LTMemory.md (hourly, 2 min after backup)
+2 * * * * python3 /home/nick/dev/lucent/scripts/auto_summarize.py >> /tmp/auto-summarize.log 2>&1
+
+# Lucent: Self-healing service monitor — restarts any failed systemd unit (every 5 min)
+*/5 * * * * python3 /home/nick/dev/lucent/scripts/service_monitor.py >> /home/nick/dev/lucent/ui/logs/service_monitor.log 2>&1
+
+# Lucent: Email sync + priority scoring (every 5 min — requires email.env, see §8.2)
+*/5 * * * * . $HOME/.config/lucent/email.env && python3 /home/nick/dev/lucent/scripts/sync_and_score.py >> /tmp/email-sync.log 2>&1
+
+# Lucent: Email monitor daemon single-pass + voice alert (every 30 min — requires email.env, see §8.2)
+*/30 * * * * cd /home/nick/dev/lucent && . $HOME/.config/lucent/email.env && python3 /home/nick/dev/lucent/scripts/email_monitor.py --once >> memory/logs/email_sync.log 2>&1
+
+# Lucent curator: Auto-prune LTMemory sessions + skill lifecycle (Sunday 7:23 PM)
+23 19 * * 0 cd /home/nick/dev/lucent && python3 scripts/skill_curator.py run --live >> /tmp/curator_cron.log 2>&1
 ```
 
 Save and exit.
@@ -703,6 +700,42 @@ Save and exit.
 - Compresses previous month's activity logs into `ui/logs/archives/activity_YYYY-MM.tar.gz`
 - Mirrors the same behavior triggered at Voice Box startup for monthly compression
 - Logs results to `/tmp/voice-log-rotation.log`
+
+**Auto-Summarize (hourly, :02)**
+- Finds daily notes flagged `UNSUMMARIZED`, reads their `memory/archive/` copy, calls Claude Haiku via the Anthropic API, and writes a real Recent Sessions summary into `LTMemory.md`
+- Requires `ANTHROPIC_API_KEY` to be set (see §6.1) — without it, this job fails silently to `/tmp/auto-summarize.log`
+- Dry-run manually: `python3 scripts/auto_summarize.py --dry-run`
+
+**Service Monitor (every 5 min)**
+- Checks `lucent-voice-box`, `lucent-monitor`, `discord-bot`, and `ollama` via `systemctl is-active` (plus an HTTP health check for voice-box and Ollama)
+- Auto-restarts anything inactive or unhealthy via `sudo -n systemctl restart <unit>` — requires passwordless sudo for `systemctl` (see the sudoers note below)
+- Logs to `ui/logs/service_monitor.log` and the activity log
+
+**Email Sync + Scoring (every 5 min) / Email Monitor (every 30 min)**
+- Both are part of the optional email-triage feature (`src/lucent_email/`) — sync inbox, score messages for priority, alert Nick via the voice box on high-priority mail
+- Require an additional dependency set: `pip3 install -r requirements-email.txt`
+- Require a credential file the deployment scripts do **not** create automatically:
+  ```bash
+  mkdir -p ~/.config/lucent
+  cat > ~/.config/lucent/email.env << 'ENVEOF'
+  export LUCENT_EMAIL_PASSWORD=your_email_app_password_here
+  ENVEOF
+  chmod 600 ~/.config/lucent/email.env
+  ```
+- Without this file, both jobs fail immediately (the `. $HOME/.config/lucent/email.env &&` sourcing step errors before the script even runs) — logged to `/tmp/email-sync.log` / `memory/logs/email_sync.log`, non-fatal to the rest of the system
+- Skip both cron lines entirely if you don't use the email feature
+
+**Weekly Curator (Sunday 7:23 PM)**
+- Runs `scripts/skill_curator.py run --live`: skill lifecycle management (active → stale → archived) plus `LTMemory.md` hygiene (caps Recent Sessions at 10, moves older entries to `LTMemory.archive.md`)
+- Takes a pre-run snapshot before applying changes; archive-only, never deletes
+- Logs to `/tmp/curator_cron.log`
+
+> **Passwordless sudo for service_monitor.py:** The self-healing monitor calls `sudo -n systemctl restart <unit>`, which needs a sudoers rule scoped to `systemctl` (not blanket `NOPASSWD: ALL`):
+> ```bash
+> echo "$(whoami) ALL=(ALL) NOPASSWD: /usr/bin/systemctl" | sudo tee /etc/sudoers.d/lucent-service-monitor
+> sudo chmod 440 /etc/sudoers.d/lucent-service-monitor
+> ```
+> Verify with `sudo -l` — it should list a `NOPASSWD: /usr/bin/systemctl` line. (Any `systemctl` subcommand, not just `restart`, since `status`/`stop`/`disable` used elsewhere in this guide also rely on it.)
 
 ### 8.3 Verify Cron Jobs Are Installed
 
@@ -1127,7 +1160,7 @@ To enable Copy ID: Discord Settings → Advanced → Developer Mode → ON.
 After configuring `.env`:
 
 ```bash
-sudo systemctl restart discord-bot.service lucent-server.service lucent-poller.service lucent-monitor.service
+sudo systemctl restart discord-bot.service lucent-monitor.service lucent-voice-box.service
 ```
 
 ### 14.5 Discord Architecture
@@ -1142,7 +1175,7 @@ discord_bot.py (port 8003)
 ui/server.py (port 8001) ─── stores in discord_pending queue
     │  (polled by)
     ▼
-discord_poller.py ─────────── delivers to terminal / Claude Code
+discord_monitor.py ─────────── processes via Ollama, generates response
     │  (response routed via)
     ▼
 ui/server.py /response ─────── routes back to discord_bot.py
@@ -1299,8 +1332,8 @@ Run through this checklist after deployment to confirm everything is working.
 ### 17.1 Services
 
 ```bash
-# All five Lucent services should show "active (running)"
-sudo systemctl status lucent-voice-box lucent-server lucent-monitor lucent-poller discord-bot --no-pager | grep -E "●|Active:"
+# All three Lucent services should show "active (running)"
+sudo systemctl status lucent-voice-box lucent-monitor discord-bot --no-pager | grep -E "●|Active:"
 
 # Ollama and Docker should also be active
 sudo systemctl status ollama docker --no-pager | grep -E "●|Active:"
@@ -1591,4 +1624,4 @@ If python3 is at a different path, update the `ExecStart` lines in the service f
 
 ---
 
-*Updated: 2026-05-14 (added NX Vox / Piper TTS section) | Lucent Core: github.com/antonizick/lucent | Memory: github.com/antonizick/LucentMemory*
+*Updated: 2026-07-15 (self-audited against live system: removed dead lucent-poller/lucent-server services, synced cron section to all 7 real jobs, added WSL2 systemd prerequisite) | 2026-05-14 (added NX Vox / Piper TTS section) | Lucent Core: github.com/antonizick/lucent | Memory: github.com/antonizick/LucentMemory*

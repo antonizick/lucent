@@ -266,7 +266,7 @@ lucent/
 
 ## Setup
 
-> **Fresh deployment or disaster recovery?** The [Deployment Guide](docs/DEPLOYMENT.md) covers the full process end-to-end: system prerequisites, cloning both repos, Python and Node dependencies, environment variables, installing and enabling all five systemd services, cron jobs, `.bashrc` auto-starts, and step-by-step setup for Claude Code, Ollama, and OpenCode. The quick steps below are for reference only.
+> **Fresh deployment or disaster recovery?** The [Deployment Guide](docs/DEPLOYMENT.md) covers the full process end-to-end: system prerequisites, cloning both repos, Python and Node dependencies, environment variables, installing and enabling all systemd services, cron jobs, `.bashrc` auto-starts, and step-by-step setup for Claude Code, Ollama, and OpenCode. The quick steps below are for reference only.
 
 ### 1. Clone the repo
 

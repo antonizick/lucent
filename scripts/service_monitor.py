@@ -5,7 +5,6 @@ and auto-restarts any that are failed or inactive.
 
 Services monitored:
   lucent-voice-box  — voice box UI (port 8001), HTTP health check
-  lucent-server     — Discord integration server
   lucent-monitor    — Discord instruction monitor
   discord-bot       — Discord bot
   ollama            — Local inference engine (port 11434)
@@ -29,10 +28,6 @@ SERVICES = [
         "unit": "lucent-voice-box",
         "label": "Voice Box",
         "health_url": "http://localhost:8001/services/health",
-    },
-    {
-        "unit": "lucent-server",
-        "label": "Discord Server",
     },
     {
         "unit": "lucent-monitor",

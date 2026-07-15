@@ -14,8 +14,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime, date, timezone
 from pathlib import Path
 from collections import deque
-from fastapi import FastAPI, HTTPException, Response
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Response, Request
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -249,6 +249,43 @@ async def root():
     if html_path.exists():
         return FileResponse(html_path)
     return {"message": "Lucent Voice Box"}
+
+
+# ── LCC Y2KM (PewPew) same-origin proxy ──────────────────────────────────────
+# Forwards /lcc/* → the command-center backend on 127.0.0.1:8104. Keeps 8104
+# private and avoids browser HTTPS mixed-content (page is HTTPS, 8104 is HTTP).
+# Forwards method + query + body; blocking `requests` runs in a threadpool so it
+# doesn't stall the event loop.
+from starlette.concurrency import run_in_threadpool
+
+LCC_BACKEND = "http://127.0.0.1:8104"
+
+
+@app.api_route("/lcc/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def lcc_proxy(path: str, request: Request):
+    body = await request.body()
+    headers = {}
+    ct = request.headers.get("content-type")
+    if ct:
+        headers["content-type"] = ct
+    try:
+        resp = await run_in_threadpool(
+            lambda: requests.request(
+                request.method,
+                f"{LCC_BACKEND}/{path}",
+                params=dict(request.query_params),
+                data=body,
+                headers=headers,
+                timeout=120,
+            )
+        )
+        return Response(
+            content=resp.content,
+            status_code=resp.status_code,
+            media_type=resp.headers.get("content-type", "application/json"),
+        )
+    except Exception as e:
+        return JSONResponse({"error": f"LCC backend unreachable: {e}"}, status_code=502)
 
 @app.post("/speak")
 async def speak(request: SpeakRequest):
@@ -1063,9 +1100,34 @@ async def submit_email_feedback(email_id: str, req: EmailFeedbackRequest):
         return {"ok": False, "msg": str(e)}
 
 
+_EMAIL_SUSPEND_FLAG = Path.home() / "dev/lucent/memory/email/.suspended"
+
+
+@app.get("/email/suspended")
+async def get_email_suspended():
+    """Return current email suspend state."""
+    return {"suspended": _EMAIL_SUSPEND_FLAG.exists()}
+
+
+@app.post("/email/suspend/toggle")
+async def toggle_email_suspended():
+    """Toggle email monitor suspend state. Returns new state."""
+    if _EMAIL_SUSPEND_FLAG.exists():
+        _EMAIL_SUSPEND_FLAG.unlink()
+        suspended = False
+    else:
+        _EMAIL_SUSPEND_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        _EMAIL_SUSPEND_FLAG.touch()
+        suspended = True
+    logger.info(f"Email monitor {'suspended' if suspended else 'resumed'}")
+    return {"suspended": suspended}
+
+
 @app.post("/email/sync")
 async def trigger_email_sync():
     """Manually trigger an out-of-cycle email sync across all backends."""
+    if _EMAIL_SUSPEND_FLAG.exists():
+        return {"status": "suspended", "error": "Email monitor is suspended — resume it first"}
     try:
         import sys
         parent_dir = str(Path(__file__).parent.parent)
@@ -2484,7 +2546,3 @@ async def delete_todo(todo_id: str):
     log_activity(f"🗑️ TODO deleted: {todo_id}", source="todo")
     return {"ok": True}
 
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
