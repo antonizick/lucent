@@ -307,8 +307,8 @@ Add to `~/.bash_aliases` (or `~/.zsh_aliases`):
 
 ```bash
 # Launcher aliases (select platform & model)
-alias lucent='bash /home/nick/dev/lucent/scripts/ai-launcher.sh'
-alias luc='bash /home/nick/dev/lucent/scripts/ai-launcher.sh'
+alias lucent='python3 /home/nick/dev/lucent/scripts/ai-launcher.py'
+alias luc='python3 /home/nick/dev/lucent/scripts/ai-launcher.py'
 
 # Sync alias
 alias brain='/home/nick/dev/lucent/lucent-sync.sh'
