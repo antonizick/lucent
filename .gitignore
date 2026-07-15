@@ -35,3 +35,4 @@ lucent_email.config.json
 src/lucent_email/*.db
 src/lucent_email/*.db-*
 ui/.auth/
+scratch pad/
