@@ -34,3 +34,4 @@ lucent_email.config.json
 .lucent/
 src/lucent_email/*.db
 src/lucent_email/*.db-*
+ui/.auth/
