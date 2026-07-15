@@ -2337,13 +2337,15 @@ async def view_file(path: str = ""):
                 raise HTTPException(status_code=403, detail="Permission denied")
             return {"type": "directory", "path": str(path_obj), "items": items}
         else:
-            # If it's a file, serve its content
+            # If it's a file, serve its content inline so it renders readable
+            # in the new tab instead of prompting a download
             try:
                 content = path_obj.read_text(encoding='utf-8')
                 return FileResponse(
                     path_obj,
                     media_type="text/plain",
-                    filename=path_obj.name
+                    filename=path_obj.name,
+                    content_disposition_type="inline",
                 )
             except UnicodeDecodeError:
                 # Binary file - serve as download

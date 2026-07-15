@@ -140,7 +140,7 @@ def _skill_stats() -> dict:
         skills_list = []
         for skill in all_skills:
             u = usage.get(skill["slug"], {})
-            skill_path = SKILLS_DIR / skill["slug"]
+            skill_path = SKILLS_DIR / skill["slug"] / "SKILL.md"
             skills_list.append({
                 "slug": skill["slug"],
                 "name": skill.get("name", skill["slug"]),
