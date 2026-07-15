@@ -11,9 +11,14 @@ sys.path.insert(0, str(parent))
 
 from src.lucent_email.config import load_config
 from src.lucent_email.email_service import EmailService
+from src.lucent_email.monitor import EmailMonitor
 
 def main():
     try:
+        # Check if email monitor is suspended
+        if EmailMonitor.is_suspended():
+            sys.exit(0)
+
         # Load config and service
         config = load_config()
         service = EmailService(config)

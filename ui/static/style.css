@@ -532,6 +532,16 @@ body {
     box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
 }
 
+.email-suspended-active {
+    border-color: #f5a623 !important;
+    color: #f5a623 !important;
+}
+
+.email-suspended-active:hover {
+    background-color: rgba(245, 166, 35, 0.12) !important;
+    box-shadow: 0 0 8px rgba(245, 166, 35, 0.3) !important;
+}
+
 .refresh-timer {
     font-size: 11px;
     color: var(--text-secondary);
@@ -1390,6 +1400,34 @@ body.facetime-mode .current-text {
     text-decoration: underline;
 }
 
+.mode-buttons {
+    display: inline-flex;
+    gap: 6px;
+}
+
+.mode-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--text-secondary);
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.85em;
+    transition: all 0.2s ease;
+}
+
+.mode-btn:hover {
+    border-color: var(--neon-cyan);
+    color: var(--neon-cyan);
+}
+
+.mode-btn.mode-active {
+    border-color: var(--neon-cyan);
+    color: var(--neon-cyan);
+    background: rgba(0, 229, 255, 0.1);
+    font-weight: bold;
+}
+
 .skills-list {
     display: flex;
     flex-direction: column;
@@ -1741,6 +1779,13 @@ body.facetime-mode .current-text {
     flex-shrink: 0;
 }
 
+.todo-status-selector {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
 .todo-newpri-btn, .todo-editpri-btn {
     padding: 2px 7px;
     background: rgba(0,0,0,0.3);
@@ -1759,6 +1804,22 @@ body.facetime-mode .current-text {
 .todo-newpri-btn.todo-pri-h.active, .todo-editpri-btn.todo-pri-h.active { background: rgba(239,83,80,0.15) !important; border-color: rgba(239,83,80,0.5) !important; }
 .todo-newpri-btn.todo-pri-m.active, .todo-editpri-btn.todo-pri-m.active { background: rgba(255,167,38,0.15) !important; border-color: rgba(255,167,38,0.5) !important; }
 .todo-newpri-btn.todo-pri-l.active, .todo-editpri-btn.todo-pri-l.active { background: rgba(102,187,106,0.15) !important; border-color: rgba(102,187,106,0.5) !important; }
+
+.todo-editstatus-btn {
+    padding: 2px 7px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 3px;
+    color: var(--text-secondary);
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    cursor: pointer;
+}
+.todo-editstatus-btn.active {
+    background: rgba(0,229,255,0.15);
+    border-color: rgba(0,229,255,0.4);
+    color: var(--neon-cyan);
+}
 
 .todo-input-tags { width: auto; flex: 1; min-width: 120px; }
 

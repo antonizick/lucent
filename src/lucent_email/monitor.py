@@ -104,8 +104,17 @@ class EmailMonitor:
                     break
                 time.sleep(10)
 
+    @staticmethod
+    def is_suspended() -> bool:
+        """Return True if the email monitor is suspended via flag file."""
+        flag = Path.home() / "dev/lucent/memory/email/.suspended"
+        return flag.exists()
+
     def _sync_and_alert(self) -> None:
         """Sync email and alert on high-priority emails."""
+        if self.is_suspended():
+            logger.info("Email monitor suspended — skipping sync cycle")
+            return
         try:
             # Sync all backends
             logger.info("Starting email sync...")

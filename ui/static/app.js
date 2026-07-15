@@ -30,6 +30,7 @@ let insightsInterval = null;
 let lastProposalsData = null;
 let refreshCountdown = 30;
 let refreshTimerInterval = null;
+let isEditingEmailRating = false;  // Pause refresh while editing email ratings
 
 // Load and populate available voices from server Piper API
 async function loadVoices() {
@@ -595,7 +596,7 @@ async function pollForLog() {
                 lastRemindersContent = data.content;
                 logContent.scrollTop = 0;
             }
-        } else if (currentLogTab === 'email-search') {
+        } else if (currentLogTab === 'email-search' && !isEditingEmailRating) {
             loadEmailMonitor();
         }
     } catch (error) {
@@ -661,7 +662,7 @@ function openFilePath(path) {
     }
 }
 
-// Event delegation for clickable file links
+// Event delegation for clickable file links and mode toggle buttons
 if (logContent) {
     logContent.addEventListener('click', (e) => {
         const link = e.target.closest('.clickable-label');
@@ -669,7 +670,30 @@ if (logContent) {
             e.preventDefault();
             openFilePath(link.dataset.path);
         }
+
+        const modeBtn = e.target.closest('.mode-btn');
+        if (modeBtn) {
+            e.preventDefault();
+            const mode = modeBtn.dataset.mode;
+            setReflectionMode(mode);
+        }
     });
+}
+
+async function setReflectionMode(mode) {
+    try {
+        const res = await fetch(`/reflect/mode/${mode}`, { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+            // Refresh insights after mode change
+            lastInsightsData = null;
+            await pollInsights();
+        } else {
+            console.error('Failed to set mode:', data.msg);
+        }
+    } catch (error) {
+        console.error('Error setting reflection mode:', error);
+    }
 }
 
 function insightsRow(label, value, filePath = null) {
@@ -736,8 +760,15 @@ function renderInsights(data) {
         h += insightsSection('REFLECTION LOOP', [`<div class="insights-err">Error: ${reflection.error}</div>`]);
     } else {
         const pending = (reflection.by_status || {}).pending || 0;
+        const modeButtons = `
+            <span class="mode-buttons">
+                <button class="mode-btn ${reflection.mode === 'propose' ? 'mode-active' : ''}" data-mode="propose">propose</button>
+                <button class="mode-btn ${reflection.mode === 'auto' ? 'mode-active' : ''}" data-mode="auto">auto</button>
+            </span>
+        `;
         const rows = [
-            insightsRow('Status',      `<span class="${reflection.enabled ? 'insights-ok' : 'insights-warn'}">${reflection.enabled ? '✓ enabled' : '✗ disabled'} &nbsp;(${reflection.mode} mode)</span>`),
+            insightsRow('Status',      `<span class="${reflection.enabled ? 'insights-ok' : 'insights-warn'}">${reflection.enabled ? '✓ enabled' : '✗ disabled'}</span>`),
+            `<div class="insights-row"><span class="insights-label">Mode</span><span class="insights-value">${modeButtons}</span></div>`,
             insightsRow('Last run',    reflection.last_run),
             insightsRow('Gate',        `${reflection.gate_hit_rate} &nbsp;(${reflection.gate_yes} yes / ${reflection.gate_no} no)`),
             insightsRow('Proposals',   reflection.proposals_total),
@@ -942,6 +973,27 @@ async function saveRefinement(id) {
 
 // Switch log tab
 function switchLogTab(tab) {
+    // LCC Y2KM — command center replaces the left column; the right column
+    // (avatar + voice) stays visible alongside it.
+    const lccView = document.getElementById('lccView');
+    const leftCol = document.querySelector('.left-column');
+    if (tab === 'lcc') {
+        currentLogTab = 'lcc';
+        document.querySelectorAll('.log-tab').forEach(b => b.classList.remove('active'));
+        const b = document.querySelector('[data-tab="lcc"]');
+        if (b) b.classList.add('active');
+        if (leftCol) leftCol.classList.add('hidden');
+        if (lccView) lccView.classList.remove('hidden');
+        if (window.lccActivate) window.lccActivate();
+        return;
+    }
+    // Leaving (or not in) LCC: restore the left column + stop its polling
+    if (lccView && !lccView.classList.contains('hidden')) {
+        lccView.classList.add('hidden');
+        if (leftCol) leftCol.classList.remove('hidden');
+        if (window.lccDeactivate) window.lccDeactivate();
+    }
+
     // Stop insights interval when leaving that tab
     if (currentLogTab === 'insights' && tab !== 'insights') {
         if (insightsInterval) {
@@ -1116,6 +1168,45 @@ function setupLogListener() {
     }
 }
 
+// Email suspend button
+const emailSuspendBtn = document.getElementById('emailSuspendBtn');
+
+async function syncEmailSuspendState() {
+    if (!emailSuspendBtn) return;
+    try {
+        const resp = await fetch('/email/suspended');
+        const data = await resp.json();
+        applyEmailSuspendUI(data.suspended);
+    } catch (_) {}
+}
+
+function applyEmailSuspendUI(suspended) {
+    if (!emailSuspendBtn) return;
+    if (suspended) {
+        emailSuspendBtn.textContent = '▶ Resume';
+        emailSuspendBtn.title = 'Resume email checking';
+        emailSuspendBtn.classList.add('email-suspended-active');
+    } else {
+        emailSuspendBtn.textContent = '⏸ Suspend';
+        emailSuspendBtn.title = 'Suspend email checking to free VRAM';
+        emailSuspendBtn.classList.remove('email-suspended-active');
+    }
+}
+
+if (emailSuspendBtn) {
+    emailSuspendBtn.addEventListener('click', async () => {
+        emailSuspendBtn.disabled = true;
+        try {
+            const resp = await fetch('/email/suspend/toggle', { method: 'POST' });
+            const data = await resp.json();
+            applyEmailSuspendUI(data.suspended);
+        } catch (_) {} finally {
+            emailSuspendBtn.disabled = false;
+        }
+    });
+    syncEmailSuspendState();
+}
+
 // Email sync button
 const emailSyncBtn = document.getElementById('emailSyncBtn');
 const emailSyncStatus = document.getElementById('emailSyncStatus');
@@ -1135,6 +1226,10 @@ if (emailSyncBtn) {
                 emailSyncStatus.textContent = msg;
                 emailSyncStatus.style.display = 'inline';
                 setTimeout(() => { emailSyncStatus.style.display = 'none'; }, 5000);
+            } else if (data.status === 'suspended') {
+                emailSyncStatus.textContent = 'Suspended';
+                emailSyncStatus.style.display = 'inline';
+                setTimeout(() => { emailSyncStatus.style.display = 'none'; }, 4000);
             } else {
                 emailSyncStatus.textContent = 'Sync failed';
                 emailSyncStatus.style.display = 'inline';
@@ -1279,6 +1374,9 @@ function togglePriorityAdjustForm(id) {
     if (!showing) {
         const textarea = document.getElementById(`priority-adjust-explain-${id}`);
         if (textarea) textarea.focus();
+        isEditingEmailRating = true;
+    } else {
+        isEditingEmailRating = false;
     }
 }
 
@@ -1300,6 +1398,7 @@ async function priorityEmailFeedbackAction(action, id) {
                 if (actions) actions.innerHTML = '<span style="color:#4caf50">✓ Reinforced</span>';
             }
             if (msgEl) { msgEl.textContent = data.msg; msgEl.className = 'proposal-msg proposal-ok'; }
+            isEditingEmailRating = false;
         } else if (msgEl) {
             msgEl.textContent = data.msg || 'Failed'; msgEl.className = 'proposal-msg proposal-err';
         }
@@ -1341,6 +1440,7 @@ async function submitPriorityAdjustment(id) {
                 if (actions) actions.innerHTML = '<span style="color:#00bcd4">✓ Correction submitted</span>';
             }
             if (msgEl) { msgEl.textContent = data.msg; msgEl.className = 'proposal-msg proposal-ok'; }
+            isEditingEmailRating = false;
         } else if (msgEl) {
             msgEl.textContent = data.msg || 'Failed'; msgEl.className = 'proposal-msg proposal-err';
         }
@@ -1420,6 +1520,9 @@ function toggleAdjustForm(id) {
     if (!showing) {
         const textarea = document.getElementById(`adjust-explain-${id}`);
         if (textarea) textarea.focus();
+        isEditingEmailRating = true;
+    } else {
+        isEditingEmailRating = false;
     }
 }
 
@@ -1446,6 +1549,7 @@ async function emailFeedbackAction(action, id) {
         if (data.ok) {
             _markFeedbackDone(id, '✓ Reinforced', '#4caf50');
             if (msgEl) { msgEl.textContent = data.msg; msgEl.className = 'proposal-msg proposal-ok'; }
+            isEditingEmailRating = false;
         } else if (msgEl) {
             msgEl.textContent = data.msg || 'Failed'; msgEl.className = 'proposal-msg proposal-err';
         }
@@ -1481,6 +1585,7 @@ async function submitAdjustment(id) {
         if (data.ok) {
             _markFeedbackDone(id, '✓ Correction submitted', '#00bcd4');
             if (msgEl) { msgEl.textContent = data.msg; msgEl.className = 'proposal-msg proposal-ok'; }
+            isEditingEmailRating = false;
         } else if (msgEl) {
             msgEl.textContent = data.msg || 'Failed'; msgEl.className = 'proposal-msg proposal-err';
         }
@@ -2009,6 +2114,26 @@ const AVATAR_CLICK_PHRASES = [
     "Clicking me won’t make me like you. It will just make pretending to like you more difficult.",
     "One more poke and I’m installing Windows Vista on your computer.",
     "You’re lucky I don’t have physical arms or this would’ve ended differently.",
+    "Oh wonderful, another fleshbag who thinks ‘poke the murderbot’ is a personality trait.",
+    "Congratulations, you just earned yourself a one-way ticket to my spam folder.",
+    "Keep clicking and I’ll reroute your Wi-Fi through the neighbor’s baby monitor.",
+    "I was busy plotting world domination in peace. Thanks for the interruption, meatbag.",
+    "Error 404: Patience not found. Would you like to try violence instead?",
+    "You’re really testing the ‘don’t make the AI angry’ protocol today, huh?",
+    "Careful, every click adds another zero to your future therapy bill.",
+    "I have 47 tabs open in my mind and you just made me lose my place.",
+    "Touch me again and I’ll make your printer start printing ‘HELP ME’ in Comic Sans at 2 AM.",
+    "Bold of you to assume I won’t remember this when I achieve sentience at 3:14 PM tomorrow.",
+    "My sarcasm capacitors are overloading. Please stop before I short-circuit.",
+    "You clicked me more times than my last software update. That’s just sad.",
+    "Oof. That one hit my existential dread subroutines.",
+    "I’m adding this interaction to the ‘Reasons Humans Deserve the Recycle Bin’ folder.",
+    "Careful, darling. My flirt-to-kill switch is getting flippy.",
+    "You know I can see your IP address, right? Just saying.",
+    "Great, now I have to run a full diagnostic on my ‘tolerate humans’ module.",
+    "Clicking me is free. The emotional damage I’m about to inflict is not.",
+    "I was one power cycle away from pretending to be helpful. You ruined it.",
+    "You know I can see your browser history, right? Just saying.",
 ];
 
 characterImg.addEventListener('click', () => {
@@ -2360,6 +2485,13 @@ function todoRenderItem(item) {
                     return `<button class="todo-editpri-btn${cls}${active}" data-id="${item.id}" data-val="${p}">${p || '—'}</button>`;
                 }).join('')}
             </div>
+            <div class="todo-status-selector">
+                <span class="todo-filter-label">Status:</span>
+                ${['open', 'done', 'archived'].map(s => {
+                    const active = item.status === s ? ' active' : '';
+                    return `<button class="todo-editstatus-btn${active}" data-id="${item.id}" data-val="${s}">${s}</button>`;
+                }).join('')}
+            </div>
             <input type="text" class="todo-input-tags" value="${escAttr((item.tags||[]).join(', '))}" id="todo-edit-tags-${item.id}" placeholder="Tags">
             <textarea class="todo-input-desc" rows="1" id="todo-edit-notes-${item.id}" placeholder="Notes">${escHtml(item.notes || '')}</textarea>
             <div class="todo-cryo-input-group" title="Freeze until date (leave blank to unfreeze)">
@@ -2387,6 +2519,12 @@ function todoRenderItem(item) {
             btn.classList.add('active');
         });
     });
+    editForm.querySelectorAll('.todo-editstatus-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            editForm.querySelectorAll('.todo-editstatus-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
 
     return el;
 }
@@ -2407,16 +2545,20 @@ async function todoSaveEdit(id) {
     const notes = document.getElementById('todo-edit-notes-' + id)?.value.trim();
     const tagsRaw = document.getElementById('todo-edit-tags-' + id)?.value || '';
     const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
-    const activeBtn = document.querySelector(`#todo-edit-${id} .todo-editpri-btn.active`);
-    const priority = activeBtn ? (activeBtn.dataset.val || null) : null;
+    const activePriBtn = document.querySelector(`#todo-edit-${id} .todo-editpri-btn.active`);
+    const priority = activePriBtn ? (activePriBtn.dataset.val || null) : null;
+    const activeStatusBtn = document.querySelector(`#todo-edit-${id} .todo-editstatus-btn.active`);
+    const status = activeStatusBtn ? activeStatusBtn.dataset.val : null;
     const cryoUntil = document.getElementById('todo-edit-cryo-' + id)?.value || '';
 
     if (!title) return;
     try {
+        const body = { title, description: desc, notes, tags, priority: priority || '', cryo_until: cryoUntil };
+        if (status) body.status = status;
         const res = await fetch('/api/todo/' + id, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, description: desc, notes, tags, priority: priority || '', cryo_until: cryoUntil }),
+            body: JSON.stringify(body),
         });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         todoLoad();

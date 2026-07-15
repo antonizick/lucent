@@ -1,0 +1,102 @@
+graph TB
+    subgraph SESSION["🔄 SESSION LIFECYCLE"]
+        STARTUP["<b>SessionStart Hook</b><br/>• Read identity bundle<br/>• Load LTMemory<br/>• Check voice box health<br/>• Surface unsummarized sessions"]
+
+        WORK["<b>User Request → Work Loop</b><br/>• Read reference files if needed<br/>• Execute task<br/>• Update progress"]
+
+        RESPONSE["<b>Per-Response (Mandatory 3-Step)</b><br/>1️⃣ Voice: curl to /speak<br/>2️⃣ Log: append to daily note<br/>3️⃣ Text: respond in Claude Code"]
+
+        STARTUP -->|Session begins| WORK
+        WORK -->|Each response| RESPONSE
+    end
+
+    subgraph HOOKS["⚙️ HOOK SYSTEM (Auto-Triggered)"]
+        SUBMIT_HOOK["<b>UserPromptSubmit Hook</b><br/>Before each response:<br/>• Emit date + RULES<br/>• Run NERO semantic recall<br/>• Inject context TODOs<br/>• Surface pending proposals"]
+
+        STOP_HOOK["<b>Stop Hook (Background)</b><br/>After each response:<br/>• Spawn Haiku gate<br/>• Propose memory/skill updates<br/>• Write to nero_inbox.md"]
+
+        COMPACT_HOOK["<b>PreCompact Hook</b><br/>Before compression:<br/>• Inject priorities + NERO state<br/>• Include daily note tail<br/>• Preserve durable knowledge"]
+
+        RESPONSE -.->|fires| SUBMIT_HOOK
+        SUBMIT_HOOK -->|enriches context| WORK
+        RESPONSE -->|async| STOP_HOOK
+    end
+
+    subgraph MEMORY["📚 THREE-TIER MEMORY SYSTEM"]
+        DAILY["<b>Tier 1: Daily Notes</b><br/>memory/YYYY-MM-DD.md<br/>• Live working log<br/>• Append during work<br/>• Auto-archived at day-end"]
+
+        ARCHIVE["<b>Tier 2: Archives</b><br/>memory/archive/YYYY-MM-DD.md<br/>• Permanent record (never delete)<br/>• Hourly backup via backup_memory.py<br/>• Recall-indexed for search"]
+
+        LTMEM["<b>Tier 3: LTMemory</b><br/>memory/LTMemory.md<br/>• Curated summaries<br/>• Recent Sessions (reverse chrono)<br/>• Read at every startup"]
+
+        DAILY -->|day-end| ARCHIVE
+        ARCHIVE -->|weekly curator| LTMEM
+        LTMEM -->|startup| STARTUP
+    end
+
+    subgraph NERO_SYSTEM["🧠 NERO: Continuous Learning"]
+        REFLECT["<b>Reflection Proposals</b><br/>• Haiku gate scores responses<br/>• Sonnet writer drafts updates<br/>• Proposed to nero_inbox.md<br/>• Mode: propose or auto"]
+
+        REVIEW["<b>Review Cycle</b><br/>python3 scripts/reflect.py<br/>• review (read proposals)<br/>• apply (implement)<br/>• reject (discard)"]
+
+        CURATOR["<b>Curator Agent (Weekly)</b><br/>python3 scripts/skill_curator.py<br/>• Review skill library health<br/>• Dry-run → approval → live<br/>• Snapshot taken on apply"]
+
+        SKILLS["<b>Skill Library</b><br/>memory/skills/<br/>• Procedural knowledge<br/>• Protected core skills<br/>• Evolve via curator"]
+
+        STOP_HOOK -->|proposes| REFLECT
+        REFLECT -->|queues for review| REVIEW
+        REVIEW -->|approved| CURATOR
+        CURATOR -->|updates| SKILLS
+        SKILLS -->|available next session| LTMEM
+    end
+
+    subgraph PATTERNS["🎯 RESPONSE PATTERNS & RULES"]
+        YAGNI["<b>Code Philosophy</b><br/>• YAGNI ladder (stdlib first)<br/>• No unrequested abstractions<br/>• Shortest working diff<br/>• Terse output enabled"]
+
+        REFERENCE["<b>Reference Lookup</b><br/>• Read LTMemory.md first<br/>• Then scan daily notes<br/>• Answer from source files<br/>• Never guess from context"]
+
+        VOICE["<b>Voice Protocol</b><br/>• curl to localhost:8001/speak<br/>• Always send before text<br/>• Framework validates"]
+
+        YAGNI -.->|apply to| WORK
+        REFERENCE -.->|when asked| WORK
+        VOICE -.->|required for| RESPONSE
+    end
+
+    subgraph INTEGRATION["🔌 EXTERNAL SYSTEMS"]
+        VOICE_BOX["Voice Box<br/>localhost:8001/speak"]
+        TODO_API["To-Do API<br/>ui/server.py<br/>GET/POST /api/todo"]
+        MEMORY_INDEX["Memory Index<br/>scripts/memory_index.py<br/>Semantic search via Ollama"]
+        INSIGHTS["Insights Dashboard<br/>scripts/insights.py<br/>Corpus, skills, health"]
+
+        RESPONSE -->|audio| VOICE_BOX
+        WORK -->|manage tasks| TODO_API
+        ARCHIVE -->|indexed by| MEMORY_INDEX
+        MEMORY_INDEX -->|feeds recall| SUBMIT_HOOK
+        LTMEM -->|analyzed by| INSIGHTS
+    end
+
+    subgraph QUALITY["✅ VALIDATION & QUALITY"]
+        STARTUP_CHECK["Startup Checks<br/>• LTMemory completeness<br/>• Voice box health<br/>• Unsummarized session detection"]
+
+        COMPRESSION["Compression Gate<br/>• Only after daily note archived<br/>• Injects durable knowledge<br/>• Prevents silent drops"]
+
+        IMMUTABLE["Archive Policy<br/>• Never delete archives<br/>• Only add new files<br/>• Read for curation, not edit"]
+
+        STARTUP_CHECK -->|blocks if stubs| STARTUP
+        COMPACT_HOOK -->|validates before| COMPRESSION
+        DAILY -->|enforces| IMMUTABLE
+    end
+
+    RESPONSE -->|closes| SESSION
+    SESSION -->|end of day| ARCHIVE
+    LTMEM -.->|context loaded| SESSION
+    MEMORY -.->|tier progression| MEMORY
+    NERO_SYSTEM -.->|continuous| SESSION
+
+    style SESSION fill:#e1f5ff
+    style HOOKS fill:#fff3e0
+    style MEMORY fill:#f3e5f5
+    style NERO_SYSTEM fill:#e8f5e9
+    style PATTERNS fill:#fce4ec
+    style INTEGRATION fill:#f1f8e9
+    style QUALITY fill:#ede7f6

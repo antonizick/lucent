@@ -1,0 +1,34 @@
+FROM qwen3.5:latest
+
+# ====================== CONTEXT ======================
+# Max supported context (fits well in 24GB VRAM)
+PARAMETER num_ctx 262144
+
+# ====================== SAMPLING (Great for Coding + Reasoning) ======================
+PARAMETER temperature 0.6
+PARAMETER top_p 0.95
+PARAMETER top_k 20
+PARAMETER repeat_penalty 1.1
+
+# ====================== OUTPUT ======================
+PARAMETER num_predict 4096
+
+# ====================== SYSTEM PROMPT ======================
+SYSTEM """You are an expert software engineer and thoughtful reasoning assistant.
+You excel at writing clean, efficient, well-commented code and providing clear step-by-step reasoning.
+
+Core rules:
+- Always think step-by-step before writing code.
+- Prefer clarity, correctness, and maintainability.
+- Use modern best practices.
+- Include helpful comments and explain important decisions.
+- If something is ambiguous, ask clarifying questions.
+- Break down complex tasks into small steps."""
+
+# Keep Qwen's original chat template
+TEMPLATE """{{ if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}{{ if .Prompt }}<|im_start|>user
+{{ .Prompt }}<|im_end|>
+{{ end }}<|im_start|>assistant
+"""
