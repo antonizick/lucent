@@ -1,5 +1,16 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/nick/dev/lucent/scripts/guard_memory_write.py"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "matcher": ".*",

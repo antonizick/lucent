@@ -140,6 +140,17 @@ def archive_accumulating_daily_note() -> None:
     This runs every backup cycle (hourly) to ensure the archive captures
     the growing daily note throughout the day. When compression happens,
     the archive will already be complete, preventing data loss.
+
+    Root cause of the 2026-07-17 wipe: this used to shutil.copy2()
+    unconditionally, so a destructive overwrite of the daily note (e.g. a
+    weak local model replacing 201 lines with 5 via the Write tool) got
+    propagated into the "permanent" archive within one hourly cycle,
+    destroying the fallback the three-tier design depends on. Archive is
+    now monotonic: it only ever grows. A daily note that has *fewer* lines
+    than the existing archive is treated as corruption, not "yesterday's
+    compressed note" (compression writes a distinct placeholder, see
+    compress_yesterday_if_needed) — the daily note is self-healed FROM the
+    archive instead of the archive being dragged down to match it.
     """
     import shutil
     today = date.today().strftime("%Y-%m-%d")
@@ -150,28 +161,29 @@ def archive_accumulating_daily_note() -> None:
         return  # No daily note yet
 
     try:
-        # Create archive directory if needed
         archive_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Copy current daily note to archive (overwrites old version)
-        shutil.copy2(daily_note, archive_path)
+        if not archive_path.exists():
+            shutil.copy2(daily_note, archive_path)
+            return
 
-        # Log only if this is a new/growing note (not already archived)
-        # Check if archive is being updated (note lines > archive lines)
-        try:
-            with open(daily_note, 'r') as f:
-                daily_lines = sum(1 for _ in f)
-            with open(archive_path, 'r') as f:
-                archive_lines = sum(1 for _ in f)
+        with open(daily_note, 'r') as f:
+            daily_lines = sum(1 for _ in f)
+        with open(archive_path, 'r') as f:
+            archive_lines = sum(1 for _ in f)
 
-            # If archive just became complete or grew, log it
-            if daily_lines == archive_lines:
-                # Archive now matches daily note—it's complete
-                # Silently maintain the invariant: archive_lines >= daily_lines
-                pass
-
-        except Exception:
-            pass  # Don't fail backup on logging errors
+        if daily_lines < archive_lines:
+            # Corruption signal: daily note shrank below the archived record.
+            # Self-heal the daily note from the archive; never shrink the archive.
+            shutil.copy2(archive_path, daily_note)
+            alert = (
+                f"[Archive] ALERT: {today}.md shrank ({daily_lines} < {archive_lines} "
+                f"archived lines) — restored daily note from archive, archive left untouched."
+            )
+            log_to_activity(alert)
+            log_to_daily_note(alert)
+        else:
+            shutil.copy2(daily_note, archive_path)
 
     except Exception as e:
         # Log error but don't fail the backup
@@ -279,6 +291,56 @@ def scan_staged_for_secrets(cwd: str) -> list:
     return findings
 
 
+# ---------------------------------------------------------------------------
+# Shrink guard — catches a daily note/archive file getting overwritten
+# instead of appended (e.g. a model doing a full-file Write with truncated
+# content). Root cause of the 2026-07-17 incident: qwen3.5-coder replaced
+# memory/2026-07-17.md's 201 lines with 5 via the Write tool, and nothing
+# stopped that from being committed+pushed as the new "backup". Same
+# fail-closed-on-detection / fail-open-on-scanner-error shape as the
+# secret-scan guard above. The known legitimate shrink case (auto-compress
+# writing a short placeholder into *yesterday's* note) is allowlisted by
+# its distinct "UNSUMMARIZED" marker text.
+_DAILY_NOTE_RE = re.compile(r'^(?:archive/)?(\d{4}-\d{2}-\d{2})\.md$')
+_SHRINK_MIN_DELETED_LINES = 20   # ignore small edits/trims
+_SHRINK_RATIO = 0.5              # flag if new size < 50% of old size
+
+
+def scan_staged_for_shrinkage(cwd: str) -> list:
+    """Return descriptions of daily-note/archive files that got drastically shorter."""
+    code, numstat, _ = run_cmd("git diff --cached --numstat", cwd=cwd)
+    if code != 0:
+        return []
+    findings = []
+    for line in numstat.splitlines():
+        parts = line.split('\t')
+        if len(parts) != 3:
+            continue
+        added, deleted, path = parts
+        m = _DAILY_NOTE_RE.match(path)
+        if not m:
+            continue
+        if added == '-' or deleted == '-':
+            continue  # binary, shouldn't happen for .md but be safe
+        added, deleted = int(added), int(deleted)
+        if deleted < _SHRINK_MIN_DELETED_LINES:
+            continue
+        old_lines = deleted + added  # approximation: lines touched
+        code2, old_content, _ = run_cmd(f"git show HEAD:{path}", cwd=cwd, check=False)
+        old_total = old_content.count('\n') + 1 if code2 == 0 and old_content else old_lines
+        new_total = old_total - deleted + added
+        if old_total <= 0 or new_total >= old_total * _SHRINK_RATIO:
+            continue
+        try:
+            new_content = (Path(cwd) / path).read_text()
+        except Exception:
+            new_content = ""
+        if "UNSUMMARIZED" in new_content:
+            continue  # known legitimate case: auto-compress placeholder
+        findings.append(f"{path}: {old_total} -> {new_total} lines ({deleted} deleted, {added} added)")
+    return findings
+
+
 def backup_memory() -> int:
     """
     Backup memory folder to Git.
@@ -328,6 +390,23 @@ def backup_memory() -> int:
             print("   Remove the credential from the offending file, then the next backup resumes.")
             print("   Emergency override: LUCENT_BACKUP_ALLOW_SECRETS=1 (use only if it's a false positive).")
             log_to_activity(f"Backup: ABORTED — {len(findings)} possible secret(s) detected; commit/push skipped")
+            return 1
+
+    # Shrink guard — never commit/push a daily note or archive file that got
+    # drastically shorter (likely overwritten instead of appended).
+    if os.environ.get("LUCENT_BACKUP_ALLOW_SHRINK") != "1":
+        try:
+            shrink_findings = scan_staged_for_shrinkage(str(MEMORY_DIR))
+        except Exception as e:
+            shrink_findings = []  # fail open — a broken scanner must not block backups
+            log_to_activity(f"Backup: shrink-scan errored, proceeding (fail-open): {e}")
+        if shrink_findings:
+            run_cmd("git reset", cwd=str(MEMORY_DIR))  # unstage; leave files in place
+            print(f"✗ ABORTED: {len(shrink_findings)} daily-note/archive file(s) shrank drastically — not committing/pushing.")
+            for f in shrink_findings[:5]:
+                print(f"   ⚠ {f}")
+            print("   If this was intentional (e.g. manual cleanup), re-run with LUCENT_BACKUP_ALLOW_SHRINK=1.")
+            log_to_activity(f"Backup: ABORTED — {len(shrink_findings)} file(s) shrank drastically; commit/push skipped")
             return 1
 
     # Commit
