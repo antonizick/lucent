@@ -2311,6 +2311,32 @@ def _get_wsl_distro() -> str:
     except Exception:
         return 'Ubuntu'
 
+# S3 fix (2026-07-20): /view-file and /open-file previously resolved ANY path,
+# giving an unrestricted arbitrary-file-read (e.g. ui/.auth/credentials.json,
+# ~/.ssh/id_rsa, /etc/passwd). Restrict to the directories the UI legitimately
+# browses. resolve() collapses ".." so traversal out of a root is blocked.
+_LUCENT_ROOT = Path(__file__).resolve().parent.parent
+_ALLOWED_FILE_ROOTS = [
+    (_LUCENT_ROOT / d).resolve()
+    for d in ("memory", "idea", "logs", "docs", "presentation", "scratchpad")
+]
+
+
+def _is_allowed_file_path(target: Path) -> bool:
+    """True iff target resolves to a location under an allowed root."""
+    try:
+        rp = target.resolve()
+    except Exception:
+        return False
+    for root in _ALLOWED_FILE_ROOTS:
+        try:
+            rp.relative_to(root)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
 @app.get("/view-file")
 async def view_file(path: str = ""):
     """Serve a file for viewing or download."""
@@ -2319,6 +2345,8 @@ async def view_file(path: str = ""):
 
     try:
         path_obj = Path(path).resolve()
+        if not _is_allowed_file_path(path_obj):
+            raise HTTPException(status_code=403, detail="Path not permitted")
         if not path_obj.exists():
             raise HTTPException(status_code=404, detail=f"Path does not exist")
 
@@ -2369,6 +2397,8 @@ async def open_file(request: dict):
 
     try:
         path_obj = Path(path).resolve()
+        if not _is_allowed_file_path(path_obj):
+            raise HTTPException(status_code=403, detail="Path not permitted")
         if not path_obj.exists():
             raise HTTPException(status_code=404, detail=f"Path does not exist: {path}")
 

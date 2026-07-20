@@ -20,30 +20,33 @@ LUCENT_ROOT = Path(__file__).parent.parent
 MEMORY_DIR = LUCENT_ROOT / "memory"
 
 def get_summarized_sessions():
-    """Extract session dates from LTMemory.md Recent Sessions."""
-    ltmemory_path = MEMORY_DIR / "LTMemory.md"
+    """Extract session dates already summarized — from LTMemory.md Recent
+    Sessions AND LTMemory.archive.md (skill_curator.py's weekly cap_ltmemory()
+    moves old session blocks there; a date summarized then pruned is still
+    summarized, just not in the live file anymore)."""
     summarized = set()
 
-    if not ltmemory_path.exists():
-        return summarized
+    ltmemory_path = MEMORY_DIR / "LTMemory.md"
+    if ltmemory_path.exists():
+        try:
+            content = ltmemory_path.read_text()
+            if "## Recent Sessions" in content:
+                parts = content.split("## Recent Sessions")
+                if len(parts) > 1:
+                    recent_section = parts[1]
+                    matches = re.findall(r'### Session (\d{4}-\d{2}-\d{2})', recent_section)
+                    summarized.update(matches)
+        except Exception:
+            pass
 
-    try:
-        with open(ltmemory_path, 'r') as f:
-            content = f.read()
-
-        # Extract all "### Session YYYY-MM-DD" entries in Recent Sessions section
-        # Look for section between "## Recent Sessions" and end (no subsection limiting needed)
-        if "## Recent Sessions" in content:
-            parts = content.split("## Recent Sessions")
-            if len(parts) > 1:
-                recent_section = parts[1]
-                # Find all session entries (### Session YYYY-MM-DD) at subsection level
-                # This captures all subsections in Recent Sessions
-                matches = re.findall(r'### Session (\d{4}-\d{2}-\d{2})', recent_section)
-                summarized.update(matches)
-
-    except Exception:
-        pass
+    archive_path = MEMORY_DIR / "LTMemory.archive.md"
+    if archive_path.exists():
+        try:
+            content = archive_path.read_text()
+            matches = re.findall(r'### Session (\d{4}-\d{2}-\d{2})', content)
+            summarized.update(matches)
+        except Exception:
+            pass
 
     return summarized
 

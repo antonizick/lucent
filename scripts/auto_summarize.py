@@ -19,6 +19,7 @@ LUCENT_ROOT = Path(__file__).parent.parent
 MEMORY_DIR = LUCENT_ROOT / "memory"
 ARCHIVE_DIR = MEMORY_DIR / "archive"
 LTMEMORY_PATH = MEMORY_DIR / "LTMemory.md"
+LTMEMORY_ARCHIVE_PATH = MEMORY_DIR / "LTMemory.archive.md"
 UNSUMMARIZED_MARKER = MEMORY_DIR / ".unsummarized_sessions.json"
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -69,10 +70,16 @@ def find_unsummarized_dates() -> list[str]:
 
 
 def ltmemory_has_session(date_str: str) -> bool:
-    """Return True if LTMemory already has a ### Session entry for this date."""
-    if not LTMEMORY_PATH.exists():
-        return False
-    return f"### Session {date_str}" in LTMEMORY_PATH.read_text()
+    """Return True if this date is already summarized — in LTMemory.md OR
+    LTMemory.archive.md (skill_curator.py's weekly prune moves old session
+    blocks to the archive; without checking both, a pruned-but-summarized
+    date gets endlessly re-summarized every cron run)."""
+    needle = f"### Session {date_str}"
+    if LTMEMORY_PATH.exists() and needle in LTMEMORY_PATH.read_text():
+        return True
+    if LTMEMORY_ARCHIVE_PATH.exists() and needle in LTMEMORY_ARCHIVE_PATH.read_text():
+        return True
+    return False
 
 
 def call_summarizer(archive_content: str) -> str | None:

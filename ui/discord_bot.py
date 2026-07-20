@@ -16,7 +16,10 @@ DISCORD_SERVER_ID = int(os.getenv("DISCORD_SERVER_ID", 0))
 DISCORD_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID", 0))
 DISCORD_LOG_CHANNEL_ID = int(os.getenv("DISCORD_LOG_CHANNEL_ID", 0))
 DISCORD_LOG_WEBHOOK_URL = os.getenv("DISCORD_LOG_WEBHOOK_URL", "")
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8002")
+# Local automation talks to the backend (8001) directly, not through the
+# MFA proxy (8002), which now requires a session cookie. Override with the
+# BACKEND_URL env var if a different target is ever needed.
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8001")
 DISCORD_CLAUDE_CHANNEL_ID = int(os.getenv("DISCORD_CLAUDE_CHANNEL_ID", 0))
 LUCENT_ROOT = os.getenv("LUCENT_ROOT", "/home/nick/dev/lucent")
 CLAUDE_BIN = "/home/nick/.local/bin/claude"

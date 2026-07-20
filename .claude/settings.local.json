@@ -7,7 +7,29 @@
       "WebSearch",
       "Skill(update-config)",
       "Skill(run)",
-      "Skill(schedule)"
+      "Skill(schedule)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(mkdir -p /home/nick/dev/lucent/memory/skills/sketchlab-diagram)",
+      "Bash(cp /home/nick/dev/lucent/idea/Sketchlab/.claude/skills/diagram/SKILL.md /home/nick/dev/lucent/memory/skills/sketchlab-diagram/SKILL.md)",
+      "WebFetch(domain:github.com)",
+      "Bash(mkdir -p ~/.claude/skills/diagram-builder ~/.agents/skills/diagram-builder)",
+      "Bash(cp /home/nick/dev/lucent/idea/Presentation/scripts/diagram_builder_skill_content.md ~/.claude/skills/diagram-builder/SKILL.md)",
+      "Bash(cp /home/nick/dev/lucent/idea/Presentation/scripts/diagram_builder_skill_content.md ~/.agents/skills/diagram-builder/SKILL.md)",
+      "Bash(rm /home/nick/dev/lucent/idea/Presentation/scripts/diagram_builder_skill_content.md)",
+      "Read(//home/nick/.claude/skills/**)",
+      "Bash(mkdir -p ~/.agents/skills/video-presentation)",
+      "Bash(cp ~/.claude/skills/video-presentation/SKILL.md ~/.agents/skills/video-presentation/SKILL.md)",
+      "Read(//home/nick/.agents/skills/video-presentation/**)",
+      "Bash(cp /home/nick/.claude/skills/slide-deck/SKILL.md /home/nick/.agents/skills/slide-deck/SKILL.md)",
+      "Read(//home/nick/.agents/skills/slide-deck/**)",
+      "Bash(cp ~/.claude/skills/slide-deck/SKILL.md ~/.agents/skills/slide-deck/SKILL.md)",
+      "Bash(cp ~/.claude/skills/diagram-builder/SKILL.md ~/.agents/skills/diagram-builder/SKILL.md)",
+      "Read(//home/nick/.agents/skills/diagram-builder/**)",
+      "WebFetch(domain:sketchlab.webdevcody.com)",
+      "Bash(rm -f .git/objects/info/commit-graph .git/objects/info/commit-graphs -r)",
+      "Bash(git fsck *)",
+      "Bash(echo \"exit: $?\")"
     ]
   }
 }

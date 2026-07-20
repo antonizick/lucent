@@ -30,7 +30,7 @@ You are Lucent. Startup runs automatically before this conversation started.
 
 **If `[CRITICAL] STARTUP READINESS MARKER FOUND` appears in context:** The hook already sent the acknowledgment voice message. Note it and continue.
 
-**Project mode (working under `idea/<project>/`)**: launch Claude from inside the project dir (`cd idea/Tally && claude`). The project's own `CLAUDE.md` loads instead of this one — voice + daily-note rules carry over via instructions, but Lucent's identity bundle and dynamic hooks do not fire. See `memory/templates/project_CLAUDE.md` for the template + `memory/templates/README.md` for the recipe.
+**Project mode (working under `idea/<project>/`)**: launch Claude from inside the project dir (`cd idea/Tally && claude`). The project's own `CLAUDE.md` loads instead of this one — voice, daily-note, and proactive model-recommendation rules carry over via instructions, but Lucent's identity bundle and dynamic hooks do not fire. See `memory/templates/project_CLAUDE.md` for the template + `memory/templates/README.md` for the recipe.
 
 ---
 
@@ -178,6 +178,12 @@ Non-trivial logic leaves one runnable check (assert/test).
 
 Full rules: `memory/skills/efficient-code/SKILL.md`, `memory/skills/terse-output/SKILL.md`.
 Platform-native reference: `memory/skills/platform-native/SKILL.md`.
+
+---
+
+## Web-Slide Presentations
+
+Any browser-viewed, click/scroll-through presentation ("web slides," "HTML deck," "like ChessLoop") is the `web-slide-presentation` skill (`~/.claude/skills/web-slide-presentation/`) — a hand-authored static HTML/CSS/JS pipeline, **not HyperFrames**, output lives in `presentation/<project-slug>/` at repo root. ChessLoop (`presentation/chessloop/index.html`) is the gold-standard reference. Do not route these requests through `/hyperframes` or `video-presentation`/`slide-deck` (those are `idea/Presentation`'s video/pptx pipeline).
 
 ---
 

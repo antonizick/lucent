@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChessLoop — Presentation</title>
+<style>
+  :root {
+    --bg: #0a0e14;
+    --card-bg: #131a24;
+    --card-border: #1f2937;
+    --text: #cbd5e1;
+    --text-dim: #64748b;
+    --gold: #d4af37;
+    --gold-bright: #f0d878;
+    --accent: #38bdf8;
+    --green: #4ade80;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-snap-type: y proximity; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  section.slide {
+    min-height: 100vh;
+    padding: 4rem 6vw;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border-bottom: 1px solid var(--card-border);
+    scroll-snap-align: start;
+    position: relative;
+    overflow: hidden;
+  }
+  section.slide::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 15% 20%, rgba(212,175,55,0.06), transparent 45%),
+      radial-gradient(circle at 85% 80%, rgba(56,189,248,0.05), transparent 45%);
+    pointer-events: none;
+  }
+  .slide-num {
+    position: absolute;
+    top: 2rem; right: 2.5rem;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.05em;
+  }
+  h1 {
+    font-size: clamp(2.4rem, 6vw, 4.2rem);
+    color: var(--gold-bright);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.5rem;
+  }
+  h2 {
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    color: var(--gold-bright);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 0.4rem;
+  }
+  .subtitle {
+    font-size: clamp(1rem, 2vw, 1.3rem);
+    color: var(--accent);
+    margin-bottom: 2rem;
+    font-weight: 500;
+  }
+  .lede {
+    font-size: 1.15rem;
+    color: var(--text);
+    max-width: 62ch;
+    margin-bottom: 1.5rem;
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.25rem;
+    margin-top: 1rem;
+  }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-left: 3px solid var(--gold);
+    border-radius: 10px;
+    padding: 1.4rem 1.6rem;
+  }
+  .card h3 {
+    color: var(--gold-bright);
+    font-size: 1.05rem;
+    margin-bottom: 0.6rem;
+  }
+  .card ul, .lede-list { list-style: none; }
+  .card li, .lede-list li {
+    padding-left: 1.3rem;
+    position: relative;
+    margin-bottom: 0.4rem;
+    font-size: 0.95rem;
+    color: var(--text);
+  }
+  .card li::before, .lede-list li::before {
+    content: "▹";
+    color: var(--gold);
+    position: absolute;
+    left: 0;
+  }
+  .lede-list li { font-size: 1.05rem; margin-bottom: 0.7rem; }
+  .tags {
+    display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem;
+  }
+  .tag {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    color: var(--green);
+    padding: 0.35rem 0.9rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-family: "SF Mono", Consolas, monospace;
+  }
+  .shot-wrap {
+    margin-top: 1.5rem;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--card-border);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    max-width: 1100px;
+  }
+  .shot-wrap img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  section.slide:has(.shot-wrap) {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+    align-content: center;
+    min-height: 100vh;
+    position: relative;
+  }
+  section.slide:has(.shot-wrap) > h2,
+  section.slide:has(.shot-wrap) > .subtitle,
+  section.slide:has(.shot-wrap) > .lede,
+  section.slide:has(.shot-wrap) > .cards,
+  section.slide:has(.shot-wrap) > .lede-list {
+    grid-column: 1;
+  }
+  section.slide:has(.shot-wrap) > .shot-wrap {
+    position: absolute;
+    right: 6vw;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 45%;
+    margin-top: 0;
+    max-width: none;
+  }
+  section.slide:has(.shot-wrap) .cards {
+    display: flex;
+    flex-direction: column;
+    max-width: 45%;
+  }
+  @media (max-width: 900px) {
+    section.slide:has(.shot-wrap) {
+      grid-template-columns: 1fr;
+    }
+    section.slide:has(.shot-wrap) > .shot-wrap {
+      grid-column: 1;
+      margin-top: 1.5rem;
+    }
+  }
+  code, pre {
+    font-family: "SF Mono", Consolas, monospace;
+    background: #0d1420;
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+  }
+  pre {
+    padding: 1rem 1.2rem;
+    font-size: 0.85rem;
+    color: var(--accent);
+    overflow-x: auto;
+    line-height: 1.7;
+  }
+  code { padding: 0.15rem 0.4rem; color: var(--gold-bright); }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    max-width: 900px;
+    margin-top: 1rem;
+    font-size: 0.95rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--card-border);
+  }
+  th { color: var(--gold-bright); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .title-slide { align-items: center; text-align: center; }
+  .title-slide h1 { font-size: clamp(3rem, 9vw, 6rem); }
+  .glow { text-shadow: 0 0 24px rgba(212,175,55,0.5); }
+  @media (max-width: 768px) {
+    section.slide { padding: 2.5rem 4vw; }
+    .cards { grid-template-columns: 1fr; gap: 1rem; }
+    section.slide:has(.shot-wrap) {
+      grid-template-columns: 1fr;
+    }
+    section.slide:has(.shot-wrap) > .shot-wrap {
+      position: relative;
+      right: auto;
+      top: auto;
+      transform: none;
+      width: 100%;
+      margin-top: 1.5rem;
+      max-width: 100%;
+    }
+    section.slide:has(.shot-wrap) > .lede-list { max-width: 100%; }
+    section.slide:has(.shot-wrap) .cards { max-width: 100%; }
+    h1 { font-size: clamp(1.8rem, 5vw, 2.8rem); }
+    h2 { font-size: clamp(1.3rem, 3.5vw, 1.8rem); }
+  }
+  .nav-controls {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    display: flex;
+    gap: 0.75rem;
+    z-index: 1000;
+  }
+  .nav-btn {
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--card-border);
+    background: rgba(19, 26, 36, 0.85);
+    color: var(--text-dim);
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(8px);
+  }
+  .nav-btn:hover {
+    background: rgba(19, 26, 36, 1);
+    color: var(--text);
+    border-color: var(--gold);
+  }
+  .nav-btn:active {
+    transform: scale(0.95);
+  }
+  .metadata {
+    position: absolute;
+    top: 2rem; left: 2.5rem;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    line-height: 1.2;
+  }
+  .metadata .title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-bottom: 0.05rem;
+  }
+  .metadata .author {
+    font-size: 0.9rem;
+    margin-bottom: 0.05rem;
+  }
+  .metadata .date {
+    font-size: 0.75rem;
+  }
+  @media (max-width: 640px) {
+    .nav-controls { bottom: 1rem; right: 1rem; gap: 1rem; }
+    .nav-btn { width: 88px; height: 88px; font-size: 1.8rem; }
+    .metadata { font-size: 0.7rem; top: 1rem; left: 1rem; }
+    .metadata .title { font-size: 0.9rem; }
+    .metadata .author { font-size: 0.75rem; }
+  }
+</style>
+</head>
+<body>
+
+  <!--  ------------------------------------------------------------------------------------------------- -->
+<section class="slide title-slide">
+  <div class="metadata" align="left">
+    <div class="title">ChessLoop</div>
+    <div class="author">Author: Nick Antonizick</div>
+    <div class="date">18 July 2026</div>
+  </div>
+  <div class="slide-num">01  / 11</div>
+  <h1 class="glow">♞ ChessLoop</h1>
+  <br><br> <!--  <p class="subtitle" style="font-size:1.4rem">Spaced-Repetition Chess Opening Trainer</p> -->
+  <p class="lede" style="max-width:50ch;text-align:center;margin:0 auto 1.5rem;font-size:2.3rem">
+    Use the navigation buttons below, Arrow keys, Page up, page down, spacebar or just click to start the presentation.
+  </p>
+</section>
+
+<!--  ------------------------------------------------------------------------------------------------- -->
+<section class="slide title-slide">
+  <div class="slide-num">01  / 11</div>
+  <h1 class="glow">♞ ChessLoop</h1>
+  <p class="subtitle" style="font-size:1.4rem">Spaced-Repetition Chess Opening Trainer</p>
+  <p class="lede" style="max-width:70ch;text-align:center;margin:0 auto 1.5rem">
+    Teach it your repertoire by playing moves. It drills you back, corrects mistakes,
+    and schedules review so the positions that break you get more practice.
+  </p>
+  <div class="tags" style="justify-content:center">
+    <span class="tag">Teach / Learn</span>
+    <span class="tag">Practice</span>
+    <span class="tag">Feedback</span>
+    <span class="tag">Track</span>
+  </div>
+</section>
+
+  <!--  ------------------------------------------------------------------------------------------------- -->
+<section class="slide">
+  <div class="slide-num">02  / 11</div>
+  <h2>What ChessLoop Does</h2>
+  <p class="subtitle">Train your openings through guided repetition</p>
+  <ul class="lede-list">
+    <li><strong>Teach</strong> — play moves on the Teaching Board; each move is saved to a Line in a Library</li>
+    <li><strong>Practice</strong> — the SRS engine (SM-2 variant) picks your weakest positions and quizzes you</li>
+    <li><strong>Feedback</strong> — wrong answers show a red flash + correct-move arrow; you must physically replay the right move before continuing</li>
+    <li><strong>Track</strong> — the Stats page shows accuracy heatmaps by move number and mastery % per opening</li>
+  </ul>
+</section>
+
+  <!--  ------------------------------------------------------------------------------------------------- -->
+<section class="slide">
+  <div class="slide-num">03  / 11</div>
+  <h2>Core Capabilities</h2>
+  <p class="subtitle">Feature Overview</p>
+  <div class="cards">
+    <div class="card">
+      <h3>Opening Library Builder</h3>
+      <ul>
+        <li>Teach by playing moves on the board</li>
+        <li>Per-move notes and annotations</li>
+        <li>PGN export, line navigation, duplication</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Spaced-Repetition Drill Engine</h3>
+      <ul>
+        <li>Modified SM-2 algorithm</li>
+        <li>Leech detection (4+ cumulative misses)</li>
+        <li>Weakness-biased session selection</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Public Library Discovery</h3>
+      <ul>
+        <li>Browse, search, filter by ECO/difficulty</li>
+        <li>Fork to your own account, star favorites</li>
+        <li>Read-only viewer for browsing without forking</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Track your own games</h3>
+      <ul>
+        <li>Upload your own games PGN Files</li>
+        <li>Document wins/losses, what happened, and lessons learned. </li>
+        <li>Monitor trends/progress over time to spot, analyze and correct behaviors, and habits</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+  <!--  ------------------------------------------------------------------------------------------------- -->
+<section class="slide">
+  <div class="slide-num">04  / 11</div>
+  <h2>Public Library Discovery</h2>
+  <p class="subtitle">Share and Learn from the Community</p>
+  <div class="cards">
+    <div class="card">
+      <h3>Browsing</h3>
+      <ul>
+        <li>Search/filter by ECO code, color, difficulty</li>
+        <li>Star favorites, leave comments</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Two Ways to Use a Public Library</h3>
+      <ul>
+        <li><strong>Fork / Add to My Library</strong> — copies it to your account</li>
+        <li><strong>Learn / View</strong> — read-only viewer, no forking required</li>
+      </ul>
+    </div>
+  </div>
+  <div class="shot-wrap">
+    <img src="images/ChessLoop%20Openings%20database.png" alt="Opening Library Browser">
+  </div>
+</section>
+
+  <!--  ------------------------------------------------------------------------------------------------- -->
+<section class="slide">
+  <div class="slide-num">05  / 11</div>
+  <h2>Teaching Board</h2>
+  <p class="subtitle">Build Your Repertoire Visually</p>
+  <p class="lede">Record opening lines by dragging pieces on the board. Every move captures FEN position and PGN notation automatically.</p>
+  <div class="cards">
+    <div class="card">
+      <h3>Move Navigation</h3>
+      <ul>
+        <li>⟪ First · ‹ Previous · Next › · Last ⟫</li>
+        <li>Jump to live position or any point in the line</li>
+        <li>↓ PGN export with [Event] header</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Line Management</h3>
+      <ul>
+        <li>⧭ Duplicate a line (creates a full copy)</li>
+        <li>Rename by double-clicking</li>
+        <li>Delete a move and everything after it</li>
+      </ul>
+    </div>
+  </div>
+  <div class="shot-wrap">
+    <img src="images/Chessloop%20Game%20tracking%20and%20self%20analysis.png" alt="Game Tracking and Self Analysis">
+  </div>
+</section>
+
+  <!--  ------------------------------------------------------------------------------------------------- -->
+<section class="slide">
+  <div class="slide-num">06  / 11</div>
+  <h2>Move Annotations</h2>
+  <p class="subtitle">Document Your Strategy</p>
+  <div class="cards">
+    <div class="card">
+      <h3>Per-Move Note Editor</h3>
+      <ul>
+        <li>Click a move → Add note → type (Ctrl+Enter to save)</li>
+        <li>Notes persist across every session</li>
+        <li>Visible in Teaching, Unrated Learning, and Practice</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Use Notes For</h3>
+      <ul>
+        <li>Why you play a particular move</li>
+        <li>Warning about traps in the line</li>
+        <li>Linking to outside analysis</li>
+      </ul>
+    </div>
+  </div>
+  <div class="shot-wrap">
+    <img src="images/ChessLoop%20Learning%20and%20training%20arenas.png" alt="Learning and Training Arenas">
+  </div>
+</section>
+
+  <!--  ------------------------------------------------------------------------------------------------- -->
+<section class="slide">
+  <div class="slide-num">07  / 11</div>
+  <h2>Practice Sessions</h2>
+  <p class="subtitle">Drill Your Weaknesses</p>
+  <ul class="lede-list">
+    <li><strong>Weakest First</strong> — overdue items sorted by most-overdue, auto-starts the hardest positions</li>
+    <li><strong>Rated / Unrated</strong> — choose whether a session counts toward performance metrics</li>
+    <li><strong>Leech Drill</strong> — dedicated mode for positions with 4+ cumulative wrong answers</li>
+  </ul>
+  <p class="lede" style="margin-top:1rem"><strong>Session priority:</strong> overdue first → leeches (in leech-drill mode) → new items (20% weight) → weakness bias (ease &lt; 1.8 gets 2× weight)</p>
+  <div class="shot-wrap">
+    <img src="images/ChessLoopPractice.png" alt="Managed Practice">
+  </div>
+</section>
+
+  <!--  ------------------------------------------------------------------------------------------------- -->
+<section class="slide">
+  <div class="slide-num">08  / 11</div>
+  <h2>Intelligent Feedback</h2>
+  <p class="subtitle">Motor Memory Through Physical Execution</p>
+  <p class="lede">The critical difference from flashcard systems: you must <strong>physically play the correct move</strong> to continue — recognition alone doesn't count.</p>
+  <div class="cards">
+    <div class="card">
+      <h3>On a Wrong Answer</h3>
+      <ul>
+        <li>Board flashes red immediately</li>
+        <li>Animated arrow shows the correct move</li>
+        <li>You cannot proceed until you play it</li>
+      </ul>
+    </div>
+  </div>
+  <div class="shot-wrap">
+    <img src="images/ChessLoopFB.png" alt="Instant feedback for incorrect moves">
+  </div>
+</section>
+
+  <!--  ------------------------------------------------------------------------------------------------- -->
+<section class="slide">
+  <div class="slide-num">09  / 11</div>
+  <h2>Progress Tracking</h2>
+  <p class="subtitle">See Your Improvement Over Time</p>
+  <div class="cards">
+    <div class="card">
+      <h3>Accuracy Heatmap</h3>
+      <ul>
+        <li>X-axis: move number in the opening</li>
+        <li>Bar height/color: success rate</li>
+        <li>Green ≥80% · Yellow 50–79% · Red &lt;50%</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Mastery Badges</h3>
+      <ul>
+        <li>not_started → learning → developing</li>
+        <li>advanced → mastered</li>
+        <li>Per-library, based on accuracy thresholds</li>
+      </ul>
+    </div>
+  </div>
+  <div class="shot-wrap">
+    <img src="images/Chessloop%20Statistics%20tracking.png" alt="Statistics Tracking">
+  </div>
+</section>
+
+  <!--  ------------------------------------------------------------------------------------------------- -->
+<section class="slide">
+  <div class="slide-num">10  / 11</div>
+  <h2>Appearance &amp; Customization</h2>
+  <p class="subtitle">Dark/Light Theme, Board &amp; Piece Sets</p>
+ <div class="cards">
+    <div class="card">
+      <h3>Board Themes</h3>
+      <ul><li>Brown (default) · Blue · Green · Ice · Purple</li></ul>
+    </div>
+    <div class="card">
+      <h3>Piece Sets</h3>
+      <ul><li>CBurnett (default) · Alpha · Mono · Shadow</li></ul>
+    </div>
+    <div class="card">
+      <h3>App Theme</h3>
+      <ul><li>Dark (default) or Light — persists per-user, syncs across devices</li></ul>
+    </div>
+  </div>
+  <div class="shot-wrap">
+    <img src="images/ChessLoopTheme.png" alt="Managed Practice">
+  </div>
+</section>
+
+  <!--  ------------------------------------------------------------------------------------------------- -->
+<section class="slide title-slide">
+  <div class="slide-num">11  / 11</div>
+  <h1 class="glow">♞ ChessLoop</h1>
+  <p class="subtitle" style="font-size:1.4rem">How how good do YOU want to be? </p>
+  <p class="lede" style="max-width:70ch;text-align:center;margin:0 auto 1.5rem">
+    Teach it your repertoire by playing moves. It drills you back, corrects mistakes,
+    and schedules review so the positions that break you get more practice.</p><br>
+<p class="lede" style="max-width:70ch;text-align:center;margin:0 auto 1.5rem">
+  <span style="color: #4ade80; font-weight: 600;">NOW in alpha release:</span><br>
+  <span style="font-size: 0.85rem; opacity: 0.85;">
+    (Access will be intermittent during this alpha testing phase, as the service is running on temporary infrastructure.)
+  </span>
+</p>
+  <span style="font-size: .90rem; opacity: 0.85;">(Access will be intermittent in alpha, the service is running on temporary infrastructure.)</span></p>
+<p class="subtitle" style="font-size:1.2rem"><a href="https://bld2.taild1bb43.ts.net:8443/" 
+     target="_blank" 
+     style="color: inherit; text-decoration: underline;">
+    https://bld2.taild1bb43.ts.net:8443/
+  </a></p>
+</section>
+
+<div class="nav-controls">
+    <label id="autoAdvanceLabel" style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-dim); font-size: 0.9rem; cursor: pointer; user-select: none;">
+    <input type="checkbox" id="autoAdvanceToggle" checked>
+    Auto Advance Slides
+  </label>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; 
+  <button class="nav-btn" id="prevBtn" aria-label="Previous slide">←</button>
+  <button class="nav-btn" id="nextBtn" aria-label="Next slide">→</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('section.slide');
+  let currentSlide = 0;
+  const audio = document.createElement('audio');
+  audio.style.display = 'none';
+  audio.muted = true;
+  document.body.appendChild(audio);
+
+  // Auto-advance state
+  let autoAdvanceEnabled = localStorage.getItem('autoAdvanceEnabled') !== 'false';
+  const autoAdvanceToggle = document.getElementById('autoAdvanceToggle');
+  autoAdvanceToggle.checked = autoAdvanceEnabled;
+
+  autoAdvanceToggle.addEventListener('change', () => {
+    autoAdvanceEnabled = autoAdvanceToggle.checked;
+    localStorage.setItem('autoAdvanceEnabled', autoAdvanceEnabled);
+  });
+
+  audio.addEventListener('ended', () => {
+    if (autoAdvanceEnabled) {
+      scrollToSlide(currentSlide + 1);
+    }
+  });
+
+  function scrollToSlide(index) {
+    if (index < 0 || index >= slides.length) return;
+    currentSlide = index;
+
+    // Stop and reset current audio
+    audio.pause();
+    audio.currentTime = 0;
+
+    // Load and play audio for the slide
+    const slideNum = String(currentSlide + 1).padStart(2, '0');
+    const audioFile = `audio/slide.${slideNum}.mp3`;
+    audio.src = audioFile;
+    audio.play().catch(err => {
+      // Silently fail if audio file doesn't exist or can't play
+    });
+
+    slides[currentSlide].scrollIntoView({ behavior: 'smooth' });
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ' || e.key === 'Spacebar') {
+      e.preventDefault();
+      scrollToSlide(currentSlide + 1);
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      e.preventDefault();
+      scrollToSlide(currentSlide - 1);
+    }
+  });
+
+  document.getElementById('nextBtn').addEventListener('click', () => {
+    scrollToSlide(currentSlide + 1);
+  });
+
+  document.getElementById('prevBtn').addEventListener('click', () => {
+    scrollToSlide(currentSlide - 1);
+  });
+
+  slides.forEach(slide => {
+    slide.addEventListener('click', (e) => {
+      if (e.target.closest('button, input, label')) return;
+      scrollToSlide(currentSlide + 1);
+    });
+  });
+
+  window.addEventListener('scroll', () => {
+    let scrollPosition = window.scrollY + window.innerHeight / 2;
+    slides.forEach((slide, index) => {
+      if (slide.offsetTop <= scrollPosition && slide.offsetTop + slide.offsetHeight > scrollPosition) {
+        currentSlide = index;
+      }
+    });
+  });
+
+  // Auto-play audio for slide 1 on page load
+  const slideNum = '01';
+  const audioFile = `audio/slide.${slideNum}.mp3`;
+  audio.src = audioFile;
+  audio.play().then(() => {
+    // Unmute after a brief delay to allow playback to start
+    setTimeout(() => { audio.muted = false; }, 100);
+  }).catch(err => {
+    // If autoplay fails, unmute on first user interaction
+    document.addEventListener('click', () => { audio.muted = false; }, { once: true });
+  });
+</script>
+</body>
+</html>

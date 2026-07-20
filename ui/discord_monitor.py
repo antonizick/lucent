@@ -26,7 +26,10 @@ from verify_startup import ensure_startup_ritual, augment_system_prompt
 load_dotenv()
 
 # Configuration
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8002")
+# Local automation talks to the backend (8001) directly, not through the
+# MFA proxy (8002), which now requires a session cookie. Override with the
+# BACKEND_URL env var if a different target is ever needed.
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8001")
 LUCENT_ROOT = os.getenv("LUCENT_ROOT", "/home/nick/dev/lucent")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 POLLING_INTERVAL = 3  # Seconds between polls for pending messages

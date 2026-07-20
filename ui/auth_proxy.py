@@ -120,6 +120,45 @@ def get_token(authorization: Optional[str] = None, cookies: Optional[dict] = Non
 # FastAPI app
 app = FastAPI(title="Lucent Voice Box (Authenticated)")
 
+# ---------------------------------------------------------------------------
+# Session-enforcement middleware (S2 fix — 2026-07-20)
+# Previously the catch-all proxy plus /speak, /speak/stream, /static and
+# /message/pending forwarded to the unauthenticated backend (8001) with NO
+# session check, so the MFA gate only actually guarded "/" and the /auth pages.
+# This middleware requires a valid, MFA-verified session cookie on EVERY path
+# except the auth flow itself and the liveness probe. It is the single
+# choke-point so no individual route can be accidentally left open again.
+#
+# Local automation must not depend on unauthenticated 8002 access: discord_bot
+# and discord_monitor now target 8001 directly, and startup.py's speak_both
+# already falls back to 8001. /services/health stays public so startup.py's
+# check_voice_box(8002) liveness probe keeps working.
+# ---------------------------------------------------------------------------
+PUBLIC_PREFIXES = ("/auth/",)
+PUBLIC_EXACT = {"/services/health", "/favicon.ico"}
+
+
+@app.middleware("http")
+async def enforce_session(request: Request, call_next):
+    path = request.url.path
+    if path in PUBLIC_EXACT or path.startswith(PUBLIC_PREFIXES):
+        return await call_next(request)
+
+    token = request.cookies.get("auth_token")
+    if token:
+        try:
+            await verify_session_token(token)
+            return await call_next(request)
+        except HTTPException:
+            pass  # invalid / expired / MFA-unverified → fall through to reject
+
+    # Unauthenticated: send browser navigations to the login page, APIs a 401.
+    accept = request.headers.get("accept", "")
+    if request.method in ("GET", "HEAD") and "text/html" in accept:
+        return RedirectResponse(url="/auth/login", status_code=302)
+    return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+
+
 @app.on_event("startup")
 async def startup():
     """Initialize auth system."""
@@ -642,13 +681,16 @@ async def proxy_request(method: str, path: str, token: str, body: Optional[bytes
 
 @app.get("/")
 async def root(request: Request):
-    """Proxy root request - authentication handled at proxy level."""
-    # Check if user is authenticated via cookie
+    """Proxy root request - requires a valid, MFA-verified session."""
     token = request.cookies.get("auth_token")
     if not token:
         return RedirectResponse(url="/auth/login", status_code=302)
 
-    # Proxy directly to port 8001 without auth - auth is only at proxy level
+    try:
+        await verify_session_token(token)
+    except HTTPException:
+        return RedirectResponse(url="/auth/login", status_code=302)
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.get(f"{get_voice_box_url()}/")
 
@@ -792,7 +834,10 @@ async def catch_all(path: str, request: Request):
     else:
         media_type = response.headers.get("content-type", "application/octet-stream")
 
-    return StreamingResponse(iter([response.content]), media_type=media_type)
+    # Propagate the backend's status code — otherwise every proxied response
+    # (including 403/404/500) is silently relabelled 200, which hid the S3
+    # allowlist's 403 and misleads client code.
+    return StreamingResponse(iter([response.content]), media_type=media_type, status_code=response.status_code)
 
 if __name__ == "__main__":
     import uvicorn
