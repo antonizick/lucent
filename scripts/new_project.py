@@ -38,6 +38,9 @@ TEMPLATE_AGENTS = ROOT / "memory" / "templates" / "project_AGENTS.md"
 
 RESERVED = {8000, 8001, 8002, 8003, 8010}
 ASSIGN_FLOOR = 8100  # new web services climb from here
+# lucent: ephemeral range hardcoded to the Linux default; read
+# /proc/sys/net/ipv4/ip_local_port_range if a box ever differs.
+EPHEMERAL_LO, EPHEMERAL_HI = 32768, 60999
 
 
 # --------------------------------------------------------------------------
@@ -98,6 +101,16 @@ def bound_ports() -> set[int]:
     return found
 
 
+def is_registerable(port: int) -> bool:
+    """False for ports that are occupied but must never enter the ledger.
+
+    Ephemeral range (/proc/sys/net/ipv4/ip_local_port_range) churns every session —
+    VS Code servers, language servers. WSL's X11 forwarders (6010+) come and go with
+    session count. Registering either produces permanent phantom drift.
+    """
+    return not (EPHEMERAL_LO <= port <= EPHEMERAL_HI or 6000 <= port <= 6063)
+
+
 def all_used() -> tuple[set[int], dict[str, set[int]]]:
     led = ports_from_ledger()
     health = ports_from_health()
@@ -128,10 +141,20 @@ def cmd_ports(_args) -> int:
     print(f"In health:   {sorted(by_src['health'])}")
     print(f"In configs:  {sorted(by_src['configs'])}")
     print(f"Live-bound:  {sorted(by_src['live'])}")
-    drift = (by_src["health"] | by_src["configs"]) - by_src["ledger"] - RESERVED
+    # Live-bound is included: a port serving traffic but absent from the ledger is
+    # exactly the case that causes collisions (see the 3001 nx3d/excalidraw-animate
+    # incident, 2026-07-30). Filtered so ephemeral/X11 churn never shows as drift.
+    drift = {
+        p
+        for p in (by_src["health"] | by_src["configs"] | by_src["live"])
+        - by_src["ledger"]
+        - RESERVED
+        if is_registerable(p)
+    }
     if drift:
         print(f"\n[!] DRIFT — used but missing from ledger: {sorted(drift)}")
-        print("    Consider adding these rows to idea/PORTS.md.")
+        print("    Identify the owner, then add rows to idea/PORTS.md:")
+        print("      ss -ltnp | grep -E ':(<port>) '")
     cands = suggest(3)
     print(f"\n>>> PROPOSED free ports (confirm one): {cands}")
     print(">>> Then: new_project.py create --name <Name> --port <chosen> ...")
