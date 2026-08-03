@@ -1,0 +1,11 @@
+# Non-stdlib deps for scripts/. Documentation + pinning only (R2 audit
+# item) — these run via hooks in .claude/settings.json against the
+# GLOBAL python3, same as always. Deliberately NOT wired into a venv:
+# the hooks fire on every turn of every session, so a bad repoint here
+# has no clean rollback the way a systemd restart does. If scripts/
+# ever needs real isolation, repoint the hook commands in
+# .claude/settings.json to a scripts/.venv built from this file — do
+# that as its own reviewed change, not bundled with a dependency bump.
+requests==2.34.2
+questionary==2.1.1
+rich==15.0.0

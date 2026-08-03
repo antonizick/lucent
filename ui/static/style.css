@@ -273,6 +273,17 @@ body {
     display: none;
 }
 
+/* Row wrapping the scanner so the repeat button can sit at the far right
+   without touching the scanner's own centering. */
+.scanner-row {
+    position: relative;
+    width: 100%;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 /* Knight Rider Scanner */
 .scanner-container {
     position: relative;
@@ -281,6 +292,40 @@ body {
     display: flex;
     align-items: center;
     margin: 0 auto;
+}
+
+.repeat-btn {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid rgba(180, 185, 195, 0.4);
+    border-radius: 50%;
+    color: rgba(190, 195, 205, 0.65);
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.75;
+    transition: opacity 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.repeat-btn:hover:not(:disabled) {
+    opacity: 1;
+    border-color: rgba(220, 225, 235, 0.8);
+    color: rgba(230, 233, 240, 0.95);
+    box-shadow: 0 0 8px rgba(200, 205, 215, 0.4);
+}
+
+.repeat-btn:disabled {
+    opacity: 0.25;
+    cursor: default;
 }
 
 .scanner-bar {

@@ -1,0 +1,5 @@
+# Test-only dependencies for the ui/ tier (M1). Installed into ui/.venv
+# alongside requirements.txt. Runtime deps stay in requirements.txt.
+# FastAPI's TestClient rides on httpx + starlette, already pinned in
+# requirements.lock — no extra runtime deps needed here.
+pytest==9.0.3

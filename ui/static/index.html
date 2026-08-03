@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lucent — Voice Output</title>
-    <link rel="stylesheet" href="/static/style.css?v=1004">
+    <link rel="stylesheet" href="/static/style.css?v=1006">
     <link rel="stylesheet" href="/static/lcc.css?v=1013">
 </head>
 <body>
@@ -206,20 +206,23 @@
                     <div class="panel-label" id="voicePanelLabel">AI VOICE BOX — IDLE</div>
 
                     <!-- Knight Rider Scanner -->
-                    <div id="scanner" class="scanner-container">
-                        <div class="scanner-light"></div>
-                        <div class="scanner-bar">
-                            <div class="scanner-dot"></div>
-                            <div class="scanner-dot"></div>
-                            <div class="scanner-dot"></div>
-                            <div class="scanner-dot"></div>
-                            <div class="scanner-dot"></div>
-                            <div class="scanner-dot"></div>
-                            <div class="scanner-dot"></div>
-                            <div class="scanner-dot"></div>
-                            <div class="scanner-dot"></div>
-                            <div class="scanner-dot"></div>
+                    <div class="scanner-row">
+                        <div id="scanner" class="scanner-container">
+                            <div class="scanner-light"></div>
+                            <div class="scanner-bar">
+                                <div class="scanner-dot"></div>
+                                <div class="scanner-dot"></div>
+                                <div class="scanner-dot"></div>
+                                <div class="scanner-dot"></div>
+                                <div class="scanner-dot"></div>
+                                <div class="scanner-dot"></div>
+                                <div class="scanner-dot"></div>
+                                <div class="scanner-dot"></div>
+                                <div class="scanner-dot"></div>
+                                <div class="scanner-dot"></div>
+                            </div>
                         </div>
+                        <button id="repeatBtn" class="repeat-btn" title="Repeat last message" disabled>⟳</button>
                     </div>
 
                     <!-- Knight Rider Speaking Animation -->
@@ -262,6 +265,6 @@
     <script src="/static/avatar-manager.js?v=1004"></script>
     <script src="/static/character.js?v=1004"></script>
     <script src="/static/audio-player.js?v=1004"></script>
-    <script src="/static/app.js?v=1009"></script>
+    <script src="/static/app.js?v=1010"></script>
 </body>
 </html>

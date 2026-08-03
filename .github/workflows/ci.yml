@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install ui/ runtime + test deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ui/requirements.txt
+          pip install -r ui/requirements-dev.txt
+
+      - name: pytest (platform security + memory-guard + hook smoke tests)
+        run: python -m pytest tests/platform/ -v
+
+      # tests/email_system/ intentionally excluded: 12/89 fail on main today,
+      # independent of the M1 platform work (e.g. a naive/aware-datetime bug
+      # in email_service.py). Wiring it in now would make CI red from day
+      # one for pre-existing, unrelated reasons. Fix the suite, then add it
+      # back as its own step.
+
+      - name: ruff (informational — not a merge gate yet; see M2 for lint debt cleanup)
+        continue-on-error: true
+        run: |
+          pip install ruff
+          ruff check ui/ scripts/ tests/

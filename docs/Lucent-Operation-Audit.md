@@ -31,7 +31,7 @@ Lucent is a genuinely capable, feature-rich personal-assistant platform. The mem
 
 Lower-ranked, because isolation *does* help here: 8001 binding `0.0.0.0` (S1 — now hardening) and CORS `*`+credentials (S4 — browser-scoped).
 
-Secondary themes: (2) the memory backup repo has bloated to **431 MB** because a 15 MB recall index is committed and pushed hourly; (3) near-zero automated test coverage over ~10k lines of platform scripts plus two large monolith web files; (4) meaningful script sprawl / dead code that raises the maintenance cost of everything else; (5) environment hygiene issues (global pip installs, mixed root/user file ownership, stray junk directories).
+Secondary themes: (2) the memory backup repo had bloated to **431 MB** because a 15 MB recall index was committed and pushed hourly — ✅ **fixed** (R1, `.git` now 3.0 MB); (3) near-zero automated test coverage over ~10k lines of platform scripts plus two large monolith web files — ✅ **fixed for the highest-risk seams** (M1, 64 tests + CI; broader coverage of the monolith files remains future work); (4) meaningful script sprawl / dead code that raises the maintenance cost of everything else; (5) environment hygiene issues — global pip installs ✅ **fixed** (R2, `ui/.venv` + full pinning), mixed root/user file ownership and stray junk directories still open (R3, M4).
 
 ### Severity & Priority Table
 
@@ -45,9 +45,9 @@ Secondary themes: (2) the memory backup repo has bloated to **431 MB** because a
 | S4 | CORS `allow_origins=["*"]` + `allow_credentials=True` (browser-scoped) | Security | Med | Low | P1 |
 | S5 | Weak password hashing (unsalted SHA-256) + insecure cookie flags + no rate limiting | Security | Med | Low–Med | P1/P2 |
 | R1 | memory/.git = 431 MB; 15 MB `.recall_index.json` committed+pushed hourly | Reliability/Scale | High | Low | ✅ **FIXED 2026-07-20** (431MB→3MB) |
-| R2 | No dependency isolation (no `ui/.venv`) or full pinning | Reliability | Med | Low | P1 |
+| R2 | No dependency isolation (no `ui/.venv`) or full pinning | Reliability | Med | Low | ✅ **FIXED 2026-07-20** |
 | R3 | Mixed root/user file ownership; unclear service supervision | Reliability | Med | Med | P1 |
-| M1 | Near-zero test coverage + no CI over core platform | Maintainability | High | Med–High | P1 |
+| M1 | Near-zero test coverage + no CI over core platform | Maintainability | High | Med–High | ✅ **DONE 2026-07-20** (Phases 1–3) |
 | M2 | Script sprawl / dead code (dual compress paths, removed-but-present scripts, `.py`+`.sh` twins) | Maintainability | Med | Med | P2 |
 | M3 | Monolithic files: `server.py` (~2.6k lines), `reflect.py` (831), `startup.py` (650) | Maintainability | Med | Med–High | P2 |
 | M4 | Stray junk dirs (`--help/`, `append/`, `check/`, `scratch pad/` vs `scratchpad/`) | Hygiene | Low | Low | P2 |
@@ -100,6 +100,26 @@ Destructive half executed with Nick's explicit go-ahead after a full backup + va
 **Rewrite:** `git filter-repo --force --invert-paths` over the 7 paths → `reflog expire` + `gc --prune=now --aggressive` → re-add origin → `git push --force`. **Result: `.git` 438 MB → 3.0 MB** (fresh clone from remote = 4.4 MB). fsck clean; all purged paths gone from every commit; LTMemory/core/MEMORY/daily notes/activity logs intact; working-tree `.recall_index.json` + `email.db` preserved on disk. 465 empty backup-only commits pruned (1719→1254); real content preserved. Upstream tracking restored; backup daemon push path verified clean.
 
 **Note:** GitHub retains the old unreachable objects server-side until its own GC, but clients now clone the 4.4 MB repo. The `/home/nick/lucent_r1_backup_20260720` backup can be deleted once Nick is satisfied.
+
+### R2 + M1 — 2026-07-20 (dependency isolation, security test suite, CI) ✅ DONE
+
+Done in sequence per the roadmap (R2 first, so M1's suite runs in a clean, deterministic environment from day one). Model-switch gates observed: Sonnet 5 for R2, Opus 4.8 to design the Phase 1 security-test assertions, Sonnet 5 for bulk authoring + CI.
+
+**R2 (dependency isolation):**
+- Created `ui/.venv`; found and pinned several dependencies `ui/requirements.txt` never listed (`pyotp`, `aiohttp`, `discord.py`, `Flask`, `ddgs`, `piper-tts`, and a hidden FastAPI `Form()` dependency, `python-multipart` — caught by import-testing `auth_proxy.py` in the venv before touching anything live). Full 57-package `ui/requirements.lock` frozen and reproducibility-verified (a from-scratch venv built from the lock file alone reproduces a byte-identical environment).
+- `ui/start.sh` now auto-creates and execs from `.venv` (the `exec` also collapses the old bash-wrapper PID layer, resolving the R3 process-ambiguity note below for the voice box specifically). `lucent-auth.service`'s `ExecStart` repointed at `ui/.venv/bin/python3` (required a one-off manual `sudo` edit — outside the passwordless sudoers scope).
+- Verified end-to-end on the live services post-restart: `/speak` 200 direct and via proxy; S2/S3 protections unaffected (401/403/302 all still correct); real browser session traffic flowed clean through the restart with zero errors.
+- `scripts/requirements.txt` added (pins `requests`/`questionary`/`rich`) — **documentation/pinning only, deliberately not wired into its own venv or into the `.claude/settings.json` hook commands.** Those hooks run on every turn of every session with no systemd-style rollback if a repoint goes wrong; the risk/benefit didn't clear the bar this session.
+
+**M1 (test suite + CI), 64 tests total, all isolated from prod:**
+- **Phase 1 — security tests** (Opus-designed, `tests/platform/test_auth_proxy_security.py` + `test_file_access_security.py`, 25 tests): pin the S2/S3 fixes above — unauthenticated `/view-file?path=/etc/passwd` through the proxy → 401 with no leak; `/static` and `/speak`'s stale "no auth needed" handlers are actually gated; a valid MFA session passes the gate (guards against an always-deny middleware); backend status-code propagation. Isolated via a stubbed `httpx.AsyncClient` + monkeypatched session store, so passing the gate hits a test stub, never the live voice box.
+- **Phase 1 — memory-guard tests** (`test_guard_memory_write.py` + `test_backup_memory_guards.py`, 21 tests): `guard_memory_write.py`'s shrink guard tested via its real subprocess stdin/stdout contract; `backup_memory.py`'s secret-scan and shrink-scan tested against a real throwaway git repo under `tmp_path` (never `memory/.git`).
+- **Phase 2 — hook smoke tests** (18 tests): `startup.py`'s individual check functions tested via a monkeypatched `LUCENT_ROOT` (running its full `main()` live was ruled out — real network calls, possible service restart, checkpoint writes, compression subprocess). `lucent-init.sh` — which hardcodes its own path with no override — tested by copying the entire real `scripts/` tree into a throwaway directory and running a patched copy of the hook against it, proving it survives a completely empty `memory/` dir without crashing.
+- **Phase 3 — CI** (`.github/workflows/ci.yml`): installs from `ui/requirements.txt` + new `ui/requirements-dev.txt`, runs `tests/platform/` as the hard gate, `ruff` (scoped to real correctness rules — syntax errors, undefined names, redefinitions, not style) as informational only. `tests/email_system/` deliberately excluded — see finding below.
+
+**Two bugs found incidentally while building the suite (not fixed — flagged for Nick):**
+1. **`check_ltmemory_completeness` off-by-one** (`scripts/startup.py`): its bullet-counter (`session_content.count('\n-')`) undercounts by 1 because the regex-captured session text starts immediately after the header's own newline, so the first bullet line is never counted. A session with exactly 3 bullets — the threshold CLAUDE.md and the function's own docstring call sufficient — needs 4 in practice, or gets wrongly flagged as a stub, which can block startup. Pinned as a regression test in `tests/platform/test_startup_smoke.py` rather than silently fixed.
+2. **`tests/email_system/` writes to the live daily note.** `src/lucent_email/email_service.py`'s `_confirm_send()` hardcodes `Path.home() / "dev/lucent/memory"` and appends to today's note directly via `open().write()` — outside the `subprocess.run` mock those tests use (which only covers the curl/voice call). Running the suite during this session's CI-scoping work wrote 5 fake "[Email] Sent... alice@example.com" lines into the real `memory/2026-07-20.md`; caught immediately (no real voice call fired), the lines were removed the same session. The suite also has 12/89 pre-existing failures unrelated to this work (e.g. a naive/aware-datetime bug), which is the other reason it's excluded from CI for now.
 
 ---
 
@@ -222,7 +242,7 @@ The reason it *feels* like the wildcard is necessary is that the URLs look very 
 
 **Model:** Haiku 4.5 / Sonnet 5 — mechanical git surgery; the judgment call (history rewrite) is Nick's, not the model's.
 
-### R2 — No dependency isolation or full pinning for the UI tier
+### R2 — No dependency isolation or full pinning for the UI tier *(✅ FIXED 2026-07-20 — see §1a)*
 
 **Observed:** No `ui/.venv` (checked — global installs). `ui/requirements.txt` pins fastapi/uvicorn but uses `>=` for anthropic/httpx/requests. Multiple other services (Tally, AIVU) *do* have their own `.venv`, so the core UI is the outlier.
 
@@ -240,7 +260,7 @@ The reason it *feels* like the wildcard is necessary is that the URLs look very 
 
 **What/how:** (1) Find what writes root-owned files (`grep` cron + systemd for the offending script) and make it run as `nick`, or `chown` and prevent recurrence. (2) Standardize: every long-lived service gets a systemd user unit with `Restart=on-failure`; kill the manual-launch path. `feedback_never_broad_process_kill` still applies — reconcile by PID/port. Milestone: reboot test → all services return; no new root-owned files appear.
 
-### M1 — Near-zero automated test coverage + no CI
+### M1 — Near-zero automated test coverage + no CI *(✅ DONE 2026-07-20 — see §1a)*
 
 **Observed:** The only tests are `tests/email_system/` (5 phase files). ~10k lines of `scripts/`, a ~2.6k-line `server.py`, and a ~800-line `auth_proxy.py` have **no** tests. No CI config present.
 
@@ -318,8 +338,8 @@ The reason it *feels* like the wildcard is necessary is that the URLs look very 
 |-------|------|---------------------|-------------------|
 | **0 — Close the tunnel-reachable chain (now)** | **S2 (proxy session enforcement) + S3 (backend auth + `/view-file` allowlist)** + the S2/S3 security tests from M1 | none — this is the live exposure | **Opus 4.8** + Sonnet 5 (tests) |
 | **1 — Cheap hardening (bundle with, or right after, Phase 0)** | S1 (bind localhost) + S4 (CORS allowlist) + R1 Phase A (gitignore index) | none | Opus 4.8 (S1/S4), Haiku (R1a) |
-| **2 — Harden & isolate** | S5 (argon2/cookies/rate-limit) + R2 (venv+pin) + R3 (ownership/supervision) | Phase 0 | Sonnet 5 |
-| **3 — Safety net** | M1 memory-integrity + hook tests, CI wiring | Phase 1 (reuses its tests) | Sonnet 5, Opus for test design |
+| **2 — Harden & isolate** | S5 (argon2/cookies/rate-limit) + ~~R2 (venv+pin)~~ ✅ done + R3 (ownership/supervision) | Phase 0 | Sonnet 5 |
+| **3 — Safety net** | ~~M1 memory-integrity + hook tests, CI wiring~~ ✅ done | Phase 1 (reuses its tests) | Sonnet 5, Opus for test design |
 | **4 — Reclaim & clean** | R1 Phase B (history rewrite, **with backup + Nick OK**) + M2 (dead code) + M4 (junk dirs) | Phase 3 (tests protect the cleanup) | Sonnet 5 / Haiku |
 | **5 — Restructure** | M3 (`server.py` → routers) | Phase 3 (tests) | Opus plan / Sonnet exec |
 | **6 — Elevate** | O1 (NERO guardrails), O2 (health supervisor), O3 (vector store) | Phases 2–4 | Opus design / Sonnet+local Ollama |

@@ -13,6 +13,7 @@ const servicesList = document.getElementById('servicesList');
 const refreshTimer = document.getElementById('refreshTimer');
 const speedSlider = document.getElementById('speedSlider');
 const speedValue = document.getElementById('speedValue');
+const repeatBtn = document.getElementById('repeatBtn');
 
 // State
 let currentVoice = null;
@@ -28,6 +29,7 @@ let lastRemindersContent = '';
 let lastInsightsData = null;
 let insightsInterval = null;
 let lastProposalsData = null;
+let lastSpoken = null;  // { text, audio } — cached from the most recent /speak/stream event
 let refreshCountdown = 30;
 let refreshTimerInterval = null;
 let isEditingEmailRating = false;  // Pause refresh while editing email ratings
@@ -473,6 +475,10 @@ function setupSpeechListener() {
             const data = JSON.parse(event.data);
             if (!data || !data.text) return;
 
+            // Cache for the repeat button
+            lastSpoken = { text: data.text, audio: data.audio || null };
+            repeatBtn.disabled = false;
+
             // Always update text display
             currentTextContent.textContent = data.text;
             updateTimestamp();
@@ -528,6 +534,47 @@ function setupSpeechListener() {
         eventSource.close();
         setTimeout(setupSpeechListener, 3000);
     };
+}
+
+// Replay the most recent /speak/stream event (cached audio if available, else TTS)
+function repeatLastSpoken() {
+    if (!lastSpoken || !lastSpoken.text || isSpeaking) return;
+
+    currentTextContent.textContent = lastSpoken.text;
+    updateTimestamp();
+    if (fadeTimeout) {
+        clearTimeout(fadeTimeout);
+        fadeTimeout = null;
+    }
+    currentText.style.opacity = '1';
+
+    if (currentVoice === 'none' || currentVoice === null) {
+        speakText(lastSpoken.text);
+        return;
+    }
+
+    if (lastSpoken.audio && speechEnabled && window.AudioPlayer && window.AudioPlayer.isAudioContextAvailable()) {
+        startSpeakingAnimation();
+        window.AudioPlayer.playAudioFromBase64(lastSpoken.audio).then((source) => {
+            source.onended = () => {
+                stopSpeakingAnimation();
+                fadeTimeout = setTimeout(() => {
+                    currentText.style.opacity = '0.2';
+                    fadeTimeout = null;
+                }, 120000);
+            };
+        }).catch((err) => {
+            console.error('Repeat audio playback failed:', err);
+            stopSpeakingAnimation();
+            if (window.speechSynthesis && currentVoice && !currentVoice.startsWith('browser:')) {
+                speakFallback(lastSpoken.text);
+            } else {
+                speakText(lastSpoken.text);
+            }
+        });
+    } else {
+        speakText(lastSpoken.text);
+    }
 }
 
 function startSpeakingAnimation() {
@@ -2049,6 +2096,7 @@ if (emailMonitorFontUp) emailMonitorFontUp.addEventListener('click', () => adjus
 if (emailMonitorFontDown) emailMonitorFontDown.addEventListener('click', () => adjustFontSize('email-monitor', false));
 
 setupSpeechListener();
+repeatBtn.addEventListener('click', repeatLastSpoken);
 setupLogListener();
 setupServiceListener();
 setupBackupListener();
