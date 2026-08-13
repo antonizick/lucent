@@ -37,6 +37,5 @@ src/lucent_email/*.db-*
 ui/.auth/
 scratch pad/
 
-# PATH deck — build/exercise output, ~107MB of it video (per Nick 2026-08-06).
-# The real PATH presentation gets rebuilt later; AIVU/chessloop stay tracked.
-presentation/PATH/
+# Presentation decks — build output (video/audio/pptx), not source (2026-08-13).
+presentation/

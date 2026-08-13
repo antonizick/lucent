@@ -4,6 +4,8 @@
 > **Recovery sources:** Two GitHub repositories — Lucent Core and Lucent Memory.
 > **Primary AI platform:** Claude Code. Ollama + OpenCode are covered in dedicated sections after the core deployment.
 
+> **Heads up — likely stale:** Lucent has gone through a lot of major updates and upgrades since this guide was last verified end-to-end. It's kept as the best available record of what a working setup looked like, but it hasn't been retested against the current framework and probably needs some adjustment. Treat it as a strong starting point, not a guarantee — a full revisit-and-retest pass is on the to-do list before we'd trust it blind on a fresh box.
+
 ---
 
 ## Table of Contents

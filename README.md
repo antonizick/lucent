@@ -112,6 +112,8 @@ FaceTime mode optimizes the Voice Box for mobile and video conferencing use. Pre
 - **Portrait & Landscape Support:** Avatar scales properly on both orientations; in portrait mode, the avatar expands to fill all available vertical space
 - **Always Visible Toggle:** The FaceTime on/off button remains accessible even in the minimal header on narrow screens
 
+**On the go:** Pair this with [Discord Integration](#discord-integration) — reachable from Discord's mobile app and any other Discord-supported platform — and the publicly exposed (MFA-protected) Voice Box UI. Together they mean you can pull up Lucent from a phone or tablet and drop into FaceTime mode for a face-to-face-style check-in wherever you are, with the same encryption and MFA gate in front of it as the rest of the deployment.
+
 ### Backup Status Monitoring
 The Voice Box popup includes real-time backup health monitoring. When you mouseover the voice panel, a popup displays the last push times for both your Lucent codebase and memory repository with visual status indicators.
 
@@ -267,6 +269,8 @@ lucent/
 ## Setup
 
 > **Audience:** a fresh Ubuntu 22.04 LTS box or WSL2 distro, no prior Lucent install. Every command below has been verified against a live, working Lucent instance. For the exhaustive reference version of this same process — every troubleshooting scenario, Discord/Gibson/Docker deep dives, full command output examples — see the [Deployment Guide](docs/DEPLOYMENT.md). This section is the complete, correct, minimum path to a working system; nothing here is a stub pointing elsewhere.
+
+> **Heads up — likely stale:** Lucent has gone through a lot of major updates and upgrades since this walkthrough was last verified end-to-end. The steps below are kept as-is because they're still the best record of what a working setup looked like, but they haven't been retested against the current framework and probably need some adjustment. Treat this as a strong starting point, not a guarantee — a full revisit-and-retest pass is on the to-do list before we'd trust it blind on a fresh box.
 
 ### 0. WSL2 only — enable systemd first
 
