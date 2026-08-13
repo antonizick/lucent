@@ -1,5 +1,7 @@
 # Lucent
 
+<img src="docs/images/WebUI.png" alt="Lucent Voice Box Web UI" width="100%" />
+
 A personal AI assistant framework built on persistent memory. Lucent maintains continuity across sessions through a curated system of identity files, long-term memory, and daily notes — so your AI assistant remembers who you are, what matters, and what happened last time.
 
 ## How It Works
