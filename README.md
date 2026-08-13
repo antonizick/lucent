@@ -2,7 +2,7 @@
 
 <img src="docs/images/WebUI.png" alt="Lucent Voice Box Web UI" width="100%" />
 
-A personal AI assistant framework built on persistent memory. Lucent maintains continuity across sessions through a curated system of identity files, long-term memory, and daily notes — so your AI assistant remembers who you are, what matters, and what happened last time.
+A personal AI assistant framework built on persistent memory that runs anywhere. Lucent maintains continuity across sessions through a curated system of identity files, long-term memory, and daily notes so your AI assistant remembers who you are, what matters, and what happened last time. Completely vendor agnostic, Lucent integrates with Claude Code, OpenCode, Ollama, AWS Bedrock, and works seamlessly on local hardware or cloud-based systems — powered by free open-source models or frontier high-end AI engines, running simultaneously across multiple platforms.
 
 ## How It Works
 
