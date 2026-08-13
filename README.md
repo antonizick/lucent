@@ -4,6 +4,8 @@
 
 <img src="docs/images/lmobile.png" alt="Lucent Mobile Access" width="100%" />
 
+<img src="docs/images/luavatars.png" alt="Lucent Avatars" width="100%" />
+
 [Watch (mobile) Lucent in action](https://www.youtube.com/watch?v=1NRI8evg-uI)
 
 A personal AI assistant framework built on persistent memory that runs anywhere. Lucent maintains continuity across sessions through a curated system of identity files, long-term memory, and daily notes so your AI assistant remembers who you are, what matters, and what happened last time. Completely vendor agnostic, Lucent integrates with Claude Code, OpenCode, Ollama, AWS Bedrock, and works seamlessly on local hardware or cloud-based systems — powered by free open-source models or frontier high-end AI engines, running simultaneously across multiple platforms.
