@@ -1,0 +1,1485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Local AI with WSL, Ollama &amp; OpenWebUI — Presentation</title>
+<style>
+  /* ============================================================
+     THEME — edit these two blocks to reskin the entire deck.
+     Nothing below this point should need to change for a new theme.
+     Seven ready-made palettes (dark + light, contrast-checked) live
+     in palettes.md — paste one over the Colors block below.
+     ============================================================ */
+  :root {
+    /* Colors */
+    --bg: #0a1128;
+    --card-bg: #101d3f;
+    --card-border: #22335c;
+    --text: #dce4f2;
+    --text-dim: #8496b8;
+    --accent-primary: #d4af37;
+    --accent-primary-bright: #f0d878;
+    --accent-secondary: #5b8fd6;
+    --accent-success: #4ade80;
+    --accent-warn: #f87171;
+
+    /* Animation timing — tune pacing here, nowhere else */
+    --anim-duration-card: 1.2s;   /* card slide-in */
+    --anim-duration-fade: 1s;     /* list-item fade-in */
+    --anim-duration-image: 1.4s;  /* screenshot slide-in */
+    --anim-stagger: 0.15s;        /* delay added per subsequent item */
+    --anim-ease: ease-out;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-snap-type: y proximity; }
+  body {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  section.slide {
+    min-height: 100vh;
+    padding: 4rem 6vw;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border-bottom: 1px solid var(--card-border);
+    scroll-snap-align: start;
+    position: relative;
+    overflow: hidden;
+  }
+  section.slide::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 15% 20%, color-mix(in srgb, var(--accent-primary) 6%, transparent), transparent 45%),
+      radial-gradient(circle at 85% 80%, color-mix(in srgb, var(--accent-secondary) 5%, transparent), transparent 45%);
+    pointer-events: none;
+  }
+  .slide-num {
+    position: absolute;
+    top: 2rem; right: 2.5rem;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.05em;
+  }
+  h1, h2, .card h3 { font-family: var(--font-heading); }
+  h1 {
+    font-size: clamp(2.9rem, 7vw, 5rem);
+    color: var(--accent-primary-bright);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.5rem;
+  }
+  h2 {
+    font-size: clamp(2.3rem, 5vw, 3.4rem);
+    color: var(--accent-primary-bright);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 0.4rem;
+  }
+  .subtitle {
+    font-size: clamp(1.3rem, 2.5vw, 1.7rem);
+    color: var(--accent-secondary);
+    margin-bottom: 2rem;
+    font-weight: 500;
+  }
+  .lede {
+    font-size: 1.4rem;
+    color: var(--text);
+    max-width: 62ch;
+    margin-bottom: 1.5rem;
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.25rem;
+    margin-top: 1rem;
+  }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-left: 3px solid var(--accent-primary);
+    border-radius: 10px;
+    padding: 1.4rem 1.6rem;
+  }
+  .card h3 {
+    color: var(--accent-primary-bright);
+    font-size: 1.35rem;
+    margin-bottom: 0.6rem;
+  }
+  /* Rotate the card edge through the palette's accents — three cards in a row
+     all wearing the same stripe is exactly the visual monotony this template
+     is built to avoid, and it costs nothing to break it here. */
+  .cards .card:nth-child(3n+2) { border-left-color: var(--accent-secondary); }
+  .cards .card:nth-child(3n+3) { border-left-color: var(--accent-success); }
+  .card ul, .lede-list { list-style: none; }
+  .card li, .lede-list li {
+    padding-left: 1.3rem;
+    position: relative;
+    margin-bottom: 0.4rem;
+    font-size: 1.15rem;
+    color: var(--text);
+  }
+  .card li::before, .lede-list li::before {
+    content: "▹";
+    color: var(--accent-primary);
+    position: absolute;
+    left: 0;
+  }
+  .lede-list li { font-size: 1.3rem; margin-bottom: 0.7rem; }
+  .tags { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem; }
+  .tag {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    color: var(--accent-success);
+    padding: 0.35rem 0.9rem;
+    border-radius: 999px;
+    font-size: 1rem;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  }
+  /* Optional source/provenance footer — any slide, any layout. */
+  .cite {
+    position: absolute;
+    bottom: 1.6rem; left: 6vw;
+    max-width: 70ch;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    font-style: italic;
+  }
+  .cite a { color: var(--text-dim); }
+  .shot-wrap {
+    margin-top: 1.5rem;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--card-border);
+    box-shadow: var(--shadow);
+    max-width: 1100px;
+  }
+  .shot-wrap img { display: block; width: 100%; height: auto; }
+  /* video-half — a real <video> where a screenshot would go. The wrapper keeps
+     the `shot-wrap` class deliberately, so it inherits every rule already
+     written and tested for the image case: right-hand placement, the
+     slide-in-from-right entrance, and the mobile reflow. Only what a video
+     needs that an image doesn't lives here — one place to look, nothing to
+     keep in sync.
+     --video-aspect reserves the box before metadata loads (otherwise the
+     poster pops the layout on arrival). Override per slide when the source
+     isn't 16:9: style="--video-aspect: 4 / 3". */
+  .shot-wrap video {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: var(--video-aspect, 16 / 9);
+    object-fit: contain;
+    background: #000;
+  }
+  section.slide:has(.shot-wrap) {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+    align-content: center;
+    min-height: 100vh;
+    position: relative;
+  }
+  section.slide:has(.shot-wrap) > h2,
+  section.slide:has(.shot-wrap) > .subtitle,
+  section.slide:has(.shot-wrap) > .lede,
+  section.slide:has(.shot-wrap) > .cards,
+  section.slide:has(.shot-wrap) > .lede-list { grid-column: 1; }
+  section.slide:has(.shot-wrap) > .shot-wrap {
+    position: absolute;
+    right: 6vw;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 45%;
+    margin-top: 0;
+    max-width: none;
+  }
+  section.slide:has(.shot-wrap) .cards {
+    display: flex;
+    flex-direction: column;
+    max-width: 45%;
+  }
+  /* Pairs with .cards above — without it, list bullets wrap full-width and run
+     under the absolutely-positioned image. Keep the two rules together. */
+  section.slide:has(.shot-wrap) > .lede-list {
+    max-width: 45%;
+  }
+  @media (max-width: 900px) {
+    section.slide:has(.shot-wrap) { grid-template-columns: 1fr; }
+    section.slide:has(.shot-wrap) > .shot-wrap { grid-column: 1; margin-top: 1.5rem; }
+  }
+  .title-slide { align-items: center; text-align: center; }
+  .title-slide h1 { font-size: clamp(3.5rem, 10vw, 6.8rem); }
+  .glow { text-shadow: var(--glow); }
+
+  /* ============================================================
+     LAYOUTS — one per shape of idea. Every one is CSS-var-driven
+     and needs no image and no font the deck doesn't already carry,
+     so any of them can be used on any slide of any deck.
+     ============================================================ */
+
+  /* content-list, split variant: heading in a narrow left rail, list beside it.
+     Use it for every other content-list so a run of them doesn't read as one
+     long identical slide. Same content, different presentation — zero risk. */
+  section.slide.split {
+    display: grid;
+    grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+    gap: 3rem;
+    align-content: center;
+  }
+  .col-head {
+    align-self: start;
+    border-left: 3px solid var(--accent-primary);
+    padding-left: 1.4rem;
+  }
+  .col-head h2 { margin-bottom: 0.3rem; }
+  .col-head .subtitle { margin-bottom: 0; }
+  section.slide.split > .lede-list { align-self: center; }
+
+  /* statement — one idea, nothing else on the slide */
+  .statement-slide { align-items: center; text-align: center; }
+  .kicker {
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: 0.95rem;
+    color: var(--accent-secondary);
+    margin-bottom: 1.4rem;
+  }
+  .statement {
+    font-family: var(--font-heading);
+    font-size: clamp(2.1rem, 4.4vw, 3.6rem);
+    line-height: 1.25;
+    color: var(--accent-primary-bright);
+    max-width: 24ch;
+  }
+  .statement-note {
+    margin-top: 1.6rem;
+    color: var(--text-dim);
+    font-size: 1.15rem;
+    max-width: 60ch;
+  }
+
+  /* compare — parallel panels sharing one frame, so the eye reads them together */
+  .compare {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    margin-top: 1.4rem;
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .compare-col {
+    background: var(--card-bg);
+    padding: 1.5rem 1.7rem;
+    border-left: 1px solid var(--card-border);
+    border-top: 3px solid var(--accent-primary);
+  }
+  .compare-col:first-child { border-left: none; }
+  .compare-col.tone-good { border-top-color: var(--accent-success); }
+  .compare-col.tone-bad { border-top-color: var(--accent-warn); }
+  .compare-col h3 {
+    font-family: var(--font-heading);
+    color: var(--accent-primary-bright);
+    font-size: 1.4rem;
+    margin-bottom: 0.7rem;
+  }
+  .compare-col.tone-good h3 { color: var(--accent-success); }
+  .compare-col.tone-bad h3 { color: var(--accent-warn); }
+  .compare-col ul { list-style: none; }
+  .compare-col li {
+    padding-left: 1.3rem;
+    position: relative;
+    margin-bottom: 0.45rem;
+    font-size: 1.12rem;
+  }
+  .compare-col li::before {
+    content: "▹";
+    color: var(--accent-primary);
+    position: absolute;
+    left: 0;
+  }
+  .compare-col.tone-good li::before { content: "✓"; color: var(--accent-success); }
+  .compare-col.tone-bad li::before { content: "✕"; color: var(--accent-warn); }
+
+  /* steps — a numbered sequence reads as a sequence. Numbers are typed in the
+     markup here (the template has no renderer); keep them 1..N in order. */
+  .steps { display: flex; flex-direction: column; gap: 1rem; margin-top: 1.4rem; max-width: 74ch; }
+  .step { display: grid; grid-template-columns: 2.6rem 1fr; gap: 1.2rem; align-items: start; }
+  .step-n {
+    width: 2.6rem; height: 2.6rem;
+    border: 1px solid var(--accent-primary);
+    border-radius: 50%;
+    color: var(--accent-primary);
+    display: flex; align-items: center; justify-content: center;
+    font-variant-numeric: tabular-nums;
+    font-size: 1.1rem;
+  }
+  .step-title {
+    font-family: var(--font-heading);
+    font-size: 1.4rem;
+    color: var(--accent-primary-bright);
+    line-height: 1.3;
+  }
+  .step-detail { color: var(--text-dim); font-size: 1.1rem; }
+
+  /* definition — term first, at the size a term deserves */
+  .definition {
+    margin-top: 1.2rem;
+    border-left: 3px solid var(--accent-primary);
+    padding-left: 1.8rem;
+    max-width: 62ch;
+  }
+  .term {
+    font-family: var(--font-heading);
+    font-size: clamp(2rem, 4vw, 3rem);
+    color: var(--accent-primary-bright);
+    line-height: 1.2;
+  }
+  .def-body { font-size: 1.45rem; margin-top: 0.7rem; }
+  .definition + .lede-list { margin-top: 1.4rem; }
+
+  /* quote — a line worth hearing said slowly */
+  .quote-slide { align-items: center; text-align: center; }
+  .pull-quote {
+    font-family: var(--font-heading);
+    font-size: clamp(1.8rem, 3.6vw, 2.9rem);
+    line-height: 1.35;
+    max-width: 28ch;
+    color: var(--text);
+  }
+  .pull-quote::before {
+    content: "“";
+    display: block;
+    font-size: 4rem;
+    line-height: 0.6;
+    color: var(--accent-primary);
+    margin-bottom: 1rem;
+  }
+  .attribution { margin-top: 1.6rem; color: var(--text-dim); font-size: 1.1rem; }
+
+  /* stat — figures at figure size */
+  .stats { display: flex; gap: 3.5rem; flex-wrap: wrap; margin-top: 1.6rem; }
+  .stat { max-width: 26ch; }
+  .stat-value {
+    font-family: var(--font-heading);
+    font-size: clamp(2.8rem, 6.5vw, 5.2rem);
+    line-height: 1;
+    color: var(--accent-primary-bright);
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-label { color: var(--text-dim); margin-top: 0.6rem; font-size: 1.05rem; }
+
+  /* timeline — ordered milestones on a spine */
+  .timeline {
+    margin-top: 1.4rem;
+    border-left: 2px solid var(--card-border);
+    padding-left: 1.8rem;
+    display: flex; flex-direction: column; gap: 1.2rem;
+    max-width: 70ch;
+  }
+  .tl-item { position: relative; }
+  .tl-item::before {
+    content: "";
+    position: absolute;
+    left: -2.28rem; top: 0.6rem;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--accent-primary);
+    box-shadow: 0 0 0 4px var(--bg);
+  }
+  .tl-when { color: var(--accent-secondary); font-size: 0.95rem; letter-spacing: 0.04em; }
+  .tl-title { font-family: var(--font-heading); font-size: 1.35rem; color: var(--text); }
+  .tl-detail { color: var(--text-dim); font-size: 1.08rem; }
+
+  /* code — the listing beside what it means, never the listing alone */
+  .code-wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    gap: 2.2rem;
+    margin-top: 1.3rem;
+    align-items: start;
+  }
+  pre.code {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-left: 3px solid var(--accent-secondary);
+    border-radius: 10px;
+    padding: 1.2rem 1.4rem;
+    overflow: auto;
+    max-height: 56vh;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 1rem;
+    line-height: 1.55;
+    color: var(--text);
+    box-shadow: var(--shadow);
+  }
+  .code-lang {
+    display: inline-block;
+    color: var(--accent-secondary);
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 0.85rem;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.5rem;
+  }
+  .code-wrap .lede-list li { font-size: 1.15rem; }
+  @media (max-width: 900px) {
+    .code-wrap { grid-template-columns: 1fr; }
+    section.slide.split { grid-template-columns: 1fr; gap: 1.6rem; }
+  }
+
+  /* ============================================================
+     PHOTOGRAPHY — for Openverse imagery resolved by
+     idea/Presentation/scripts/imagery.py. Every rule here assumes
+     the source photo is a stranger: unknown aspect, unknown palette,
+     unknown quality. `object-fit: cover` + a fixed aspect-ratio +
+     one shared treatment is what makes six unrelated photos read as
+     one deck instead of a clipart collage.
+
+     Editorial, never explanatory: these carry tone, not argument.
+     Anything that has to explain is a diagram (diagram-builder).
+     ============================================================ */
+
+  /* Full-bleed backdrop. Add class "bleed" to a div holding one <img>,
+     and class "has-bleed" to the section so its text stays on top. */
+  .bleed {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+  }
+  .bleed img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  /* Text must out-paint the positioned backdrop, which needs `position` set to
+     make z-index apply. `.cite` and `.slide-num` are ALREADY absolutely
+     positioned — forcing `relative` on them drops them back into flow, which
+     lands the credit line on top of the body text and moves the slide number
+     to the left margin. Exclude them and just raise their z-index. */
+  section.slide.has-bleed > *:not(.bleed):not(.cite):not(.slide-num) {
+    position: relative;
+    z-index: 1;
+  }
+  section.slide.has-bleed > .cite,
+  section.slide.has-bleed > .slide-num { z-index: 2; }
+  /* Scrim: the image never competes with the words. Tune the stops, not the
+     text colour — darkening the photo is always the right fix, dimming the
+     type is never one. */
+  .bleed::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(90deg, var(--bg) 0%,
+        color-mix(in srgb, var(--bg) 90%, transparent) 42%,
+        color-mix(in srgb, var(--bg) 55%, transparent) 100%),
+      linear-gradient(0deg, color-mix(in srgb, var(--bg) 80%, transparent) 0%,
+        transparent 45%);
+  }
+  /* Centred layouts (statement/quote/title over a photo) want a radial scrim
+     instead, or the type sits on a bright edge. */
+  .bleed.center::after {
+    background:
+      radial-gradient(ellipse at center, color-mix(in srgb, var(--bg) 82%, transparent) 0%,
+        color-mix(in srgb, var(--bg) 92%, transparent) 60%, var(--bg) 100%);
+  }
+  /* Duotone. THE unifying trick — grayscale plus one accent makes mismatched
+     stock photography look commissioned. Reach for it whenever a deck uses
+     more than two photos. (imagery.py --tint bakes the same effect into the
+     file for the .pptx and video pipelines, which have no CSS filters.) */
+  .bleed.tint img { filter: grayscale(1) contrast(1.08) brightness(0.82); }
+  .bleed.tint::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: var(--accent-primary);
+    mix-blend-mode: color;
+    opacity: 0.55;
+  }
+
+  /* image-half — photo owns one half of the frame, bleeding off the edge.
+     Distinct from cards-image, which is a *contained* screenshot with a
+     border; this one has no frame and is not meant to be read in detail. */
+  section.slide.img-half > .bleed {
+    left: auto;
+    width: 46%;
+  }
+  section.slide.img-half > .bleed::after {
+    background: linear-gradient(90deg, var(--bg) 0%,
+      color-mix(in srgb, var(--bg) 30%, transparent) 22%, transparent 55%);
+  }
+  section.slide.img-half > *:not(.bleed) { max-width: 50%; }
+  section.slide.img-half.flip > .bleed { left: 0; right: auto; }
+  section.slide.img-half.flip > .bleed::after {
+    background: linear-gradient(270deg, var(--bg) 0%,
+      color-mix(in srgb, var(--bg) 30%, transparent) 22%, transparent 55%);
+  }
+  section.slide.img-half.flip > *:not(.bleed) { margin-left: auto; }
+
+  /* image-band — a cropped strip as a chapter divider. The most forgiving
+     layout there is: you only ever see a slice, so a mediocre source survives. */
+  .img-band-strip {
+    margin-top: 2.2rem;
+    width: 100%;
+    aspect-ratio: 21 / 5;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--card-border);
+    box-shadow: var(--shadow);
+    position: relative;
+  }
+  .img-band-strip img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .img-band-strip.tint img { filter: grayscale(1) contrast(1.08) brightness(0.85); }
+  .img-band-strip.tint::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: var(--accent-primary);
+    mix-blend-mode: color;
+    opacity: 0.55;
+  }
+
+  /* image-grid — 2-4 tiles forced to one aspect ratio. Uniformity is the
+     whole point; never let the sources' own proportions through. */
+  .img-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.1rem;
+    margin-top: 1.4rem;
+  }
+  .img-tile {
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+  }
+  .img-tile img {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    display: block;
+  }
+  .img-tile.tint img { filter: grayscale(1) contrast(1.08) brightness(0.85); }
+  .img-tile figcaption {
+    padding: 0.7rem 0.9rem;
+    font-size: 1rem;
+    color: var(--text-dim);
+  }
+  @media (max-width: 768px) {
+    section.slide.img-half > .bleed { position: relative; width: 100%; height: 34vh; }
+    section.slide.img-half > *:not(.bleed) { max-width: 100%; }
+    .img-band-strip { aspect-ratio: 16 / 9; }
+  }
+
+  /* Entrance animations — durations/stagger driven by the vars above */
+  @keyframes slideInLeft {
+    from { opacity: 0; transform: translateX(-30px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes slideInRightPositioned {
+    from { opacity: 0; transform: translateY(-50%) translateX(30px); }
+    to   { opacity: 1; transform: translateY(-50%) translateX(0); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  .card.animating { animation: slideInLeft var(--anim-duration-card) var(--anim-ease) both; }
+  .card.animating:nth-child(2) { animation-delay: calc(var(--anim-stagger) * 1); }
+  .card.animating:nth-child(3) { animation-delay: calc(var(--anim-stagger) * 2); }
+  .card.animating:nth-child(4) { animation-delay: calc(var(--anim-stagger) * 3); }
+  .card.animating:nth-child(5) { animation-delay: calc(var(--anim-stagger) * 4); }
+  .card.animating:nth-child(6) { animation-delay: calc(var(--anim-stagger) * 5); }
+  section.slide:has(.shot-wrap) > .shot-wrap.animating {
+    animation: slideInRightPositioned var(--anim-duration-image) var(--anim-ease) both !important;
+  }
+  .lede-list li.animating { animation: fadeIn var(--anim-duration-fade) var(--anim-ease) both; }
+  /* The variety layouts animate on the same clock as the cards, so a mixed
+     deck doesn't feel like two different products stitched together. */
+  .compare-col.animating, .step.animating, .stat.animating, .tl-item.animating {
+    animation: slideInLeft var(--anim-duration-card) var(--anim-ease) both;
+  }
+  .compare-col.animating:nth-child(2), .step.animating:nth-child(2),
+  .stat.animating:nth-child(2), .tl-item.animating:nth-child(2) { animation-delay: calc(var(--anim-stagger) * 1); }
+  .compare-col.animating:nth-child(3), .step.animating:nth-child(3),
+  .stat.animating:nth-child(3), .tl-item.animating:nth-child(3) { animation-delay: calc(var(--anim-stagger) * 2); }
+  .step.animating:nth-child(4), .tl-item.animating:nth-child(4) { animation-delay: calc(var(--anim-stagger) * 3); }
+  .step.animating:nth-child(5), .tl-item.animating:nth-child(5) { animation-delay: calc(var(--anim-stagger) * 4); }
+  .step.animating:nth-child(6) { animation-delay: calc(var(--anim-stagger) * 5); }
+  .statement.animating, .pull-quote.animating, .definition.animating,
+  pre.code.animating { animation: fadeIn var(--anim-duration-fade) var(--anim-ease) both; }
+  /* Photography settles rather than moves — a backdrop that slides in pulls
+     the eye off the words it exists to support. Slow fade only. */
+  .bleed.animating, .img-band-strip.animating {
+    animation: fadeIn var(--anim-duration-image) var(--anim-ease) both;
+  }
+  .img-tile.animating { animation: slideInLeft var(--anim-duration-card) var(--anim-ease) both; }
+  .img-tile.animating:nth-child(2) { animation-delay: calc(var(--anim-stagger) * 1); }
+  .img-tile.animating:nth-child(3) { animation-delay: calc(var(--anim-stagger) * 2); }
+  .img-tile.animating:nth-child(4) { animation-delay: calc(var(--anim-stagger) * 3); }
+  .lede-list li.animating:nth-child(2) { animation-delay: calc(var(--anim-stagger) * 1); }
+  .lede-list li.animating:nth-child(3) { animation-delay: calc(var(--anim-stagger) * 2); }
+  .lede-list li.animating:nth-child(4) { animation-delay: calc(var(--anim-stagger) * 3); }
+  .lede-list li.animating:nth-child(5) { animation-delay: calc(var(--anim-stagger) * 4); }
+  .lede-list li.animating:nth-child(6) { animation-delay: calc(var(--anim-stagger) * 5); }
+
+  @media (max-width: 768px) {
+    section.slide { padding: 2.5rem 4vw; }
+    .cards { grid-template-columns: 1fr; gap: 1rem; }
+    section.slide:has(.shot-wrap) { grid-template-columns: 1fr; }
+    section.slide:has(.shot-wrap) > .shot-wrap {
+      position: relative; right: auto; top: auto; transform: none;
+      width: 100%; margin-top: 1.5rem; max-width: 100%;
+    }
+    section.slide:has(.shot-wrap) > .lede-list { max-width: 100%; }
+    section.slide:has(.shot-wrap) .cards { max-width: 100%; }
+    h1 { font-size: clamp(2.1rem, 6vw, 3.2rem); }
+    h2 { font-size: clamp(1.6rem, 4.5vw, 2.2rem); }
+    .cite { left: 4vw; bottom: 1rem; font-size: 0.7rem; }
+    .stats { gap: 1.8rem; }
+    .steps { gap: 0.8rem; }
+    .step { grid-template-columns: 2.1rem 1fr; gap: 0.9rem; }
+    .step-n { width: 2.1rem; height: 2.1rem; font-size: 0.95rem; }
+    .statement, .pull-quote { max-width: 100%; }
+    .definition, .timeline { padding-left: 1.1rem; }
+  }
+  .nav-controls {
+    position: fixed;
+    bottom: 2rem; right: 2rem;
+    display: flex; gap: 0.75rem;
+    align-items: center;
+    z-index: 1000;
+  }
+  .nav-btn {
+    width: 44px; height: 44px;
+    border: 1px solid var(--card-border);
+    background: color-mix(in srgb, var(--card-bg) 85%, transparent);
+    color: var(--text-dim);
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(8px);
+  }
+  .nav-btn:hover { background: var(--card-bg); color: var(--text); border-color: var(--accent-primary); }
+  .nav-btn:active { transform: scale(0.95); }
+  .metadata {
+    position: absolute;
+    top: 2rem; left: 2.5rem;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    line-height: 1.2;
+    text-align: left;
+  }
+  .metadata .title { font-size: 1.1rem; font-weight: 600; color: var(--text-dim); margin-bottom: 0.05rem; }
+  .metadata .author { font-size: 0.9rem; margin-bottom: 0.05rem; }
+  .metadata .date { font-size: 0.75rem; }
+  @media (max-width: 640px) {
+    .nav-controls { bottom: 1rem; right: 1rem; gap: 1rem; }
+    .nav-btn { width: 88px; height: 88px; font-size: 1.8rem; }
+    .metadata { font-size: 0.7rem; top: 1rem; left: 1rem; }
+    .metadata .title { font-size: 0.9rem; }
+    .metadata .author { font-size: 0.75rem; }
+  }
+</style>
+</head>
+<body>
+
+  <!--  ==========================================================================================  -->
+<section class="slide title-slide" data-silent>
+  <div class="metadata">
+    <div class="title">Local AI with WSL, Ollama &amp; OpenWebUI</div>
+    <div class="author">Author: Nick Antonizick</div>
+    <div class="date">7 August 2026</div>
+  </div>
+  <span class="slide-num"></span>
+  <h1 class="glow">Local AI with WSL, Ollama &amp; OpenWebUI</h1>
+  <p class="lede" style="max-width:50ch;text-align:center;margin:1.5rem auto;font-size:2rem">
+    Use the arrow buttons in the lower-right, the arrow keys, Page Up/Down, or the space bar to move through the slides. Click anywhere on a slide to advance.
+  </p>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide title-slide has-bleed">
+  <div class="bleed center tint"><img src="images/hero.jpg" alt="Rows of servers in a data center, evoking self-hosted infrastructure"></div>
+  <span class="slide-num"></span>
+  <h1 class="glow">Local AI with WSL, Ollama &amp; OpenWebUI</h1>
+  <p class="subtitle" style="font-size:1.4rem">Run a private AI chatbot entirely on your own PC</p>
+  <p class="lede" style="max-width:70ch;text-align:center;margin:0 auto 1.5rem">No cloud account, no subscription, no monthly bill. A beginner's walkthrough of Windows Subsystem for Linux, Ollama, and OpenWebUI — one command at a time.</p>
+  <div class="tags" style="justify-content:center">
+    <span class="tag">WSL</span>
+    <span class="tag">Ollama</span>
+    <span class="tag">OpenWebUI</span>
+    <span class="tag">Local AI</span>
+  </div>
+  <p class="cite">Source: <a href="https://commons.wikimedia.org/w/index.php?curid=16886979" target="_blank" rel="noopener noreferrer">Photo: The National Archives (UK) / CC BY 3.0</a></p>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>What You'll Learn</h2>
+  <p class="subtitle">Four stops, in order</p>
+  <ul class="lede-list">
+    <li><strong>Install WSL</strong> — Get a real Linux terminal running inside Windows</li>
+    <li><strong>Install Ollama</strong> — Download, run, and manage AI models with simple commands</li>
+    <li><strong>Pick a model</strong> — Choose the right size AI model for your hardware</li>
+    <li><strong>Install OpenWebUI</strong> — A friendly, browser-based chat window for your models</li>
+  </ul>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>Let's Get Started</h2>
+  <p class="subtitle">Grab a coffee — this whole path takes about half an hour</p>
+  <div class="img-band-strip tint">
+    <img src="images/band-getting-started.jpg" alt="A person at a laptop running Windows, phone in hand">
+  </div>
+  <p class="cite">Source: <a href="https://commons.wikimedia.org/w/index.php?curid=27914865" target="_blank" rel="noopener noreferrer">Photo: Intel Free Press / CC BY-SA 2.0</a></p>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>Before You Start</h2>
+  <p class="subtitle">Windows 10 (build 19041+) or Windows 11, 64-bit, with virtualization enabled in BIOS/UEFI</p>
+  <div class="stats">
+    <div class="stat"><div class="stat-value">8 GB RAM</div><div class="stat-label">minimum — 16 GB+ recommended for bigger models</div></div>
+    <div class="stat"><div class="stat-value">20 GB free</div><div class="stat-label">disk space for WSL plus your first model</div></div>
+    <div class="stat"><div class="stat-value">64-bit CPU</div><div class="stat-label">any Intel or AMD chip from the last ~8 years</div></div>
+  </div>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>First, Some Vocabulary</h2>
+  <div class="definition">
+    <p class="term">WSL</p>
+    <p class="def-body">Windows Subsystem for Linux — a real Linux environment that runs directly inside Windows. No virtual machine to set up, no dual-boot, no separate computer.</p>
+  </div>
+  <ul class="lede-list">
+    <li>Files and networking are shared between Windows and Linux</li>
+    <li>This is where Ollama actually lives and runs</li>
+  </ul>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>Install WSL</h2>
+  <p class="subtitle">Five minutes, one restart</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-n">1</div>
+      <div>
+        <div class="step-title">Open PowerShell as Administrator</div>
+        <div class="step-detail">Right-click the Start button → Terminal (Admin), or search “PowerShell” and Run as administrator</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">2</div>
+      <div>
+        <div class="step-title">Run the install command</div>
+        <div class="step-detail">wsl --install</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">3</div>
+      <div>
+        <div class="step-title">Restart your computer</div>
+        <div class="step-detail">Windows will prompt you — save your work first</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">4</div>
+      <div>
+        <div class="step-title">Let Ubuntu finish setting up</div>
+        <div class="step-detail">It opens automatically on first boot after restart</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">5</div>
+      <div>
+        <div class="step-title">Create a Linux username and password</div>
+        <div class="step-detail">This account is separate from your Windows login</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">6</div>
+      <div>
+        <div class="step-title">You're in</div>
+        <div class="step-detail">You now have a real Linux terminal inside Windows</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>What You'll See</h2>
+  <p class="subtitle">PowerShell running the install command</p>
+  <div class="cards">
+    <div class="card">
+      <h3>wsl --install</h3>
+      <ul>
+      <li>Downloads the WSL2 kernel and Ubuntu</li>
+      <li>Takes a few minutes on first run</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>First boot</h3>
+      <ul>
+      <li>Ubuntu opens in its own window</li>
+      <li>Prompts for a new Linux username + password</li>
+      </ul>
+    </div>
+  </div>
+  <div class="shot-wrap">
+    <img src="images/screenshot-wsl-install.png" alt="PowerShell window showing the wsl --install command running">
+  </div>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>Everyday WSL Commands</h2>
+  <p class="subtitle">Run these from PowerShell or Windows Terminal</p>
+  <ul class="lede-list">
+    <li><strong>wsl -l -v</strong> — List installed distros and which WSL version each uses</li>
+    <li><strong>wsl</strong> — Jump straight into your default Linux distro</li>
+    <li><strong>wsl --shutdown</strong> — Fully stop all running WSL instances</li>
+    <li><strong>wsl --update</strong> — Update the WSL engine itself</li>
+    <li><strong>wsl --version</strong> — Check your installed WSL and kernel version</li>
+  </ul>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>Checking Your Setup</h2>
+  <p class="subtitle">wsl -l -v in action</p>
+  <div class="cards">
+    <div class="card">
+      <h3>NAME column</h3>
+      <ul>
+      <li>Ubuntu should be listed here</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>VERSION column</h3>
+      <ul>
+      <li>Should read 2, not 1 — that's WSL2</li>
+      </ul>
+    </div>
+  </div>
+  <div class="shot-wrap">
+    <img src="images/screenshot-wsl-list.png" alt="Terminal output of wsl -l -v showing Ubuntu on WSL version 2">
+  </div>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>Next Term</h2>
+  <div class="definition">
+    <p class="term">Ollama</p>
+    <p class="def-body">A free tool that downloads, runs, and manages AI language models on your own computer — no cloud account, no subscription, no API key.</p>
+  </div>
+  <ul class="lede-list">
+    <li>Everything runs locally — your prompts never leave your machine</li>
+    <li>One command downloads a model, one command starts chatting</li>
+  </ul>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>Install Ollama Inside WSL</h2>
+  <p class="subtitle">One command</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-n">1</div>
+      <div>
+        <div class="step-title">Open your WSL Ubuntu terminal</div>
+        <div class="step-detail">Type wsl from PowerShell, or open “Ubuntu” from the Start menu</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">2</div>
+      <div>
+        <div class="step-title">Run the install script</div>
+        <div class="step-detail">curl -fsSL https://ollama.com/install.sh | sh</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">3</div>
+      <div>
+        <div class="step-title">Wait for it to finish</div>
+        <div class="step-detail">It downloads Ollama and sets it up as a background service</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">4</div>
+      <div>
+        <div class="step-title">Confirm it installed</div>
+        <div class="step-detail">ollama --version</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>The Install Script</h2>
+  <p class="subtitle">curl ... | sh, running inside WSL</p>
+  <div class="cards">
+    <div class="card">
+      <h3>Downloads the binary</h3>
+      <ul>
+      <li>Installs to /usr/local/bin/ollama</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Starts the service</h3>
+      <ul>
+      <li>Ollama listens on localhost:11434</li>
+      </ul>
+    </div>
+  </div>
+  <div class="shot-wrap">
+    <img src="images/screenshot-ollama-install.png" alt="WSL terminal showing the Ollama install script downloading and configuring the service">
+  </div>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>Ollama Command Cheat Sheet</h2>
+  <p class="subtitle">Everything starts with ollama</p>
+  <div class="code-wrap">
+    <div>
+      <span class="code-lang">bash</span>
+      <pre class="code">ollama serve                  # start the server (usually already running)
+ollama pull llama3.2          # download a model without running it
+ollama run llama3.2           # download (if needed) and start chatting
+ollama list                   # show every model you've downloaded
+ollama ps                     # show models currently loaded in memory
+ollama show llama3.2          # see details about one model
+ollama rm llama3.2            # delete a model you no longer need
+ollama stop llama3.2          # unload a model from memory</pre>
+    </div>
+    <ul class="lede-list">
+    <li>pull downloads only; run downloads AND starts chatting</li>
+    <li>list shows what's on disk; ps shows what's loaded right now</li>
+    <li>rm deletes the model; stop just frees up memory</li>
+    </ul>
+  </div>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>Which Model Should You Pick?</h2>
+  <p class="subtitle">Match the model size to your hardware</p>
+  <div class="compare">
+    <div class="compare-col">
+      <h3>Small &amp; Fast — llama3.2:3b</h3>
+      <ul>
+      <li>~2 GB download</li>
+      <li>Runs fine on 8 GB RAM</li>
+      <li>Great for quick tasks &amp; testing</li>
+      <li>Less nuanced on hard questions</li>
+      </ul>
+    </div>
+    <div class="compare-col">
+      <h3>Balanced — mistral:7b or llama3.1:8b</h3>
+      <ul>
+      <li>~4–5 GB download</li>
+      <li>Wants 16 GB RAM for comfort</li>
+      <li>Good everyday quality/speed mix</li>
+      <li>The sensible default choice</li>
+      </ul>
+    </div>
+    <div class="compare-col">
+      <h3>Best Quality — llama3.1:70b</h3>
+      <ul>
+      <li>40+ GB download</li>
+      <li>Wants 64 GB+ RAM or a GPU</li>
+      <li>Slow on an ordinary laptop CPU</li>
+      <li>Save for powerful hardware</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>Download &amp; Run Your First Model</h2>
+  <p class="subtitle">Using llama3.2 as the example</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-n">1</div>
+      <div>
+        <div class="step-title">Download it</div>
+        <div class="step-detail">ollama pull llama3.2</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">2</div>
+      <div>
+        <div class="step-title">Wait for the download</div>
+        <div class="step-detail">Progress bars show layer-by-layer download status</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">3</div>
+      <div>
+        <div class="step-title">Start chatting</div>
+        <div class="step-detail">ollama run llama3.2</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">4</div>
+      <div>
+        <div class="step-title">Type a question</div>
+        <div class="step-detail">Press Enter and the model replies right in the terminal</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">5</div>
+      <div>
+        <div class="step-title">Exit when you're done</div>
+        <div class="step-detail">Type /bye</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>Your First Conversation</h2>
+  <p class="subtitle">ollama run llama3.2, live</p>
+  <div class="cards">
+    <div class="card">
+      <h3>The prompt</h3>
+      <ul>
+      <li>A &gt;&gt;&gt; arrow waits for your question</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>The reply</h3>
+      <ul>
+      <li>Streams back token by token, like typing</li>
+      </ul>
+    </div>
+  </div>
+  <div class="shot-wrap">
+    <img src="images/screenshot-ollama-chat.png" alt="Terminal showing an interactive chat with ollama run llama3.2">
+  </div>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>Last Term</h2>
+  <div class="definition">
+    <p class="term">OpenWebUI</p>
+    <p class="def-body">A private, browser-based chat interface for the models Ollama is running — looks and feels like ChatGPT, but it's entirely yours.</p>
+  </div>
+  <ul class="lede-list">
+    <li>Talk to any Ollama model through a clean chat window</li>
+    <li>Runs in Docker, entirely on your own machine</li>
+  </ul>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>Install Docker Desktop First</h2>
+  <p class="subtitle">OpenWebUI runs inside a Docker container</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-n">1</div>
+      <div>
+        <div class="step-title">Download Docker Desktop</div>
+        <div class="step-detail">From docker.com, the Windows installer</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">2</div>
+      <div>
+        <div class="step-title">Run the installer</div>
+        <div class="step-detail">Keep “Use WSL 2 instead of Hyper-V” checked</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">3</div>
+      <div>
+        <div class="step-title">Restart Windows</div>
+        <div class="step-detail">When the installer prompts you</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">4</div>
+      <div>
+        <div class="step-title">Open Docker Desktop</div>
+        <div class="step-detail">Wait until it shows “Running” in the bottom-left</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">5</div>
+      <div>
+        <div class="step-title">Enable WSL integration</div>
+        <div class="step-detail">Settings → Resources → WSL Integration → toggle on Ubuntu</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">6</div>
+      <div>
+        <div class="step-title">Apply &amp; Restart</div>
+        <div class="step-detail">Confirms the integration</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>Turning On WSL Integration</h2>
+  <p class="subtitle">Docker Desktop → Settings → Resources → WSL Integration</p>
+  <div class="cards">
+    <div class="card">
+      <h3>The toggle</h3>
+      <ul>
+      <li>Enable integration with your Ubuntu distro</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Why it matters</h3>
+      <ul>
+      <li>Lets Docker containers see your WSL environment</li>
+      </ul>
+    </div>
+  </div>
+  <div class="shot-wrap">
+    <img src="images/screenshot-docker-wsl-integration.png" alt="Docker Desktop settings screen with WSL integration enabled for Ubuntu">
+  </div>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>Run the OpenWebUI Container</h2>
+  <p class="subtitle">One command, run from your WSL terminal</p>
+  <div class="code-wrap">
+    <div>
+      <span class="code-lang">bash</span>
+      <pre class="code">docker run -d \
+  -p 3000:8080 \
+  --add-host=host.docker.internal:host-gateway \
+  -v open-webui:/app/backend/data \
+  --name open-webui \
+  --restart always \
+  ghcr.io/open-webui/open-webui:main</pre>
+    </div>
+    <ul class="lede-list">
+    <li>-p 3000:8080 opens the UI at localhost:3000</li>
+    <li>--add-host lets the container reach Ollama on WSL</li>
+    <li>-v open-webui:... saves your chats between restarts</li>
+    <li>--restart always brings it back after a reboot</li>
+    </ul>
+  </div>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>Confirming It's Running</h2>
+  <p class="subtitle">docker ps, right after launch</p>
+  <div class="cards">
+    <div class="card">
+      <h3>STATUS column</h3>
+      <ul>
+      <li>Should read “Up” within a few seconds</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>PORTS column</h3>
+      <ul>
+      <li>Should show 0.0.0.0:3000-&gt;8080/tcp</li>
+      </ul>
+    </div>
+  </div>
+  <div class="shot-wrap">
+    <img src="images/screenshot-docker-ps.png" alt="Terminal output of docker ps showing the open-webui container running">
+  </div>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>First Login to OpenWebUI</h2>
+  <p class="subtitle">http://localhost:3000</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-n">1</div>
+      <div>
+        <div class="step-title">Open a browser</div>
+        <div class="step-detail">Go to http://localhost:3000</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">2</div>
+      <div>
+        <div class="step-title">Click “Sign up”</div>
+        <div class="step-detail">The very first account you create becomes the admin</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">3</div>
+      <div>
+        <div class="step-title">Fill in name, email, password</div>
+        <div class="step-detail">This is a local account — nothing is sent anywhere</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">4</div>
+      <div>
+        <div class="step-title">Create Account</div>
+        <div class="step-detail">You land straight in the chat interface</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>The Sign-Up Screen</h2>
+  <p class="subtitle">First run of OpenWebUI</p>
+  <div class="cards">
+    <div class="card">
+      <h3>First account = admin</h3>
+      <ul>
+      <li>No separate admin setup needed</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>All local</h3>
+      <ul>
+      <li>Stored in the open-webui Docker volume</li>
+      </ul>
+    </div>
+  </div>
+  <div class="shot-wrap">
+    <img src="images/screenshot-openwebui-signup.png" alt="OpenWebUI sign-up screen on first run">
+  </div>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>Chatting Through OpenWebUI</h2>
+  <p class="subtitle">Pick a model from the dropdown, then chat</p>
+  <div class="cards">
+    <div class="card">
+      <h3>Model dropdown</h3>
+      <ul>
+      <li>Lists every model ollama list shows</li>
+      <li>Switch models mid-conversation</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Chat window</h3>
+      <ul>
+      <li>Same model, friendlier interface</li>
+      </ul>
+    </div>
+  </div>
+  <div class="shot-wrap">
+    <img src="images/screenshot-openwebui-chat.png" alt="OpenWebUI chat interface with llama3.2 selected and a conversation in progress">
+  </div>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide">
+  <span class="slide-num"></span>
+  <h2>Quick Troubleshooting</h2>
+  <p class="subtitle">The five snags almost everyone hits</p>
+  <ul class="lede-list">
+    <li><strong>“ollama: command not found”</strong> — Close and reopen your WSL terminal so the install takes effect</li>
+    <li><strong>OpenWebUI shows no models</strong> — Run ollama list inside WSL to confirm a model is downloaded</li>
+    <li><strong>Page won't load at localhost:3000</strong> — Check Docker Desktop shows the container as “Running”</li>
+    <li><strong>Everything feels slow</strong> — Run wsl --shutdown, then reopen WSL for a clean restart</li>
+    <li><strong>Model won't load / crashes</strong> — It may be too large for your RAM — try a smaller model</li>
+  </ul>
+</section>
+
+  <!--  ==========================================================================================  -->
+<section class="slide title-slide has-bleed">
+  <div class="bleed center tint"><img src="images/closing.jpg" alt="Close-up of a glowing laptop keyboard"></div>
+  <span class="slide-num"></span>
+  <h1 class="glow">Local AI with WSL, Ollama &amp; OpenWebUI</h1>
+  <p class="subtitle" style="font-size:1.4rem">You're running a private AI, entirely on your own machine.</p>
+  <p class="lede" style="max-width:70ch;text-align:center;margin:0 auto 1.5rem">WSL gave you the Linux environment. Ollama gave you the models. OpenWebUI gave you the chat window. Revisit any command on this deck any time — nothing here ever needs the cloud.</p>
+  <p class="cite">Source: <a href="https://commons.wikimedia.org/w/index.php?curid=84105365" target="_blank" rel="noopener noreferrer">Photo: Aditya Oberai / CC BY-SA 4.0</a></p>
+</section>
+
+<div class="nav-controls">
+  <label id="autoAdvanceLabel" style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-dim); font-size: 0.9rem; cursor: pointer; user-select: none;">
+    <input type="checkbox" id="autoAdvanceToggle" checked>
+    Auto Advance Slides
+  </label>
+  <button class="nav-btn" id="prevBtn" aria-label="Previous slide">←</button>
+  <button class="nav-btn" id="nextBtn" aria-label="Next slide">→</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('section.slide');
+  let currentSlide = 0;
+  const audio = document.createElement('audio');
+  audio.style.display = 'none';
+  audio.muted = true;
+  document.body.appendChild(audio);
+
+  // Auto-number every slide: "NN / total" — never hand-typed in markup.
+  const lastIndex = slides.length - 1;
+  slides.forEach((slide, i) => {
+    const el = slide.querySelector('.slide-num');
+    if (el) el.textContent = `${String(i).padStart(2, '0')}  / ${String(lastIndex).padStart(2, '0')}`;
+  });
+
+  // Explicit data-audio wins; data-silent means no narration for this slide;
+  // otherwise fall back to the positional convention (slide N -> slide.NN.mp3).
+  // Without the explicit override, one silent slide desyncs every slide after it.
+  function audioFor(index) {
+    const slide = slides[index];
+    if (!slide) return null;
+    if (slide.hasAttribute('data-silent')) return null;
+    return slide.dataset.audio || `audio/slide.${String(index + 1).padStart(2, '0')}.mp3`;
+  }
+
+  let autoAdvanceEnabled = localStorage.getItem('autoAdvanceEnabled') !== 'false';
+  const autoAdvanceToggle = document.getElementById('autoAdvanceToggle');
+  autoAdvanceToggle.checked = autoAdvanceEnabled;
+  autoAdvanceToggle.addEventListener('change', () => {
+    autoAdvanceEnabled = autoAdvanceToggle.checked;
+    localStorage.setItem('autoAdvanceEnabled', autoAdvanceEnabled);
+  });
+
+  // --- Video slides ------------------------------------------------------
+  // On a slide carrying a <video>, the CLIP owns the room, not the narration:
+  //   * pressing play pauses the slide narration — two voices at once is never
+  //     the intent, and the narration exists to introduce the clip anyway;
+  //   * auto-advance waits for the clip to END, not for the narration to end.
+  //     Without this, a 30-second narration in front of a two-minute clip
+  //     scrolls the deck away mid-sentence, which is the whole bug;
+  //   * a clip nobody starts never auto-advances. Deliberate — this is the one
+  //     slide that asks the viewer to do something, so it waits for them.
+  // Leaving a video slide pauses the clip but keeps its position, so coming
+  // back resumes rather than restarting. Rewatching is the player's own job.
+  const videos = document.querySelectorAll('section.slide video');
+  const hasVideo = (index) => !!(slides[index] && slides[index].querySelector('video'));
+
+  videos.forEach(v => {
+    v.addEventListener('play', () => { audio.pause(); });
+    v.addEventListener('ended', () => {
+      if (autoAdvanceEnabled) scrollToSlide(currentSlide + 1);
+    });
+  });
+
+  audio.addEventListener('ended', () => {
+    if (autoAdvanceEnabled && !hasVideo(currentSlide)) scrollToSlide(currentSlide + 1);
+  });
+
+  function scrollToSlide(index) {
+    if (index < 0 || index >= slides.length) return;
+    currentSlide = index;
+    audio.pause();
+    audio.currentTime = 0;
+    // Any clip still running belongs to the slide being left behind.
+    videos.forEach(v => { if (!v.paused) v.pause(); });
+    const src = audioFor(currentSlide);
+    if (src) {
+      audio.src = src;
+      audio.play().catch(() => {});
+    } else {
+      audio.removeAttribute('src');
+    }
+    slides[currentSlide].scrollIntoView({ behavior: 'smooth' });
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ' || e.key === 'Spacebar') {
+      e.preventDefault();
+      scrollToSlide(currentSlide + 1);
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      e.preventDefault();
+      scrollToSlide(currentSlide - 1);
+    }
+  });
+
+  document.getElementById('nextBtn').addEventListener('click', () => scrollToSlide(currentSlide + 1));
+  document.getElementById('prevBtn').addEventListener('click', () => scrollToSlide(currentSlide - 1));
+
+  slides.forEach(slide => {
+    slide.addEventListener('click', (e) => {
+      // `.shot-wrap` is in this list only because it wraps the player — the
+      // native controls are inside the <video> box, and a mis-click on scrub
+      // or volume must never advance the deck out from under the viewer.
+      if (e.target.closest('button, input, label, a, video, .shot-wrap:has(video)')) return;
+      scrollToSlide(currentSlide + 1);
+    });
+  });
+
+  window.addEventListener('scroll', () => {
+    let scrollPosition = window.scrollY + window.innerHeight / 2;
+    slides.forEach((slide, index) => {
+      if (slide.offsetTop <= scrollPosition && slide.offsetTop + slide.offsetHeight > scrollPosition) {
+        currentSlide = index;
+      }
+    });
+  });
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.querySelectorAll('.card, .shot-wrap, .lede-list li, .compare-col, .step, .stat, .tl-item, .statement, .pull-quote, .definition, pre.code, .bleed, .img-band-strip, .img-tile').forEach(el => el.classList.add('animating'));
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1 });
+  slides.forEach(slide => observer.observe(slide));
+
+  // Auto-play slide 1 narration on load (starts muted, unmutes shortly after
+  // to satisfy browser autoplay policy; falls back to unmute-on-first-click).
+  const firstSrc = audioFor(0);
+  if (firstSrc) {
+    audio.src = firstSrc;
+    audio.play().then(() => {
+      setTimeout(() => { audio.muted = false; }, 100);
+    }).catch(() => {
+      document.addEventListener('click', () => { audio.muted = false; }, { once: true });
+    });
+  } else {
+    audio.muted = false;
+  }
+</script>
+</body>
+</html>

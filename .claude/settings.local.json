@@ -29,7 +29,11 @@
       "WebFetch(domain:sketchlab.webdevcody.com)",
       "Bash(rm -f .git/objects/info/commit-graph .git/objects/info/commit-graphs -r)",
       "Bash(git fsck *)",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(git check-ignore *)",
+      "Bash(mkdir -p .claude/skills)",
+      "Bash(cp -r ~/.claude/skills/web-slide-presentation ~/.claude/skills/video-presentation .claude/skills/)",
+      "Bash(git add *)"
     ]
   }
 }
