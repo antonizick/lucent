@@ -82,6 +82,7 @@
         <div class="lcc-main">
             <div class="lcc-topbar">
                 <div class="lcc-title">LCC Y2KM</div>
+                <div class="lcc-ip" id="lccIp" title="WSL IP -- click to copy (use this from Windows instead of localhost)"></div>
                 <div class="lcc-summary" id="lccSummary"></div>
                 <div class="lcc-refresh">
                     <span class="tick" id="lccTick">—</span>
@@ -115,6 +116,11 @@
             if (window.switchLogTab) window.switchLogTab('daily');
         });
         $('lccRefreshBtn').addEventListener('click', () => { loadInventory(); loadSystem(); });
+        $('lccIp').addEventListener('click', () => {
+            const ip = $('lccIp').dataset.ip;
+            if (!ip) return;
+            navigator.clipboard.writeText(ip).then(() => toast(`Copied ${ip}`));
+        });
         $('lccModalCancel').addEventListener('click', closeModal);
         $('lccModalBack').addEventListener('click', (e) => { if (e.target.id === 'lccModalBack') closeModal(); });
 
@@ -204,6 +210,7 @@
     // ── renderers ─────────────────────────────────────────────────────────────
     function renderSystem(s) {
         if (!s || s.error) { $('lccResmon').innerHTML = `<div class="lcc-empty">system: ${esc(s && s.error)}</div>`; return; }
+        if (s.wsl_ip) { $('lccIp').textContent = s.wsl_ip; $('lccIp').dataset.ip = s.wsl_ip; }
         spark.cpu.push(s.cpu.total); if (spark.cpu.length > SPARK_MAX) spark.cpu.shift();
         spark.mem.push(s.mem.percent); if (spark.mem.length > SPARK_MAX) spark.mem.shift();
         const g = (label, pct, sub, sk, col) => `

@@ -242,7 +242,9 @@ def _curator_stats() -> dict:
             lt_live_sessions = lt.read_text().count("### Session")
 
         # Limits and utilization
-        ltmemory_session_limit = 10  # KEEP_RECENT_SESSIONS from skill_curator.py
+        sys.path.insert(0, str(LUCENT_ROOT / "scripts"))
+        from curator import SESSIONS_TO_KEEP
+        ltmemory_session_limit = SESSIONS_TO_KEEP  # single source of truth: curator.py
         ltmemory_utilization = round(100 * lt_live_sessions / ltmemory_session_limit) if ltmemory_session_limit > 0 else 0
 
         daily_notes_limit = 7  # Days tracked

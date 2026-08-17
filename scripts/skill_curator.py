@@ -37,6 +37,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from ollama_client import call_ollama, check_ollama_health, WRITER_MODEL
+from curator_notify import speak, append_daily_note, bump_last_curator_run
+from curator import SESSIONS_TO_KEEP
 
 LUCENT_ROOT = Path(__file__).parent.parent
 MEMORY_DIR = LUCENT_ROOT / "memory"
@@ -52,7 +54,7 @@ REPORT_PATH = MEMORY_DIR / ".nero" / "curator_report.md"
 STALE_AFTER_DAYS = 30
 ARCHIVE_AFTER_DAYS = 90
 # Memory hygiene thresholds
-KEEP_RECENT_SESSIONS = 10
+KEEP_RECENT_SESSIONS = SESSIONS_TO_KEEP  # single source of truth: curator.py
 AUTO_MEMORY_STALE_DAYS = 90
 
 CONSOLIDATE_TIMEOUT = 180  # seconds — local inference, larger candidate listings take longer
@@ -365,7 +367,39 @@ def _run_all(live: bool):
         "4b Auto-memory stale archive": am,
     }
     write_report(sections, live)
+    if live:
+        _notify_run(sections)
     return sections
+
+
+def _notify_run(sections: dict) -> None:
+    """Voice + daily-note ping for a live curator run, only when something
+    actually happened — silent on a no-op week."""
+    t = sections.get("4a-i Lifecycle transitions", {})
+    c = sections.get("4a-ii Umbrella consolidation", {})
+    lt = sections.get("4b LTMemory length cap", {})
+    am = sections.get("4b Auto-memory stale archive", {})
+
+    changed = (
+        t.get("marked_stale", 0) + t.get("archived", 0) + t.get("reactivated", 0)
+        + len(c.get("applied", []) or [])
+        + lt.get("archived", 0)
+        + am.get("archived", 0)
+    )
+    if changed == 0:
+        return
+
+    bump_last_curator_run()
+    note = (
+        f"skill_curator (live): {t.get('marked_stale', 0)} skill(s) marked stale, "
+        f"{t.get('archived', 0)} skill(s) archived by age, {t.get('reactivated', 0)} reactivated, "
+        f"{len(c.get('applied', []) or [])} consolidation action(s), "
+        f"{lt.get('archived', 0)} LTMemory session(s) pruned to archive, "
+        f"{am.get('archived', 0)} stale auto-memory file(s) archived. "
+        f"Full report: {REPORT_PATH}"
+    )
+    append_daily_note(note)
+    speak(f"Weekly skill curator ran: {changed} change{'s' if changed != 1 else ''} applied. Details in today's daily note.")
 
 
 def _print_summary(sections: dict, live: bool):

@@ -24,6 +24,7 @@ UNSUMMARIZED_MARKER = MEMORY_DIR / ".unsummarized_sessions.json"
 
 sys.path.insert(0, str(Path(__file__).parent))
 from ollama_client import call_ollama, check_ollama_health, WRITER_MODEL
+from curator_notify import speak, append_daily_note, bump_last_curator_run, check_staleness_and_alarm
 
 MAX_ARCHIVE_CHARS = 60_000  # ~15K tokens — comfortably within mistral-small's 32K context
 SUMMARY_TIMEOUT = 180       # seconds — long input, local inference on a 3090 Ti
@@ -140,9 +141,11 @@ def main():
 
     if not check_ollama_health():
         print("  ✗ Ollama unreachable at localhost:11434 — cannot summarize (is `ollama serve` / systemd unit running?)")
+        check_staleness_and_alarm()
         return 1
 
     success_count = 0
+    newly_written = []
     for date_str in unsummarized:
         if ltmemory_has_session(date_str):
             print(f"  ✓ {date_str}: already in LTMemory, skipping")
@@ -178,6 +181,7 @@ def main():
         if prepend_session_to_ltmemory(date_str, summary):
             print(f"  ✓ {date_str}: written to LTMemory.md")
             success_count += 1
+            newly_written.append(date_str)
         else:
             print(f"  ✗ {date_str}: write failed")
 
@@ -186,8 +190,19 @@ def main():
             UNSUMMARIZED_MARKER.unlink()
 
     status = f"{success_count}/{len(unsummarized)} sessions summarized"
-    print(f"{'✓' if success_count == len(unsummarized) else '⚠'} auto_summarize complete: {status}")
-    return 0 if success_count == len(unsummarized) else 1
+    complete = success_count == len(unsummarized)
+    print(f"{'✓' if complete else '⚠'} auto_summarize complete: {status}")
+
+    if not dry_run and newly_written:
+        bump_last_curator_run()
+        note = f"auto_summarize: wrote LTMemory summaries for {', '.join(newly_written)} ({status})"
+        append_daily_note(note)
+        speak(f"Curator update: summarized {len(newly_written)} day{'s' if len(newly_written) != 1 else ''} into long-term memory.")
+
+    if not complete:
+        check_staleness_and_alarm()
+
+    return 0 if complete else 1
 
 
 if __name__ == "__main__":
