@@ -1,0 +1,21 @@
+[Unit]
+Description=Lucent RemoteBox (Google Drive rclone mount)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=nick
+Group=nick
+ExecStartPre=-/bin/fusermount -uz /home/nick/dev/lucent/RemoteBox
+ExecStart=/usr/bin/rclone mount gdrive: /home/nick/dev/lucent/RemoteBox --config /home/nick/.config/rclone/rclone.conf --vfs-cache-mode writes --drive-import-formats docx --dir-cache-time 30s --poll-interval 15s --umask 022
+ExecStop=/bin/fusermount -uz /home/nick/dev/lucent/RemoteBox
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
